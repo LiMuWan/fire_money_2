@@ -1,0 +1,43 @@
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Local app state and caches
+.quant_hunter/app_state.json
+.quant_hunter/cache/
+.codex_stage/
+.env
+.env.*
+
+# Test scratch data
+tests/.tmp/
+
+# Build and packaging outputs
+build/
+dist/
+dist_latest/
+.pyinstaller_build/
+.pyinstaller_build_latest/
+.installer_build/
+releases/
+*.spec.bak
+
+# Runtime exports and generated reports
+exports/
+reports/
+
+# IDE files
+.idea/
+.vscode/
+
+# Logs
+*.log
