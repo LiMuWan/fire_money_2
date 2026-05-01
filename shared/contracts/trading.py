@@ -279,6 +279,21 @@ class StrategyBoundaryReview:
 
 
 @dataclass(frozen=True)
+class StrategyResetReview:
+    review_id: str
+    strategy_id: str
+    source: str
+    from_version: str
+    to_version: str
+    reset_status: AdjustmentStatus
+    can_reset: bool
+    blockers: tuple[str, ...]
+    recent_changes: tuple[StrategyChangeRecord, ...]
+    summary: str
+    next_action: str
+
+
+@dataclass(frozen=True)
 class Recap:
     recap_id: str
     order_id: str

@@ -20,6 +20,7 @@ server/firemoney_server/
     execution.py        semi-automatic order draft and receipt prep
     recap.py            execution recap and strategy-boundary suggestions
     strategy_boundary_review.py  archive-review-driven boundary guidance
+    strategy_reset_review.py  confirmable local boundary reset guidance
     strategy_config.py  confirmed strategy-boundary validation/application
   infrastructure/
     archive_store.py    local completed trade archive persistence/export/cleanup
@@ -82,7 +83,8 @@ keeps only the front candidates in the execution line.
 - Strategy config parameters are validated by `domain/strategy_config.py` before they enter the next signal scan.
 - Invalid local strategy JSON falls back to default config; unknown, malformed, or out-of-range parameters are corrected from default boundaries.
 - Confirmed strategy boundaries are stored locally under `.firemoney/strategy_config.json`.
-- Local strategy boundaries can be reset through the application service; UI must not delete files directly.
+- Local strategy-boundary reset guidance is built by `domain/strategy_reset_review.py` and exposed through `MainChainService.build_strategy_reset_review()`; it returns blockers, recent changes, and the default target version without deleting files.
+- Local strategy boundaries are reset only through `MainChainService.apply_strategy_reset_review(confirm=True)` or the legacy service reset helper; UI must not delete files directly.
 - Strategy boundary apply/reset actions keep a lightweight local change record for user trust and recovery context.
 - Strategy boundary change records can be exported through `MainChainService.export_strategy_boundary_audit()` as Markdown under `exports/strategy/`.
 

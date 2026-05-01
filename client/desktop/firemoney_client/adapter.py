@@ -9,6 +9,7 @@ from shared.contracts import (
     MainChainSnapshot,
     StrategyBoundaryReview,
     StrategyConfig,
+    StrategyResetReview,
     TradeArchiveReview,
 )
 
@@ -37,6 +38,15 @@ class LocalMainChainAdapter:
 
     def reset_strategy_config(self) -> bool:
         return self._service.reset_strategy_config()
+
+    def build_strategy_reset_review(self) -> StrategyResetReview:
+        return self._service.build_strategy_reset_review()
+
+    def apply_strategy_reset_review(
+        self,
+        confirm: bool = False,
+    ) -> StrategyConfig:
+        return self._service.apply_strategy_reset_review(confirm=confirm)
 
     def export_trade_archives(
         self,

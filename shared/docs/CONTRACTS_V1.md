@@ -299,6 +299,26 @@ Key fields:
 - `summary`
 - `next_action`
 
+### `StrategyResetReview`
+
+Describes whether a local strategy-boundary reset is available and what the user is confirming before the service restores default boundaries.
+
+It carries recent change records for context and never represents an automatic file deletion.
+
+Key fields:
+
+- `review_id`
+- `strategy_id`
+- `source`
+- `from_version`
+- `to_version`
+- `reset_status`
+- `can_reset`
+- `blockers`
+- `recent_changes`
+- `summary`
+- `next_action`
+
 ### `MainChainSnapshot`
 
 Aggregated main-chain snapshot. The client consumes this structure to render the main workflow state and does not re-judge business conclusions in the UI.
@@ -327,5 +347,6 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Trade archive reviews are service-owned outputs; clients may display them or trigger export, but must not calculate win rate, best/worst archive, or follow-up action.
 - Archive review requires at least 3 closed archive records before strategy-boundary review can be recommended; smaller sample sets remain observation-only.
 - Strategy-boundary reviews may propose adjustments from archive-review signals, but those adjustments affect `StrategyConfig` only through an explicit confirmation/apply service path.
+- Strategy-reset reviews may describe a local reset opportunity, but resets affect `StrategyConfig` only through an explicit confirmation/apply service path.
 - Strategy boundary audit export is infrastructure-owned and must use `StrategyChangeRecord`; clients must not read `.firemoney` history files directly.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.

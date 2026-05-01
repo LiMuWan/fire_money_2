@@ -100,6 +100,13 @@
     "adjustment_min_score_reason": "最弱归档 {worst_archive_id} 需要复核信号质量，下一轮先提高进入执行审查的门槛。",
     "adjustment_min_score_impact": "减少低质量机会进入执行中控，优先积累更稳的闭环样本。"
   },
+  "strategy_reset_review": {
+    "blocker_no_local": "当前没有本地策略边界覆盖，不需要回退。",
+    "summary_waiting": "本地策略边界可回退到默认配置，确认后会清除本地覆盖并保留回退记录。",
+    "summary_blocked": "当前使用默认策略边界，暂无可回退的本地配置。",
+    "next_waiting": "先复核最近策略变更记录，确认后再恢复默认策略边界。",
+    "next_blocked": "继续使用默认策略边界，等待下一轮真实闭环样本。"
+  },
   "broker_import": {
     "entry_fill_default": "券商成交明细已写回",
     "exit_fill_default": "退出成交明细已写回"

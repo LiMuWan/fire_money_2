@@ -16,6 +16,7 @@ from server.firemoney_server.domain.strategy_boundary_review import (
     StrategyBoundaryReviewPolicy,
 )
 from server.firemoney_server.domain.strategy_config import StrategyConfigPolicy
+from server.firemoney_server.domain.strategy_reset_review import StrategyResetReviewPolicy
 from server.firemoney_server.infrastructure.sample_data import (
     sample_market_context,
     sample_current_price,
@@ -43,6 +44,7 @@ from shared.contracts import (
     MainChainSnapshot,
     StrategyBoundaryReview,
     StrategyConfig,
+    StrategyResetReview,
     TradeArchiveReview,
     WorkflowStage,
 )
@@ -63,6 +65,7 @@ class MainChainService:
         signal_scan_policy: SignalScanPolicy | None = None,
         strategy_boundary_review_policy: StrategyBoundaryReviewPolicy | None = None,
         strategy_config_policy: StrategyConfigPolicy | None = None,
+        strategy_reset_review_policy: StrategyResetReviewPolicy | None = None,
         strategy_store: StrategyConfigStore | None = None,
         strategy_audit_exporter: MarkdownStrategyAuditExporter | None = None,
         archive_store: TradeArchiveStore | None = None,
@@ -84,6 +87,9 @@ class MainChainService:
             strategy_boundary_review_policy or StrategyBoundaryReviewPolicy()
         )
         self._strategy_config_policy = strategy_config_policy or StrategyConfigPolicy()
+        self._strategy_reset_review_policy = (
+            strategy_reset_review_policy or StrategyResetReviewPolicy()
+        )
         self._strategy_store = strategy_store or StrategyConfigStore()
         self._strategy_audit_exporter = (
             strategy_audit_exporter or MarkdownStrategyAuditExporter()
@@ -102,6 +108,42 @@ class MainChainService:
         """Restore default strategy boundaries by clearing local overrides."""
 
         return self._strategy_store.reset(sample_strategy_config()) is not None
+
+    def build_strategy_reset_review(self) -> StrategyResetReview:
+        """Build confirmable guidance for resetting local strategy boundaries."""
+
+        default_strategy_config = sample_strategy_config()
+        strategy_config = self._strategy_config_policy.normalize_config(
+            self._strategy_store.load_or_default(default_strategy_config),
+            default_strategy_config,
+        )
+        return self._strategy_reset_review_policy.build_review(
+            strategy_config=strategy_config,
+            default_config=default_strategy_config,
+            has_local_config=self._strategy_store.path.exists(),
+        )
+
+    def apply_strategy_reset_review(self, confirm: bool = False) -> StrategyConfig:
+        """Reset local strategy boundaries only after explicit confirmation."""
+
+        default_strategy_config = sample_strategy_config()
+        strategy_config = self._strategy_config_policy.normalize_config(
+            self._strategy_store.load_or_default(default_strategy_config),
+            default_strategy_config,
+        )
+        if not confirm:
+            return strategy_config
+
+        review = self._strategy_reset_review_policy.build_review(
+            strategy_config=strategy_config,
+            default_config=default_strategy_config,
+            has_local_config=self._strategy_store.path.exists(),
+        )
+        if review.reset_status is not AdjustmentStatus.WAITING_USER:
+            return strategy_config
+
+        reset_config = self._strategy_store.reset(default_strategy_config)
+        return reset_config or strategy_config
 
     def export_trade_archives(
         self,

@@ -51,6 +51,7 @@ from shared.contracts import (
     StrategyAdjustment,
     StrategyBoundaryAction,
     StrategyBoundaryReview,
+    StrategyResetReview,
     TradeArchiveRecord,
     WorkflowStage,
     contract_to_dict,
@@ -886,6 +887,90 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(reset.strategy_config.source, "default")
             self.assertEqual(reset.strategy_config.parameters["min_score"], 70)
             self.assertEqual(reset.strategy_config.recent_changes[0].action, "reset")
+
+    def test_strategy_reset_review_blocks_default_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store)
+
+            review = service.build_strategy_reset_review()
+            unchanged = service.apply_strategy_reset_review(confirm=True)
+            payload = contract_to_dict(review)
+
+            self.assertIsInstance(review, StrategyResetReview)
+            self.assertFalse(review.can_reset)
+            self.assertEqual(review.reset_status, AdjustmentStatus.NOT_AVAILABLE)
+            self.assertEqual(review.source, "default")
+            self.assertEqual(review.from_version, "0.1.0")
+            self.assertEqual(review.to_version, "0.1.0")
+            self.assertEqual(review.recent_changes, ())
+            self.assertTrue(review.blockers)
+            self.assertFalse(store.path.exists())
+            self.assertEqual(unchanged.source, "default")
+            self.assertEqual(payload["reset_status"], "not_available")
+            self.assertFalse(payload["can_reset"])
+
+    def test_strategy_reset_review_requires_confirmation_before_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store)
+            service.build_first_slice_snapshot(
+                user_confirmed=True,
+                adjustments_confirmed=True,
+            )
+
+            review = service.build_strategy_reset_review()
+            unchanged = service.apply_strategy_reset_review(confirm=False)
+
+            self.assertTrue(review.can_reset)
+            self.assertEqual(review.reset_status, AdjustmentStatus.WAITING_USER)
+            self.assertEqual(review.source, "local")
+            self.assertEqual(review.from_version, "0.1.1")
+            self.assertEqual(review.to_version, "0.1.0")
+            self.assertEqual(review.recent_changes[0].action, "apply")
+            self.assertEqual(unchanged.version, "0.1.1")
+            self.assertTrue(store.path.exists())
+
+    def test_confirmed_strategy_reset_review_restores_default_with_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store)
+            service.build_first_slice_snapshot(
+                user_confirmed=True,
+                adjustments_confirmed=True,
+            )
+
+            reset = service.apply_strategy_reset_review(confirm=True)
+            review_after_reset = service.build_strategy_reset_review()
+
+            self.assertEqual(reset.source, "default")
+            self.assertEqual(reset.version, "0.1.0")
+            self.assertEqual(reset.parameters["min_score"], 70)
+            self.assertFalse(store.path.exists())
+            self.assertTrue(store.history_path.exists())
+            self.assertEqual(reset.recent_changes[0].action, "reset")
+            self.assertEqual(reset.recent_changes[1].action, "apply")
+            self.assertFalse(review_after_reset.can_reset)
+            self.assertEqual(review_after_reset.recent_changes[0].action, "reset")
+
+    def test_client_adapter_exposes_strategy_reset_review_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store)
+            adapter = LocalMainChainAdapter(service)
+            adapter.load_snapshot(user_confirmed=True, adjustments_confirmed=True)
+
+            review = adapter.build_strategy_reset_review()
+            reset = adapter.apply_strategy_reset_review(confirm=True)
+
+            self.assertIsInstance(review, StrategyResetReview)
+            self.assertTrue(review.can_reset)
+            self.assertEqual(reset.source, "default")
+            self.assertEqual(reset.recent_changes[0].action, "reset")
 
     def test_local_strategy_config_is_validated_before_next_scan(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
