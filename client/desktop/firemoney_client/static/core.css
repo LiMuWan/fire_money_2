@@ -491,6 +491,54 @@ button {
   border-color: rgba(31, 122, 90, 0.32);
 }
 
+.one-to-two-app .topbar {
+  align-items: center;
+}
+
+.one-to-two-dashboard {
+  display: grid;
+  gap: 18px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.one-to-two-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  gap: 22px;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.one-to-two-hero h2 {
+  margin: 12px 0 8px;
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.one-to-two-hero p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.one-to-two-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  align-items: start;
+}
+
+.one-to-two-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .one-to-two-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -590,7 +638,10 @@ button {
 @media (max-width: 980px) {
   .topbar,
   .layout,
-  .step {
+  .step,
+  .one-to-two-hero,
+  .one-to-two-main-grid,
+  .one-to-two-candidate-grid {
     grid-template-columns: 1fr;
   }
 

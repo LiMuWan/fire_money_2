@@ -61,7 +61,7 @@ The first interface is a restrained three-part workspace:
 
 - Top: product name, core path, and only three workspace switches.
 - Main column: `市场判断 -> 执行审查 -> 复盘改进` as stacked decision steps.
-- Side column: front candidates, one-to-two specialty panel, and next action.
+- Current preview: one-to-two specialty page only.
 
 Design constraints:
 
@@ -70,12 +70,12 @@ Design constraints:
 - Risk, position limit, price, route, and confirmation stay close together.
 - The UI may render an order draft, but it must not turn it into a receipt or recap before user confirmation.
 - The preview includes both confirmation states: before confirmation and after confirmation.
-- The one-to-two specialty panel displays server-owned candidates, position labels, stop loss, strict T+1 risk notes, paper-account state, Feishu notification status, and end-of-day/stability summaries.
+- The one-to-two specialty page displays server-owned candidates, position labels, stop loss, strict T+1 risk notes, paper-account state, Feishu notification status, and end-of-day/stability summaries.
 - Visible text should come from `content/*.json` when practical.
 
 ## 7. Content Configuration
 
 - `client/desktop/firemoney_client/content/zh_CN.json` owns visible client text, workspace labels, section titles, empty states, buttons, and shell templates.
-- `client/desktop/firemoney_client/content/preview_seed.zh_CN.json` owns deterministic preview inputs such as broker receipts and fill samples.
+- The current local preview uses one-to-two sample market data from the service boundary and renders only candidate, risk, paper-account, notification, and review state.
 - `content.py` loads content into typed client structures; UI modules consume these structures instead of embedding display text.
 - New visible text should be added to locale content first whenever practical, so future localization can reuse the same interface code.

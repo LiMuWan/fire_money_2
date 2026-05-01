@@ -1,164 +1,41 @@
-"""Generate a local preview of the core FireMoney interface."""
+"""Generate a local preview of the one-to-two FireMoney interface."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from .adapter import LocalMainChainAdapter
-from .renderer import render_core_workflow_html
+from .renderer import render_one_to_two_workflow_html
 from server.firemoney_server import MainChainService
-from server.firemoney_server.infrastructure.archive_store import TradeArchiveStore
-from server.firemoney_server.infrastructure.fill_import import (
-    BrokerExitRecord,
-    BrokerFillImporter,
-    BrokerFillRecord,
-)
-from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
-from server.firemoney_server.infrastructure.receipt_import import (
-    BrokerReceiptImporter,
-    BrokerReceiptRecord,
-)
-from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
-from shared.contracts import ExecutionReceiptStatus
-
-
-_CONTENT_DIR = Path(__file__).with_name("content")
-
-
-def load_preview_seed(locale: str = "zh_CN") -> dict:
-    """Load local preview broker samples from content config."""
-
-    with (_CONTENT_DIR / f"preview_seed.{locale}.json").open(
-        "r",
-        encoding="utf-8",
-    ) as file:
-        return json.load(file)
-
-
-def seed_preview_execution_files(
-    order_id: str,
-    symbol: str,
-    receipt_importer: BrokerReceiptImporter,
-    fill_importer: BrokerFillImporter,
-) -> None:
-    """Create local receipt/fill samples used by the static preview states."""
-
-    seed = load_preview_seed()
-    receipt_seed = seed["receipt"]
-    receipt_importer.save_record(
-        BrokerReceiptRecord(
-            order_id=order_id,
-            status=ExecutionReceiptStatus.ACCEPTED,
-            submitted_at=receipt_seed["submitted_at"],
-            message=receipt_seed["message"],
-            next_action=receipt_seed["next_action"],
-        )
-    )
-    entry_seed = seed["entry_fill"]
-    fill_importer.save_record(
-        BrokerFillRecord(
-            order_id=order_id,
-            symbol=symbol,
-            filled_quantity=int(entry_seed["filled_quantity"]),
-            avg_price=float(entry_seed["avg_price"]),
-            filled_at=entry_seed["filled_at"],
-            message=entry_seed["message"],
-        )
-    )
-    exit_seed = seed["exit_fill"]
-    fill_importer.save_exit_record(
-        BrokerExitRecord(
-            order_id=order_id,
-            symbol=symbol,
-            exited_quantity=int(exit_seed["exited_quantity"]),
-            avg_price=float(exit_seed["avg_price"]),
-            exited_at=exit_seed["exited_at"],
-            reason=exit_seed["reason"],
-            message=exit_seed["message"],
-        )
-    )
 
 
 def build_preview(output_path: str | Path) -> Path:
-    """Write the current core workflow interface to an HTML file."""
+    """Write the current one-to-two workflow interface to an HTML file."""
 
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory() as temp_dir:
         preview_root = Path(temp_dir)
-        store = StrategyConfigStore(preview_root / "strategy_config.json")
-        receipt_importer = BrokerReceiptImporter(preview_root / "receipts")
-        fill_importer = BrokerFillImporter(preview_root / "fills")
         paper_store = PaperTradeStore(preview_root / "paper_trades.json")
         adapter = LocalMainChainAdapter(
             MainChainService(
-                strategy_store=store,
-                archive_store=TradeArchiveStore(preview_root / "trade_archives.json"),
-                order_exporter=CsvOrderExporter(preview_root / "orders"),
-                receipt_importer=receipt_importer,
-                fill_importer=fill_importer,
                 paper_store=paper_store,
                 market_data_provider=SampleMarketDataProvider(),
             )
-        )
-        snapshot = adapter.load_snapshot()
-        confirmed_snapshot = adapter.load_snapshot(user_confirmed=True)
-        seed_preview_execution_files(
-            order_id=confirmed_snapshot.execution_receipt.order_id,
-            symbol=confirmed_snapshot.order_ticket.symbol,
-            receipt_importer=receipt_importer,
-            fill_importer=fill_importer,
-        )
-        submitted_snapshot = adapter.load_snapshot(
-            user_confirmed=True,
-            broker_submitted=True,
-        )
-        filled_snapshot = adapter.load_snapshot(
-            user_confirmed=True,
-            broker_submitted=True,
-            fill_received=True,
-        )
-        closed_snapshot = adapter.load_snapshot(
-            user_confirmed=True,
-            broker_submitted=True,
-            fill_received=True,
-            exit_received=True,
-        )
-        adjusted_snapshot = adapter.load_snapshot(
-            user_confirmed=True,
-            broker_submitted=True,
-            fill_received=True,
-            exit_received=True,
-            adjustments_confirmed=True,
-        )
-        adapter.reset_strategy_config()
-        reset_snapshot = adapter.load_snapshot(
-            user_confirmed=True,
-            broker_submitted=True,
-            fill_received=True,
-            exit_received=True,
         )
         one_to_two_report = adapter.build_one_to_two_morning_report(notify=False)
         one_to_two_watch_report = adapter.run_one_to_two_watch(notify=False)
         one_to_two_eod_review = adapter.build_one_to_two_end_of_day_review(notify=False)
         one_to_two_stability_report = adapter.build_one_to_two_stability_report()
         target.write_text(
-            render_core_workflow_html(
-                snapshot,
-                confirmed_snapshot=confirmed_snapshot,
-                submitted_snapshot=submitted_snapshot,
-                filled_snapshot=filled_snapshot,
-                closed_snapshot=closed_snapshot,
-                adjusted_snapshot=adjusted_snapshot,
-                reset_snapshot=reset_snapshot,
-                one_to_two_report=one_to_two_report,
-                one_to_two_watch_report=one_to_two_watch_report,
-                one_to_two_eod_review=one_to_two_eod_review,
-                one_to_two_stability_report=one_to_two_stability_report,
+            render_one_to_two_workflow_html(
+                report=one_to_two_report,
+                watch_report=one_to_two_watch_report,
+                eod_review=one_to_two_eod_review,
+                stability_report=one_to_two_stability_report,
             ),
             encoding="utf-8",
         )
