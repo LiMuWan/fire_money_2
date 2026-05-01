@@ -69,6 +69,7 @@ docs/
 - 归档复查导出：`exports/archives/trade_archive_review.md`
 - 策略边界审计导出：`exports/strategy/strategy_boundary_audit.md`
 - 策略边界审计可由服务端按 `apply`、`reset` 等变更动作筛选导出，客户端不读取 `.firemoney` 历史文件。
+- 归档/策略导出清理由服务端按保留数量执行，只处理项目已知导出文件名，不直接清空整个 `exports/` 目录。
 
 券商执行目前走项目自有 `BrokerExecutionAdapter` 边界，首个实现是本地 CSV；后续真实 SDK 必须先实现这个边界再接入主链。
 
@@ -103,4 +104,4 @@ python -m client.desktop.firemoney_client.preview
 
 ## 下一步
 
-短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商 SDK 的 `BrokerExecutionAdapter` 实现，或给归档/策略导出补充清理与保留策略。
+短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商 SDK 的 `BrokerExecutionAdapter` 实现，或把导出清理结果接入预览中的复盘操作反馈。

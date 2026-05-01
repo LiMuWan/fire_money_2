@@ -15,6 +15,10 @@ class MarkdownArchiveReviewExporter:
     def __init__(self, export_dir: str | Path = DEFAULT_ARCHIVE_EXPORT_DIR) -> None:
         self._export_dir = Path(export_dir)
 
+    @property
+    def export_dir(self) -> Path:
+        return self._export_dir
+
     def export(
         self,
         review: TradeArchiveReview,

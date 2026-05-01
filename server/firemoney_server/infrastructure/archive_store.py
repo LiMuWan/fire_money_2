@@ -31,6 +31,10 @@ class TradeArchiveStore:
     def path(self) -> Path:
         return self._path
 
+    @property
+    def export_dir(self) -> Path:
+        return self._export_dir
+
     def save(self, record: TradeArchiveRecord) -> tuple[TradeArchiveRecord, ...]:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         records = [item for item in self.load_recent() if item.archive_id != record.archive_id]

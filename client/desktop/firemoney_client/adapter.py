@@ -6,6 +6,7 @@ from pathlib import Path
 
 from server.firemoney_server import MainChainService
 from shared.contracts import (
+    ExportCleanupResult,
     MainChainSnapshot,
     StrategyBoundaryReview,
     StrategyConfig,
@@ -98,3 +99,15 @@ class LocalMainChainAdapter:
 
     def clear_trade_archives(self) -> bool:
         return self._service.clear_trade_archives()
+
+    def cleanup_archive_exports(
+        self,
+        retention_count: int = 1,
+    ) -> ExportCleanupResult:
+        return self._service.cleanup_archive_exports(retention_count=retention_count)
+
+    def cleanup_strategy_exports(
+        self,
+        retention_count: int = 1,
+    ) -> ExportCleanupResult:
+        return self._service.cleanup_strategy_exports(retention_count=retention_count)

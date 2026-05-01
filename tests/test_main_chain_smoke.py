@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,6 +43,7 @@ from shared.contracts import (
     AdjustmentStatus,
     ArchiveReviewQuality,
     ConfirmationStatus,
+    ExportCleanupResult,
     ExecutionReceiptStatus,
     ExecutionRoute,
     ExitExecution,
@@ -397,6 +399,63 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertFalse(archive_store.path.exists())
             self.assertEqual(archive_store.load_recent(), ())
             self.assertFalse(service.clear_trade_archives())
+
+    def test_archive_export_cleanup_keeps_recent_service_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            export_dir = root / "archive_exports"
+            archive_store = TradeArchiveStore(
+                root / "trade_archives.json",
+                export_dir=export_dir,
+            )
+            service = _build_service(root, archive_store=archive_store)
+            old_json = export_dir / "trade_archives_old.json"
+            old_md = export_dir / "trade_archive_review_old.md"
+            keep_csv = export_dir / "trade_archives_latest.csv"
+            untouched = export_dir / "manual_note.md"
+            export_dir.mkdir(parents=True)
+            for index, path in enumerate((old_json, old_md, keep_csv, untouched), start=1):
+                path.write_text(path.name, encoding="utf-8")
+                timestamp = float(index)
+                os.utime(path, (timestamp, timestamp))
+
+            result = service.cleanup_archive_exports(retention_count=1)
+
+            self.assertIsInstance(result, ExportCleanupResult)
+            self.assertEqual(result.target, "archive_exports")
+            self.assertEqual(result.retention_count, 1)
+            self.assertEqual(result.matched_count, 3)
+            self.assertEqual(result.deleted_count, 2)
+            self.assertEqual(result.kept_files, ("trade_archives_latest.csv",))
+            self.assertTrue(keep_csv.exists())
+            self.assertTrue(untouched.exists())
+            self.assertFalse(old_json.exists())
+            self.assertFalse(old_md.exists())
+            self.assertIn("trade_archives_old.json", result.deleted_files)
+
+    def test_client_adapter_cleans_strategy_exports_with_retention(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            export_dir = root / "strategy_exports"
+            exporter = MarkdownStrategyAuditExporter(export_dir)
+            service = _build_service(root, strategy_audit_exporter=exporter)
+            adapter = LocalMainChainAdapter(service)
+            stale = export_dir / "strategy_boundary_audit_old.md"
+            keep = export_dir / "strategy_boundary_audit_latest.md"
+            unrelated = export_dir / "strategy_notes.md"
+            export_dir.mkdir(parents=True)
+            for index, path in enumerate((stale, keep, unrelated), start=1):
+                path.write_text(path.name, encoding="utf-8")
+                os.utime(path, (float(index), float(index)))
+
+            result = adapter.cleanup_strategy_exports(retention_count=1)
+
+            self.assertEqual(result.target, "strategy_exports")
+            self.assertEqual(result.deleted_files, ("strategy_boundary_audit_old.md",))
+            self.assertEqual(result.kept_files, ("strategy_boundary_audit_latest.md",))
+            self.assertFalse(stale.exists())
+            self.assertTrue(keep.exists())
+            self.assertTrue(unrelated.exists())
 
     def test_trade_archive_review_summarizes_recent_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

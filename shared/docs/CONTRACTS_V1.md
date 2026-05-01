@@ -319,6 +319,23 @@ Key fields:
 - `summary`
 - `next_action`
 
+### `ExportCleanupResult`
+
+Describes a service-owned cleanup operation over generated export files.
+
+The result is intentionally small so the client can show what happened without reading local directories itself.
+
+Key fields:
+
+- `target`
+- `directory`
+- `retention_count`
+- `matched_count`
+- `deleted_count`
+- `kept_count`
+- `deleted_files`
+- `kept_files`
+
 ### `MainChainSnapshot`
 
 Aggregated main-chain snapshot. The client consumes this structure to render the main workflow state and does not re-judge business conclusions in the UI.
@@ -350,4 +367,5 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Strategy-reset reviews may describe a local reset opportunity, but resets affect `StrategyConfig` only through an explicit confirmation/apply service path.
 - Strategy boundary audit export is infrastructure-owned and must use `StrategyChangeRecord`; clients must not read `.firemoney` history files directly.
 - Strategy boundary audit action filtering is a service/export concern over `StrategyChangeRecord.action`; clients may request filters but must not re-implement history parsing.
+- Export cleanup results are service-owned outputs; clients may display deleted/kept filenames but must not delete export files directly.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.

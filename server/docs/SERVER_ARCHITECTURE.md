@@ -26,6 +26,7 @@ server/firemoney_server/
     archive_store.py    local completed trade archive persistence/export/cleanup
     archive_review_export.py  Markdown export for lightweight archive reviews
     broker_adapter.py   project-owned broker execution adapter boundary
+    export_cleanup.py   retention cleanup for service-owned export files
     sample_data.py      deterministic smoke data
     config/             deterministic local input data
     fill_import.py      local broker fill-detail import adapter
@@ -73,6 +74,7 @@ keeps only the front candidates in the execution line.
 - Recent archive records can be exported through `MainChainService.export_trade_archives()` as JSON or CSV under `exports/archives/`.
 - Recent archive records can produce `TradeArchiveReview` through `MainChainService.build_trade_archive_review()` and Markdown through `MainChainService.export_trade_archive_review()`.
 - Archive review metrics are built by `domain/archive_review.py`; `infrastructure/archive_review_export.py` only formats the already-approved service output.
+- Archive export cleanup goes through `MainChainService.cleanup_archive_exports(retention_count=...)`; it only deletes service-owned archive export filenames and keeps unmatched files.
 - Archive review uses a minimum 3-record sample-quality gate before recommending strategy-boundary review; smaller samples are observation-only.
 - Archive-review-driven strategy boundary guidance is built by `domain/strategy_boundary_review.py` and exposed through `MainChainService.build_strategy_boundary_review()`; it returns confirmable `StrategyAdjustment` items but does not write config.
 - Confirmed archive-review-driven boundary guidance is applied through `MainChainService.apply_strategy_boundary_review(confirm=True)`, which reuses `StrategyConfigPolicy.apply_adjustments()` and `StrategyConfigStore.save()`.
@@ -88,6 +90,7 @@ keeps only the front candidates in the execution line.
 - Strategy boundary apply/reset actions keep a lightweight local change record for user trust and recovery context.
 - Strategy boundary change records can be exported through `MainChainService.export_strategy_boundary_audit()` as Markdown under `exports/strategy/`.
 - Strategy boundary audit export can filter records by action through `actions=("apply",)` or `actions=("reset",)`; filtering stays in infrastructure/service code, not the client.
+- Strategy export cleanup goes through `MainChainService.cleanup_strategy_exports(retention_count=...)`; it only deletes service-owned strategy audit filenames and returns an `ExportCleanupResult`.
 
 ## 6. Configuration Entry Points
 

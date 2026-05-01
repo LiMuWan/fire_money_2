@@ -294,6 +294,18 @@ class StrategyResetReview:
 
 
 @dataclass(frozen=True)
+class ExportCleanupResult:
+    target: str
+    directory: str
+    retention_count: int
+    matched_count: int
+    deleted_count: int
+    kept_count: int
+    deleted_files: tuple[str, ...]
+    kept_files: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Recap:
     recap_id: str
     order_id: str

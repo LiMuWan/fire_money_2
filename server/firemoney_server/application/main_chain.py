@@ -17,13 +17,6 @@ from server.firemoney_server.domain.strategy_boundary_review import (
 )
 from server.firemoney_server.domain.strategy_config import StrategyConfigPolicy
 from server.firemoney_server.domain.strategy_reset_review import StrategyResetReviewPolicy
-from server.firemoney_server.infrastructure.sample_data import (
-    sample_market_context,
-    sample_current_price,
-    sample_opportunity_candidates,
-    sample_strategy_config,
-    sample_universe_size,
-)
 from server.firemoney_server.infrastructure.archive_store import TradeArchiveStore
 from server.firemoney_server.infrastructure.archive_review_export import (
     MarkdownArchiveReviewExporter,
@@ -32,15 +25,24 @@ from server.firemoney_server.infrastructure.broker_adapter import (
     BrokerExecutionAdapter,
     LocalCsvBrokerAdapter,
 )
+from server.firemoney_server.infrastructure.export_cleanup import ExportCleanup
 from server.firemoney_server.infrastructure.fill_import import BrokerFillImporter
 from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
 from server.firemoney_server.infrastructure.receipt_import import BrokerReceiptImporter
+from server.firemoney_server.infrastructure.sample_data import (
+    sample_market_context,
+    sample_current_price,
+    sample_opportunity_candidates,
+    sample_strategy_config,
+    sample_universe_size,
+)
 from server.firemoney_server.infrastructure.strategy_audit_export import (
     MarkdownStrategyAuditExporter,
 )
 from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
 from shared.contracts import (
     AdjustmentStatus,
+    ExportCleanupResult,
     MainChainSnapshot,
     StrategyBoundaryReview,
     StrategyConfig,
@@ -70,6 +72,7 @@ class MainChainService:
         strategy_audit_exporter: MarkdownStrategyAuditExporter | None = None,
         archive_store: TradeArchiveStore | None = None,
         archive_review_exporter: MarkdownArchiveReviewExporter | None = None,
+        export_cleanup: ExportCleanup | None = None,
         broker_adapter: BrokerExecutionAdapter | None = None,
         order_exporter: CsvOrderExporter | None = None,
         receipt_importer: BrokerReceiptImporter | None = None,
@@ -98,6 +101,7 @@ class MainChainService:
         self._archive_review_exporter = (
             archive_review_exporter or MarkdownArchiveReviewExporter()
         )
+        self._export_cleanup = export_cleanup or ExportCleanup()
         self._broker_adapter = broker_adapter or LocalCsvBrokerAdapter(
             order_exporter=order_exporter,
             receipt_importer=receipt_importer,
@@ -249,6 +253,34 @@ class MainChainService:
         """Clear local completed-trade archives through the service boundary."""
 
         return self._archive_store.clear()
+
+    def cleanup_archive_exports(
+        self,
+        retention_count: int = 1,
+    ) -> ExportCleanupResult:
+        """Remove older archive export files while keeping recent reports."""
+
+        return self._export_cleanup.cleanup(
+            target="archive_exports",
+            directory=self._archive_store.export_dir,
+            prefixes=("trade_archives", "trade_archive_review"),
+            suffixes=(".json", ".csv", ".md"),
+            retention_count=retention_count,
+        )
+
+    def cleanup_strategy_exports(
+        self,
+        retention_count: int = 1,
+    ) -> ExportCleanupResult:
+        """Remove older strategy audit export files while keeping recent reports."""
+
+        return self._export_cleanup.cleanup(
+            target="strategy_exports",
+            directory=self._strategy_audit_exporter.export_dir,
+            prefixes=("strategy_boundary_audit",),
+            suffixes=(".md",),
+            retention_count=retention_count,
+        )
 
     def build_first_slice_snapshot(
         self,
