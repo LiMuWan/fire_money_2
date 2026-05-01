@@ -209,6 +209,23 @@ class TradeArchiveRecord:
 
 
 @dataclass(frozen=True)
+class TradeArchiveReview:
+    review_id: str
+    record_count: int
+    profit_count: int
+    loss_count: int
+    flat_count: int
+    win_rate: float
+    total_realized_pnl: float
+    average_realized_pnl_pct: float
+    best_archive_id: str | None
+    worst_archive_id: str | None
+    summary: str
+    focus_points: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
 class StrategyAdjustment:
     key: str
     label: str

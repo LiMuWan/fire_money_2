@@ -67,6 +67,17 @@
     "next_empty": "当前没有可执行候选，继续观察市场温度和信号质量。",
     "next_focus": "先处理 {name}，进入执行审查前确认风险、仓位和价格。"
   },
+  "archive_review": {
+    "empty_summary": "还没有可复查的已完成交易归档。",
+    "empty_focus": "先完成一笔闭环交易，再生成复查要点。",
+    "empty_next_action": "继续按主链完成确认、回执、成交和退出写回。",
+    "summary": "已复查 {count} 笔归档交易，累计已实现盈亏 {total_pnl:.2f}，胜率 {win_rate:.2%}，平均收益率 {average_pct:.2%}。",
+    "focus_best": "最佳归档 {archive_id}({symbol}) 已实现盈亏 {pnl:.2f}，复核它对应的信号和执行纪律。",
+    "focus_worst": "最弱归档 {archive_id}({symbol}) 已实现盈亏 {pnl:.2f}，优先检查风控和退出原因。",
+    "focus_recent": "最近归档 {archive_id} 的后续动作是：{next_action}",
+    "next_action_loss": "先复查亏损样本，再决定是否收紧下一轮策略边界。",
+    "next_action_profit": "当前复查未发现亏损样本，保留策略边界并继续积累样本。"
+  },
   "broker_import": {
     "entry_fill_default": "券商成交明细已写回",
     "exit_fill_default": "退出成交明细已写回"

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from server.firemoney_server.domain.archive import TradeArchivePolicy
+from server.firemoney_server.domain.archive_review import TradeArchiveReviewPolicy
 from server.firemoney_server.domain.execution import ExecutionPolicy
 from server.firemoney_server.domain.opportunity import OpportunityRanker
 from server.firemoney_server.domain.outcome import OutcomePolicy
@@ -20,6 +21,9 @@ from server.firemoney_server.infrastructure.sample_data import (
     sample_universe_size,
 )
 from server.firemoney_server.infrastructure.archive_store import TradeArchiveStore
+from server.firemoney_server.infrastructure.archive_review_export import (
+    MarkdownArchiveReviewExporter,
+)
 from server.firemoney_server.infrastructure.broker_adapter import (
     BrokerExecutionAdapter,
     LocalCsvBrokerAdapter,
@@ -28,7 +32,7 @@ from server.firemoney_server.infrastructure.fill_import import BrokerFillImporte
 from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
 from server.firemoney_server.infrastructure.receipt_import import BrokerReceiptImporter
 from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
-from shared.contracts import MainChainSnapshot, WorkflowStage
+from shared.contracts import MainChainSnapshot, TradeArchiveReview, WorkflowStage
 
 
 class MainChainService:
@@ -39,6 +43,7 @@ class MainChainService:
         opportunity_ranker: OpportunityRanker | None = None,
         risk_policy: RiskReviewPolicy | None = None,
         archive_policy: TradeArchivePolicy | None = None,
+        archive_review_policy: TradeArchiveReviewPolicy | None = None,
         execution_policy: ExecutionPolicy | None = None,
         outcome_policy: OutcomePolicy | None = None,
         recap_policy: RecapPolicy | None = None,
@@ -46,6 +51,7 @@ class MainChainService:
         strategy_config_policy: StrategyConfigPolicy | None = None,
         strategy_store: StrategyConfigStore | None = None,
         archive_store: TradeArchiveStore | None = None,
+        archive_review_exporter: MarkdownArchiveReviewExporter | None = None,
         broker_adapter: BrokerExecutionAdapter | None = None,
         order_exporter: CsvOrderExporter | None = None,
         receipt_importer: BrokerReceiptImporter | None = None,
@@ -54,6 +60,7 @@ class MainChainService:
         self._opportunity_ranker = opportunity_ranker or OpportunityRanker()
         self._risk_policy = risk_policy or RiskReviewPolicy()
         self._archive_policy = archive_policy or TradeArchivePolicy()
+        self._archive_review_policy = archive_review_policy or TradeArchiveReviewPolicy()
         self._execution_policy = execution_policy or ExecutionPolicy()
         self._outcome_policy = outcome_policy or OutcomePolicy()
         self._recap_policy = recap_policy or RecapPolicy()
@@ -61,6 +68,9 @@ class MainChainService:
         self._strategy_config_policy = strategy_config_policy or StrategyConfigPolicy()
         self._strategy_store = strategy_store or StrategyConfigStore()
         self._archive_store = archive_store or TradeArchiveStore()
+        self._archive_review_exporter = (
+            archive_review_exporter or MarkdownArchiveReviewExporter()
+        )
         self._broker_adapter = broker_adapter or LocalCsvBrokerAdapter(
             order_exporter=order_exporter,
             receipt_importer=receipt_importer,
@@ -84,6 +94,28 @@ class MainChainService:
             target_path=target_path,
             format=format,
             limit=limit,
+        )
+
+    def build_trade_archive_review(self, limit: int = 50) -> TradeArchiveReview:
+        """Build a lightweight review summary from recent completed trades."""
+
+        return self._archive_review_policy.build_review(
+            self._archive_store.load_recent(limit=limit)
+        )
+
+    def export_trade_archive_review(
+        self,
+        target_path: str | Path | None = None,
+        limit: int = 50,
+    ) -> Path:
+        """Export a lightweight Markdown review for recent completed trades."""
+
+        records = self._archive_store.load_recent(limit=limit)
+        review = self._archive_review_policy.build_review(records)
+        return self._archive_review_exporter.export(
+            review=review,
+            records=records,
+            target_path=target_path,
         )
 
     def clear_trade_archives(self) -> bool:

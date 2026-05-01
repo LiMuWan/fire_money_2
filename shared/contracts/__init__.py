@@ -22,6 +22,7 @@ from .trading import (
     StrategyChangeRecord,
     StrategyConfig,
     TradeArchiveRecord,
+    TradeArchiveReview,
     WorkflowStage,
     contract_to_dict,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "StrategyChangeRecord",
     "StrategyConfig",
     "TradeArchiveRecord",
+    "TradeArchiveReview",
     "WorkflowStage",
     "contract_to_dict",
 ]

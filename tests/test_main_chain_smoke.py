@@ -12,6 +12,9 @@ from server.firemoney_server.domain.message_catalog import load_domain_messages
 from server.firemoney_server.domain.signal_scan import SignalScanPolicy
 from server.firemoney_server.domain.strategy_config import StrategyConfigPolicy
 from server.firemoney_server.infrastructure.archive_store import TradeArchiveStore
+from server.firemoney_server.infrastructure.archive_review_export import (
+    MarkdownArchiveReviewExporter,
+)
 from server.firemoney_server.infrastructure.broker_adapter import (
     BrokerExecutionAdapter,
     LocalCsvBrokerAdapter,
@@ -54,6 +57,7 @@ def _build_service(
     fill_importer: BrokerFillImporter | None = None,
     strategy_store: StrategyConfigStore | None = None,
     archive_store: TradeArchiveStore | None = None,
+    archive_review_exporter: MarkdownArchiveReviewExporter | None = None,
     broker_adapter: BrokerExecutionAdapter | None = None,
 ) -> MainChainService:
     return MainChainService(
@@ -63,6 +67,10 @@ def _build_service(
         fill_importer=fill_importer or BrokerFillImporter(root / "fills"),
         strategy_store=strategy_store or StrategyConfigStore(root / "strategy_config.json"),
         archive_store=archive_store or TradeArchiveStore(root / "trade_archives.json"),
+        archive_review_exporter=(
+            archive_review_exporter
+            or MarkdownArchiveReviewExporter(root / "archive_exports")
+        ),
     )
 
 
@@ -349,6 +357,86 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertFalse(archive_store.path.exists())
             self.assertEqual(archive_store.load_recent(), ())
             self.assertFalse(service.clear_trade_archives())
+
+    def test_trade_archive_review_summarizes_recent_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            receipt_importer = BrokerReceiptImporter(root / "receipts")
+            _seed_broker_receipt(receipt_importer)
+            fill_importer = BrokerFillImporter(root / "fills")
+            _seed_entry_fill(fill_importer)
+            _seed_exit_fill(fill_importer)
+            service = _build_service(
+                root,
+                receipt_importer=receipt_importer,
+                fill_importer=fill_importer,
+            )
+            service.build_first_slice_snapshot(
+                user_confirmed=True,
+                broker_submitted=True,
+                fill_received=True,
+                exit_received=True,
+            )
+
+            review = service.build_trade_archive_review()
+
+            self.assertEqual(review.record_count, 1)
+            self.assertEqual(review.profit_count, 1)
+            self.assertEqual(review.loss_count, 0)
+            self.assertEqual(review.flat_count, 0)
+            self.assertEqual(review.win_rate, 1.0)
+            self.assertEqual(review.total_realized_pnl, 49.0)
+            self.assertEqual(review.average_realized_pnl_pct, 0.0394)
+            self.assertEqual(review.best_archive_id, "archive-draft-600001")
+            self.assertEqual(review.worst_archive_id, "archive-draft-600001")
+            self.assertGreaterEqual(len(review.focus_points), 3)
+            self.assertIn("49.00", review.summary)
+
+    def test_trade_archive_review_can_be_exported_as_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            receipt_importer = BrokerReceiptImporter(root / "receipts")
+            _seed_broker_receipt(receipt_importer)
+            fill_importer = BrokerFillImporter(root / "fills")
+            _seed_entry_fill(fill_importer)
+            _seed_exit_fill(fill_importer)
+            service = _build_service(
+                root,
+                receipt_importer=receipt_importer,
+                fill_importer=fill_importer,
+            )
+            service.build_first_slice_snapshot(
+                user_confirmed=True,
+                broker_submitted=True,
+                fill_received=True,
+                exit_received=True,
+            )
+
+            exported = service.export_trade_archive_review()
+
+            self.assertEqual(exported.name, "trade_archive_review.md")
+            content = exported.read_text(encoding="utf-8")
+            self.assertIn("# Trade Archive Review", content)
+            self.assertIn("archive-draft-600001", content)
+            self.assertIn("49.00", content)
+            self.assertIn("## Focus Points", content)
+
+    def test_empty_trade_archive_review_has_safe_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(Path(temp_dir))
+
+            review = service.build_trade_archive_review()
+            exported = service.export_trade_archive_review()
+
+            self.assertEqual(review.record_count, 0)
+            self.assertEqual(review.win_rate, 0.0)
+            self.assertIsNone(review.best_archive_id)
+            self.assertIsNone(review.worst_archive_id)
+            self.assertTrue(exported.exists())
+            self.assertIn(
+                "No completed archive records yet.",
+                exported.read_text(encoding="utf-8"),
+            )
 
     def test_bad_archive_store_file_is_treated_as_empty(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

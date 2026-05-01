@@ -104,6 +104,21 @@ V1 uses a semi-automatic receipt. `prepared` means the CSV export is ready for u
 `exported_path` points to the generated local CSV file for the confirmed order draft.
 `accepted` means a broker-side receipt has been imported and reconciled into the workflow.
 
+Key fields:
+
+- `receipt_id`
+- `order_id`
+- `accepted`
+- `status`
+- `route`
+- `message`
+- `prepared_at`
+- `submitted_at`
+- `confirmed_by_user`
+- `failure_reason`
+- `next_action`
+- `exported_path`
+
 ### `FillExecution`
 
 Describes the broker-side fill detail and answers: "What actually traded, at what price, and how far did it deviate from the plan?"
@@ -181,20 +196,27 @@ Key fields:
 - `next_action`
 - `tags`
 
+### `TradeArchiveReview`
+
+Describes a lightweight review over recent completed archives and answers: "What pattern is visible now, which samples deserve inspection, and what is the next safe action?"
+
+It is a service-owned summary, not a client-side history dashboard.
+
 Key fields:
 
-- `receipt_id`
-- `order_id`
-- `accepted`
-- `status`
-- `route`
-- `message`
-- `prepared_at`
-- `submitted_at`
-- `confirmed_by_user`
-- `failure_reason`
+- `review_id`
+- `record_count`
+- `profit_count`
+- `loss_count`
+- `flat_count`
+- `win_rate`
+- `total_realized_pnl`
+- `average_realized_pnl_pct`
+- `best_archive_id`
+- `worst_archive_id`
+- `summary`
+- `focus_points`
 - `next_action`
-- `exported_path`
 
 ### `Recap`
 
@@ -275,4 +297,5 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Exit execution data can enter outcome only after an entry fill has been imported.
 - Outcome cards are service-owned outputs; the client must not calculate P/L or stop discipline itself.
 - Trade archive records are compact service-owned summaries; local storage, export, and cleanup are owned by infrastructure/service boundaries, not the client.
+- Trade archive reviews are service-owned outputs; clients may display them or trigger export, but must not calculate win rate, best/worst archive, or follow-up action.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.

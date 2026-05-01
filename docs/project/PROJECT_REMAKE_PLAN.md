@@ -104,6 +104,7 @@ Everything else is supporting material, not a first-class entry.
 - Client preview now shows a lightweight recent-archives review strip beside the core workflow.
 - Archive records can now be exported as JSON or CSV through the service boundary.
 - Local archive cleanup now goes through the service boundary and bad archive JSON is treated as empty local state.
+- Recent archive records can now produce a lightweight service-owned review summary and Markdown export without adding a history center.
 - Smoke tests cover the new contract field and the main client rendering path.
 
 ## 6. Next TODO
@@ -131,6 +132,7 @@ Everything else is supporting material, not a first-class entry.
 - [x] Persist completed archive records to local storage after the in-memory contract is stable.
 - [x] Add a compact recent-archives review strip without turning it into a full history dashboard.
 - [x] Add archive export or cleanup controls only after the core local record format settles.
+- [x] Add lightweight archive review summary/export after archive export settles.
 
 ## 7. Validation Entry Points
 

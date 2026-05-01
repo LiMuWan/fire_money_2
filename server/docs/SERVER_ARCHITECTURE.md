@@ -12,6 +12,7 @@ server/firemoney_server/
     main_chain.py       main workflow orchestration
   domain/
     archive.py          completed trade archive record policy
+    archive_review.py   lightweight completed-archive review policy
     signal_scan.py      explainable signal scan policy
     opportunity.py      opportunity ranking
     outcome.py          post-fill result card policy
@@ -21,6 +22,7 @@ server/firemoney_server/
     strategy_config.py  confirmed strategy-boundary validation/application
   infrastructure/
     archive_store.py    local completed trade archive persistence/export/cleanup
+    archive_review_export.py  Markdown export for lightweight archive reviews
     broker_adapter.py   project-owned broker execution adapter boundary
     sample_data.py      deterministic smoke data
     config/             deterministic local input data
@@ -66,6 +68,8 @@ keeps only the front candidates in the execution line.
 - Completed trade archive records are built by `domain/archive.py`; they summarize the closed round trip without introducing a separate history surface yet.
 - Completed trade archive records are persisted by `infrastructure/archive_store.py` under `.firemoney/trade_archives.json`.
 - Recent archive records can be exported through `MainChainService.export_trade_archives()` as JSON or CSV under `exports/archives/`.
+- Recent archive records can produce `TradeArchiveReview` through `MainChainService.build_trade_archive_review()` and Markdown through `MainChainService.export_trade_archive_review()`.
+- Archive review metrics are built by `domain/archive_review.py`; `infrastructure/archive_review_export.py` only formats the already-approved service output.
 - Local archive cleanup goes through `MainChainService.clear_trade_archives()`; client code must not delete `.firemoney` files directly.
 - Invalid local archive JSON is treated as empty local state so the main workflow can continue.
 - Recap may propose strategy adjustments, but it must not write new strategy config automatically.

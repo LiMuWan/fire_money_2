@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from server.firemoney_server import MainChainService
-from shared.contracts import MainChainSnapshot
+from shared.contracts import MainChainSnapshot, TradeArchiveReview
 
 
 class LocalMainChainAdapter:
@@ -42,6 +42,19 @@ class LocalMainChainAdapter:
         return self._service.export_trade_archives(
             target_path=target_path,
             format=format,
+            limit=limit,
+        )
+
+    def build_trade_archive_review(self, limit: int = 50) -> TradeArchiveReview:
+        return self._service.build_trade_archive_review(limit=limit)
+
+    def export_trade_archive_review(
+        self,
+        target_path: str | Path | None = None,
+        limit: int = 50,
+    ) -> Path:
+        return self._service.export_trade_archive_review(
+            target_path=target_path,
             limit=limit,
         )
 

@@ -66,8 +66,10 @@ docs/
 - 交易归档：`.firemoney/trade_archives.json`
 - 委托/回执/成交样本：`exports/`
 - 归档导出：`exports/archives/trade_archives.json` 或 `exports/archives/trade_archives.csv`
+- 归档复查导出：`exports/archives/trade_archive_review.md`
 
 券商执行目前走项目自有 `BrokerExecutionAdapter` 边界，首个实现是本地 CSV；后续真实 SDK 必须先实现这个边界再接入主链。
+归档复查目前是服务端轻量摘要：胜率、累计盈亏、最佳样本、最弱样本和下一步建议都由业务层产生，客户端只展示或触发导出，不扩展成独立历史中心。
 
 ## 配置入口
 
@@ -98,4 +100,4 @@ python -m client.desktop.firemoney_client.preview
 
 ## 下一步
 
-短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商 SDK 的 `BrokerExecutionAdapter` 实现，或归档导出后的轻量复查体验。
+短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商 SDK 的 `BrokerExecutionAdapter` 实现，或归档复查输出后的样本质量/策略边界小步增强。
