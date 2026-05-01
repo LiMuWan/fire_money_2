@@ -266,6 +266,7 @@ Before a local strategy config enters the next scan, the service validates known
 ### `StrategyChangeRecord`
 
 Describes a lightweight local strategy-boundary change record.
+The service can export these records for audit, but the shared contract remains the same record structure used in `StrategyConfig.recent_changes`.
 
 Key fields:
 
@@ -326,4 +327,5 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Trade archive reviews are service-owned outputs; clients may display them or trigger export, but must not calculate win rate, best/worst archive, or follow-up action.
 - Archive review requires at least 3 closed archive records before strategy-boundary review can be recommended; smaller sample sets remain observation-only.
 - Strategy-boundary reviews may propose adjustments from archive-review signals, but those adjustments affect `StrategyConfig` only through an explicit confirmation/apply service path.
+- Strategy boundary audit export is infrastructure-owned and must use `StrategyChangeRecord`; clients must not read `.firemoney` history files directly.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.

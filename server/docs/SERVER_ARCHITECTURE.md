@@ -30,6 +30,7 @@ server/firemoney_server/
     fill_import.py      local broker fill-detail import adapter
     order_export.py     local CSV order export adapter
     receipt_import.py   local broker receipt import adapter
+    strategy_audit_export.py  Markdown export for strategy-boundary audit records
     strategy_store.py   local strategy config persistence
 ```
 
@@ -83,6 +84,7 @@ keeps only the front candidates in the execution line.
 - Confirmed strategy boundaries are stored locally under `.firemoney/strategy_config.json`.
 - Local strategy boundaries can be reset through the application service; UI must not delete files directly.
 - Strategy boundary apply/reset actions keep a lightweight local change record for user trust and recovery context.
+- Strategy boundary change records can be exported through `MainChainService.export_strategy_boundary_audit()` as Markdown under `exports/strategy/`.
 
 ## 6. Configuration Entry Points
 

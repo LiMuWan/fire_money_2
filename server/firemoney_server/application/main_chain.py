@@ -34,6 +34,9 @@ from server.firemoney_server.infrastructure.broker_adapter import (
 from server.firemoney_server.infrastructure.fill_import import BrokerFillImporter
 from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
 from server.firemoney_server.infrastructure.receipt_import import BrokerReceiptImporter
+from server.firemoney_server.infrastructure.strategy_audit_export import (
+    MarkdownStrategyAuditExporter,
+)
 from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
 from shared.contracts import (
     AdjustmentStatus,
@@ -61,6 +64,7 @@ class MainChainService:
         strategy_boundary_review_policy: StrategyBoundaryReviewPolicy | None = None,
         strategy_config_policy: StrategyConfigPolicy | None = None,
         strategy_store: StrategyConfigStore | None = None,
+        strategy_audit_exporter: MarkdownStrategyAuditExporter | None = None,
         archive_store: TradeArchiveStore | None = None,
         archive_review_exporter: MarkdownArchiveReviewExporter | None = None,
         broker_adapter: BrokerExecutionAdapter | None = None,
@@ -81,6 +85,9 @@ class MainChainService:
         )
         self._strategy_config_policy = strategy_config_policy or StrategyConfigPolicy()
         self._strategy_store = strategy_store or StrategyConfigStore()
+        self._strategy_audit_exporter = (
+            strategy_audit_exporter or MarkdownStrategyAuditExporter()
+        )
         self._archive_store = archive_store or TradeArchiveStore()
         self._archive_review_exporter = (
             archive_review_exporter or MarkdownArchiveReviewExporter()
@@ -176,6 +183,22 @@ class MainChainService:
             strategy_config,
             previous_config=base_strategy_config,
             reason=review.summary,
+        )
+
+    def export_strategy_boundary_audit(
+        self,
+        target_path: str | Path | None = None,
+    ) -> Path:
+        """Export recent local strategy-boundary changes for audit."""
+
+        default_strategy_config = sample_strategy_config()
+        strategy_config = self._strategy_config_policy.normalize_config(
+            self._strategy_store.load_or_default(default_strategy_config),
+            default_strategy_config,
+        )
+        return self._strategy_audit_exporter.export(
+            strategy_config=strategy_config,
+            target_path=target_path,
         )
 
     def clear_trade_archives(self) -> bool:

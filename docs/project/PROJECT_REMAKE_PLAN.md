@@ -108,6 +108,7 @@ Everything else is supporting material, not a first-class entry.
 - Archive review now reports sample quality and prevents fewer than 3 closed archives from driving strategy-boundary action.
 - Archive-review signals can now produce a separate strategy-boundary review with confirmable adjustments, without writing strategy config automatically.
 - Confirmed archive-review-driven strategy-boundary reviews can now apply through the existing validated strategy-config persistence path.
+- Strategy-boundary apply/reset change records can now be exported as a lightweight Markdown audit report.
 - Smoke tests cover the new contract field and the main client rendering path.
 
 ## 6. Next TODO
@@ -139,6 +140,7 @@ Everything else is supporting material, not a first-class entry.
 - [x] Add an archive-review sample-quality gate before strategy-boundary guidance.
 - [x] Add a service-owned strategy-boundary review from archive-review signals without auto-applying it.
 - [x] Apply archive-review-driven strategy-boundary reviews only after explicit confirmation.
+- [x] Export recent strategy-boundary apply/reset records as a lightweight audit report.
 
 ## 7. Validation Entry Points
 

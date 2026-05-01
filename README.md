@@ -67,10 +67,11 @@ docs/
 - 委托/回执/成交样本：`exports/`
 - 归档导出：`exports/archives/trade_archives.json` 或 `exports/archives/trade_archives.csv`
 - 归档复查导出：`exports/archives/trade_archive_review.md`
+- 策略边界审计导出：`exports/strategy/strategy_boundary_audit.md`
 
 券商执行目前走项目自有 `BrokerExecutionAdapter` 边界，首个实现是本地 CSV；后续真实 SDK 必须先实现这个边界再接入主链。
 
-归档复查目前是服务端轻量摘要：样本质量、胜率、累计盈亏、最佳样本、最弱样本和下一步建议都由业务层产生。少于 3 笔闭环归档只作为观察样本，不驱动策略边界调整；达到门槛后的策略边界审查只生成待用户确认的建议。只有显式确认后，服务端才会应用并持久化策略配置。客户端只展示或触发导出，不扩展成独立历史中心。
+归档复查目前是服务端轻量摘要：样本质量、胜率、累计盈亏、最佳样本、最弱样本和下一步建议都由业务层产生。少于 3 笔闭环归档只作为观察样本，不驱动策略边界调整；达到门槛后的策略边界审查只生成待用户确认的建议。只有显式确认后，服务端才会应用并持久化策略配置；应用/重置记录可导出为轻量审计报告。客户端只展示或触发导出，不扩展成独立历史中心。
 
 ## 配置入口
 
@@ -101,4 +102,4 @@ python -m client.desktop.firemoney_client.preview
 
 ## 下一步
 
-短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商 SDK 的 `BrokerExecutionAdapter` 实现，或给归档复查驱动的策略边界应用补充更细的审计/回退体验。
+短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商 SDK 的 `BrokerExecutionAdapter` 实现，或给策略边界变更补充更细的回退确认体验。

@@ -76,5 +76,11 @@ class LocalMainChainAdapter:
             limit=limit,
         )
 
+    def export_strategy_boundary_audit(
+        self,
+        target_path: str | Path | None = None,
+    ) -> Path:
+        return self._service.export_strategy_boundary_audit(target_path=target_path)
+
     def clear_trade_archives(self) -> bool:
         return self._service.clear_trade_archives()

@@ -29,6 +29,9 @@ from server.firemoney_server.infrastructure.receipt_import import (
     BrokerReceiptImporter,
     BrokerReceiptRecord,
 )
+from server.firemoney_server.infrastructure.strategy_audit_export import (
+    MarkdownStrategyAuditExporter,
+)
 from server.firemoney_server.infrastructure.sample_data import (
     sample_market_context,
     sample_opportunity_candidates,
@@ -59,6 +62,7 @@ def _build_service(
     receipt_importer: BrokerReceiptImporter | None = None,
     fill_importer: BrokerFillImporter | None = None,
     strategy_store: StrategyConfigStore | None = None,
+    strategy_audit_exporter: MarkdownStrategyAuditExporter | None = None,
     archive_store: TradeArchiveStore | None = None,
     archive_review_exporter: MarkdownArchiveReviewExporter | None = None,
     broker_adapter: BrokerExecutionAdapter | None = None,
@@ -69,6 +73,10 @@ def _build_service(
         receipt_importer=receipt_importer or BrokerReceiptImporter(root / "receipts"),
         fill_importer=fill_importer or BrokerFillImporter(root / "fills"),
         strategy_store=strategy_store or StrategyConfigStore(root / "strategy_config.json"),
+        strategy_audit_exporter=(
+            strategy_audit_exporter
+            or MarkdownStrategyAuditExporter(root / "strategy_exports")
+        ),
         archive_store=archive_store or TradeArchiveStore(root / "trade_archives.json"),
         archive_review_exporter=(
             archive_review_exporter
@@ -658,6 +666,70 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(reloaded.strategy_config.source, "local")
             self.assertEqual(reloaded.strategy_config.parameters["max_position_pct"], 0.08)
             self.assertEqual(reloaded.strategy_config.parameters["min_score"], 75)
+
+    def test_strategy_boundary_audit_exports_current_change_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            for record in (
+                _archive_record(
+                    "archive-loss",
+                    "600003",
+                    -18.0,
+                    -0.012,
+                    "loss",
+                    "review stop discipline",
+                ),
+                _archive_record(
+                    "archive-flat",
+                    "600002",
+                    0.0,
+                    0.0,
+                    "flat",
+                    "keep watching",
+                ),
+                _archive_record(
+                    "archive-profit",
+                    "600001",
+                    42.0,
+                    0.028,
+                    "profit",
+                    "keep boundary",
+                ),
+            ):
+                archive_store.save(record)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store, archive_store=archive_store)
+            service.apply_strategy_boundary_review(confirm=True)
+
+            exported = service.export_strategy_boundary_audit()
+
+            self.assertEqual(exported.name, "strategy_boundary_audit.md")
+            content = exported.read_text(encoding="utf-8")
+            self.assertIn("# Strategy Boundary Audit", content)
+            self.assertIn("intraday-mainline-v1", content)
+            self.assertIn("0.1.1", content)
+            self.assertIn("max_position_pct: 0.12 -> 0.08", content)
+            self.assertIn("min_score: 70 -> 75", content)
+            self.assertIn("归档复查", content)
+
+    def test_strategy_boundary_audit_exports_reset_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store)
+            service.build_first_slice_snapshot(
+                user_confirmed=True,
+                adjustments_confirmed=True,
+            )
+            self.assertTrue(service.reset_strategy_config())
+
+            exported = service.export_strategy_boundary_audit()
+
+            content = exported.read_text(encoding="utf-8")
+            self.assertIn("reset", content)
+            self.assertIn("恢复默认策略边界", content)
+            self.assertIn("apply", content)
 
     def test_confirmed_strategy_boundary_review_skips_blocked_samples(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
