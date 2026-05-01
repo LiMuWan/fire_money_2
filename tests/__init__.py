@@ -1,0 +1,1 @@
+"""FireMoney test package."""
