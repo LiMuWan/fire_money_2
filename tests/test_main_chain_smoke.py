@@ -732,6 +732,50 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("恢复默认策略边界", content)
             self.assertIn("apply", content)
 
+    def test_strategy_boundary_audit_can_filter_change_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store)
+            service.build_first_slice_snapshot(
+                user_confirmed=True,
+                adjustments_confirmed=True,
+            )
+            service.apply_strategy_reset_review(confirm=True)
+
+            reset_export = service.export_strategy_boundary_audit(actions=("reset",))
+            apply_export = service.export_strategy_boundary_audit(actions=("apply",))
+            empty_export = service.export_strategy_boundary_audit(actions=("review",))
+
+            self.assertEqual(reset_export.name, "strategy_boundary_audit_reset.md")
+            self.assertEqual(apply_export.name, "strategy_boundary_audit_apply.md")
+            reset_content = reset_export.read_text(encoding="utf-8")
+            apply_content = apply_export.read_text(encoding="utf-8")
+            empty_content = empty_export.read_text(encoding="utf-8")
+            self.assertIn("- Action filter: reset", reset_content)
+            self.assertIn("| reset-", reset_content)
+            self.assertNotIn("| apply-", reset_content)
+            self.assertIn("- Action filter: apply", apply_content)
+            self.assertIn("| apply-", apply_content)
+            self.assertNotIn("| reset-", apply_content)
+            self.assertIn("No strategy-boundary changes matched", empty_content)
+
+    def test_client_adapter_exports_filtered_strategy_boundary_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store)
+            adapter = LocalMainChainAdapter(service)
+            adapter.load_snapshot(user_confirmed=True, adjustments_confirmed=True)
+            adapter.apply_strategy_reset_review(confirm=True)
+
+            exported = adapter.export_strategy_boundary_audit(actions=("reset",))
+
+            self.assertEqual(exported.name, "strategy_boundary_audit_reset.md")
+            content = exported.read_text(encoding="utf-8")
+            self.assertIn("| reset-", content)
+            self.assertNotIn("| apply-", content)
+
     def test_confirmed_strategy_boundary_review_skips_blocked_samples(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -87,6 +87,7 @@ keeps only the front candidates in the execution line.
 - Local strategy boundaries are reset only through `MainChainService.apply_strategy_reset_review(confirm=True)` or the legacy service reset helper; UI must not delete files directly.
 - Strategy boundary apply/reset actions keep a lightweight local change record for user trust and recovery context.
 - Strategy boundary change records can be exported through `MainChainService.export_strategy_boundary_audit()` as Markdown under `exports/strategy/`.
+- Strategy boundary audit export can filter records by action through `actions=("apply",)` or `actions=("reset",)`; filtering stays in infrastructure/service code, not the client.
 
 ## 6. Configuration Entry Points
 

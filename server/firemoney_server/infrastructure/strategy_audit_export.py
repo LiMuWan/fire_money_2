@@ -20,17 +20,33 @@ class MarkdownStrategyAuditExporter:
         self,
         strategy_config: StrategyConfig,
         target_path: str | Path | None = None,
+        actions: tuple[str, ...] | None = None,
     ) -> Path:
+        action_filter = self._normalize_actions(actions)
         target = (
             Path(target_path)
             if target_path
-            else self._export_dir / "strategy_boundary_audit.md"
+            else self._default_target(action_filter)
         )
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(self._render_markdown(strategy_config), encoding="utf-8")
+        target.write_text(
+            self._render_markdown(strategy_config, action_filter),
+            encoding="utf-8",
+        )
         return target
 
-    def _render_markdown(self, strategy_config: StrategyConfig) -> str:
+    def _default_target(self, action_filter: tuple[str, ...]) -> Path:
+        if not action_filter:
+            return self._export_dir / "strategy_boundary_audit.md"
+        suffix = "_".join(self._filename_token(action) for action in action_filter)
+        return self._export_dir / f"strategy_boundary_audit_{suffix}.md"
+
+    def _render_markdown(
+        self,
+        strategy_config: StrategyConfig,
+        action_filter: tuple[str, ...],
+    ) -> str:
+        records = self._matching_records(strategy_config, action_filter)
         lines = [
             "# Strategy Boundary Audit",
             "",
@@ -38,6 +54,7 @@ class MarkdownStrategyAuditExporter:
             f"- Version: {strategy_config.version}",
             f"- Source: {strategy_config.source}",
             f"- Adjustment status: {strategy_config.adjustment_status.value}",
+            f"- Action filter: {', '.join(action_filter) if action_filter else 'all'}",
             "",
             "## Impact",
             "",
@@ -46,21 +63,50 @@ class MarkdownStrategyAuditExporter:
             "## Recent Changes",
             "",
         ]
-        if strategy_config.recent_changes:
+        if records:
             lines.extend(
                 [
                     "| Record | Action | Version | Reason | Changes | Created At |",
                     "| --- | --- | --- | --- | --- | --- |",
                 ]
             )
-            lines.extend(
-                self._render_record(record)
-                for record in strategy_config.recent_changes
-            )
+            lines.extend(self._render_record(record) for record in records)
+        elif action_filter:
+            lines.append("No strategy-boundary changes matched the selected audit filter.")
         else:
             lines.append("No local strategy-boundary changes recorded yet.")
         lines.append("")
         return "\n".join(lines)
+
+    def _normalize_actions(self, actions: tuple[str, ...] | None) -> tuple[str, ...]:
+        if not actions:
+            return ()
+        normalized: list[str] = []
+        for action in actions:
+            value = str(action).strip().lower()
+            if value and value not in normalized:
+                normalized.append(value)
+        return tuple(normalized)
+
+    def _matching_records(
+        self,
+        strategy_config: StrategyConfig,
+        action_filter: tuple[str, ...],
+    ) -> tuple[StrategyChangeRecord, ...]:
+        if not action_filter:
+            return strategy_config.recent_changes
+        return tuple(
+            record
+            for record in strategy_config.recent_changes
+            if record.action.lower() in action_filter
+        )
+
+    def _filename_token(self, action: str) -> str:
+        token = "".join(
+            char if char.isalnum() or char in {"-", "_"} else "_"
+            for char in action
+        ).strip("_")
+        return token or "action"
 
     def _render_record(self, record: StrategyChangeRecord) -> str:
         return (

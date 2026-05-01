@@ -48,6 +48,7 @@ Removed as first-class entries:
 - Execution actions must show confirmation, status feedback, and recap entry points.
 - The client should use the service-layer adapter instead of calling SDKs directly.
 - Strategy-boundary apply/reset actions must go through service review and confirmation methods; the client must not edit `.firemoney` files directly.
+- Strategy-boundary audit filtering is requested through the adapter, not by reading or parsing local history files in UI code.
 - One screen should answer one dominant user question.
 - Repeated summaries should be folded or hidden when they do not change the next action.
 

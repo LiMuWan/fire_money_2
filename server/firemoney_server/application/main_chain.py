@@ -230,6 +230,7 @@ class MainChainService:
     def export_strategy_boundary_audit(
         self,
         target_path: str | Path | None = None,
+        actions: tuple[str, ...] | None = None,
     ) -> Path:
         """Export recent local strategy-boundary changes for audit."""
 
@@ -241,6 +242,7 @@ class MainChainService:
         return self._strategy_audit_exporter.export(
             strategy_config=strategy_config,
             target_path=target_path,
+            actions=actions,
         )
 
     def clear_trade_archives(self) -> bool:
