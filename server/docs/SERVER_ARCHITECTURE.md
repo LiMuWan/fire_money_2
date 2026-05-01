@@ -18,7 +18,7 @@ server/firemoney_server/
     risk.py             pre-execution risk review
     execution.py        semi-automatic order draft and receipt prep
     recap.py            execution recap and strategy-boundary suggestions
-    strategy_config.py  confirmed strategy-boundary application
+    strategy_config.py  confirmed strategy-boundary validation/application
   infrastructure/
     archive_store.py    local completed trade archive persistence/export/cleanup
     sample_data.py      deterministic smoke data
@@ -67,6 +67,8 @@ keeps only the front candidates in the execution line.
 - Invalid local archive JSON is treated as empty local state so the main workflow can continue.
 - Recap may propose strategy adjustments, but it must not write new strategy config automatically.
 - Strategy config changes require explicit adjustment confirmation before they affect the next scan cycle.
+- Strategy config parameters are validated by `domain/strategy_config.py` before they enter the next signal scan.
+- Invalid local strategy JSON falls back to default config; unknown, malformed, or out-of-range parameters are corrected from default boundaries.
 - Confirmed strategy boundaries are stored locally under `.firemoney/strategy_config.json`.
 - Local strategy boundaries can be reset through the application service; UI must not delete files directly.
 - Strategy boundary apply/reset actions keep a lightweight local change record for user trust and recovery context.

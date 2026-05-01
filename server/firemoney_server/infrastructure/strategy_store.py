@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 from pathlib import Path
 from time import strftime
 from typing import Any
@@ -45,21 +46,24 @@ class StrategyConfigStore:
         if not self._path.exists():
             return self._with_history(default_config)
 
-        with self._path.open("r", encoding="utf-8") as file:
-            payload: dict[str, Any] = json.load(file)
+        try:
+            with self._path.open("r", encoding="utf-8") as file:
+                payload: dict[str, Any] = json.load(file)
+            return StrategyConfig(
+                strategy_id=str(payload["strategy_id"]),
+                name=str(payload["name"]),
+                version=str(payload["version"]),
+                risk_profile=str(payload["risk_profile"]),
+                parameters=dict(payload["parameters"]),
+                impact_summary=str(payload["impact_summary"]),
+                adjustment_status=AdjustmentStatus(str(payload["adjustment_status"])),
+                adjustment_message=str(payload["adjustment_message"]),
+                source="local",
+                recent_changes=self._records_from_payload(payload.get("recent_changes", [])),
+            )
+        except (JSONDecodeError, KeyError, OSError, TypeError, ValueError):
+            return self._with_history(default_config)
 
-        return StrategyConfig(
-            strategy_id=str(payload["strategy_id"]),
-            name=str(payload["name"]),
-            version=str(payload["version"]),
-            risk_profile=str(payload["risk_profile"]),
-            parameters=dict(payload["parameters"]),
-            impact_summary=str(payload["impact_summary"]),
-            adjustment_status=AdjustmentStatus(str(payload["adjustment_status"])),
-            adjustment_message=str(payload["adjustment_message"]),
-            source="local",
-            recent_changes=self._records_from_payload(payload.get("recent_changes", [])),
-        )
 
     def save(
         self,
@@ -223,9 +227,12 @@ class StrategyConfigStore:
     def _load_history_records(self) -> tuple[StrategyChangeRecord, ...]:
         if not self.history_path.exists():
             return ()
-        with self.history_path.open("r", encoding="utf-8") as file:
-            payload: dict[str, Any] = json.load(file)
-        return self._records_from_payload(payload.get("recent_changes", ()))
+        try:
+            with self.history_path.open("r", encoding="utf-8") as file:
+                payload: dict[str, Any] = json.load(file)
+            return self._records_from_payload(payload.get("recent_changes", ()))
+        except (JSONDecodeError, KeyError, OSError, TypeError, ValueError):
+            return ()
 
     def _record_to_payload(self, record: StrategyChangeRecord) -> dict[str, Any]:
         return {

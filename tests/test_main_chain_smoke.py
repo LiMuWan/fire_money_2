@@ -10,6 +10,7 @@ from client.desktop.firemoney_client.renderer import render_core_workflow_html
 from server.firemoney_server import MainChainService
 from server.firemoney_server.domain.message_catalog import load_domain_messages
 from server.firemoney_server.domain.signal_scan import SignalScanPolicy
+from server.firemoney_server.domain.strategy_config import StrategyConfigPolicy
 from server.firemoney_server.infrastructure.archive_store import TradeArchiveStore
 from server.firemoney_server.infrastructure.fill_import import (
     BrokerExitRecord,
@@ -36,6 +37,7 @@ from shared.contracts import (
     FillExecution,
     OutcomeCard,
     ReviewDecision,
+    StrategyAdjustment,
     TradeArchiveRecord,
     WorkflowStage,
     contract_to_dict,
@@ -364,6 +366,94 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(reset.strategy_config.source, "default")
             self.assertEqual(reset.strategy_config.parameters["min_score"], 70)
             self.assertEqual(reset.strategy_config.recent_changes[0].action, "reset")
+
+    def test_local_strategy_config_is_validated_before_next_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            store.path.write_text(
+                json.dumps(
+                    {
+                        "strategy_id": "intraday-mainline-v1",
+                        "name": "盘中主线机会",
+                        "version": "0.9.0",
+                        "risk_profile": "semi_auto_review_required",
+                        "parameters": {
+                            "min_score": 130,
+                            "max_position_pct": 0.8,
+                            "confidence_floor": 0.2,
+                            "unknown_toggle": "on",
+                        },
+                        "impact_summary": "unsafe local override",
+                        "adjustment_status": "applied",
+                        "adjustment_message": "unsafe",
+                        "source": "local",
+                        "recent_changes": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            snapshot = _build_service(root, strategy_store=store).build_first_slice_snapshot()
+
+            self.assertEqual(snapshot.strategy_config.version, "0.9.0")
+            self.assertEqual(snapshot.strategy_config.source, "local")
+            self.assertEqual(snapshot.strategy_config.adjustment_status, AdjustmentStatus.NOT_AVAILABLE)
+            self.assertEqual(snapshot.strategy_config.parameters["min_score"], 70)
+            self.assertEqual(snapshot.strategy_config.parameters["max_position_pct"], 0.12)
+            self.assertEqual(snapshot.strategy_config.parameters["confidence_floor"], 0.72)
+            self.assertNotIn("unknown_toggle", snapshot.strategy_config.parameters)
+            self.assertIn("unknown_toggle", snapshot.strategy_config.impact_summary)
+
+    def test_invalid_strategy_store_file_falls_back_to_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            store.path.write_text("{", encoding="utf-8")
+
+            snapshot = _build_service(root, strategy_store=store).build_first_slice_snapshot()
+
+            self.assertEqual(snapshot.strategy_config.version, "0.1.0")
+            self.assertEqual(snapshot.strategy_config.source, "default")
+            self.assertEqual(snapshot.strategy_config.parameters["min_score"], 70)
+
+    def test_strategy_adjustment_policy_filters_invalid_suggestions(self) -> None:
+        base_config = sample_strategy_config()
+        adjusted = StrategyConfigPolicy().apply_adjustments(
+            strategy_config=base_config,
+            adjustments=(
+                StrategyAdjustment(
+                    key="min_score",
+                    label="有效评分门槛",
+                    current_value=70,
+                    suggested_value=75,
+                    reason="valid",
+                    impact="valid",
+                ),
+                StrategyAdjustment(
+                    key="max_position_pct",
+                    label="危险仓位",
+                    current_value=0.12,
+                    suggested_value=0.9,
+                    reason="invalid",
+                    impact="invalid",
+                ),
+                StrategyAdjustment(
+                    key="unknown_toggle",
+                    label="未知参数",
+                    current_value="off",
+                    suggested_value="on",
+                    reason="invalid",
+                    impact="invalid",
+                ),
+            ),
+        )
+
+        self.assertEqual(adjusted.adjustment_status, AdjustmentStatus.APPLIED)
+        self.assertEqual(adjusted.parameters["min_score"], 75)
+        self.assertEqual(adjusted.parameters["max_position_pct"], 0.12)
+        self.assertNotIn("unknown_toggle", adjusted.parameters)
 
     def test_signal_scan_policy_filters_to_executable_focus(self) -> None:
         report = SignalScanPolicy().build_report(

@@ -95,8 +95,10 @@ class MainChainService:
         """Build a deterministic snapshot for scan -> review -> confirmation."""
 
         market_context = sample_market_context()
-        base_strategy_config = self._strategy_store.load_or_default(
-            sample_strategy_config()
+        default_strategy_config = sample_strategy_config()
+        base_strategy_config = self._strategy_config_policy.normalize_config(
+            self._strategy_store.load_or_default(default_strategy_config),
+            default_strategy_config,
         )
         strategy_config = base_strategy_config
         opportunities = self._opportunity_ranker.rank(sample_opportunity_candidates())

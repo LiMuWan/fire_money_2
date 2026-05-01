@@ -235,6 +235,7 @@ Additional adjustment fields:
 Strategy adjustments become effective only after the user explicitly confirms applying them.
 The local service can persist confirmed boundaries and mark `source` as `local`.
 Resetting local strategy boundaries restores the default strategy config and source.
+Before a local strategy config enters the next scan, the service validates known parameter types and ranges and falls back to default boundaries for invalid values.
 
 ### `StrategyChangeRecord`
 
@@ -250,19 +251,6 @@ Key fields:
 - `changes`
 - `reason`
 - `created_at`
-
-### `StrategyConfig`
-
-Describes the strategy boundary and answers: "How do parameter changes affect risk and opportunity?"
-
-Key fields:
-
-- `strategy_id`
-- `name`
-- `version`
-- `risk_profile`
-- `parameters`
-- `impact_summary`
 
 ### `MainChainSnapshot`
 
@@ -287,3 +275,4 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Exit execution data can enter outcome only after an entry fill has been imported.
 - Outcome cards are service-owned outputs; the client must not calculate P/L or stop discipline itself.
 - Trade archive records are compact service-owned summaries; local storage, export, and cleanup are owned by infrastructure/service boundaries, not the client.
+- Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.

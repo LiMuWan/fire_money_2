@@ -29,7 +29,12 @@
     "waiting_adjustment_message": "复盘已生成策略边界建议，等待用户确认应用。",
     "applied_impact_summary": "已应用复盘建议：{labels}",
     "applied_label_separator": "、",
-    "applied_adjustment_message": "策略边界建议已应用到下一轮参数。"
+    "applied_adjustment_message": "策略边界建议已应用到下一轮参数。",
+    "normalized_summary": "策略边界已通过参数校验。",
+    "normalized_invalid_keys_summary": "本地策略边界包含无效参数，已按默认边界纠偏：{keys}",
+    "normalized_adjustment_message": "本地策略边界已校验并纠偏，等待下一轮扫描使用。",
+    "no_valid_adjustment_summary": "复盘建议未通过策略边界校验，未写入下一轮参数。",
+    "no_valid_adjustment_message": "没有可应用的有效策略边界建议。"
   },
   "recap": {
     "conclusion_closed": "退出成交已写回，交易闭环可进入最终复盘",

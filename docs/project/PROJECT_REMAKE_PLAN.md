@@ -88,6 +88,8 @@ Everything else is supporting material, not a first-class entry.
 - Recap now proposes strategy-boundary adjustments without automatically writing config.
 - Strategy-boundary adjustments now require explicit user confirmation before updating the next cycle.
 - Confirmed strategy boundaries are persisted locally under `.firemoney/strategy_config.json`.
+- Local strategy boundaries are validated before the next scan; invalid local JSON falls back to defaults.
+- Unknown, malformed, or out-of-range strategy parameters are corrected from default boundaries.
 - Local strategy boundaries can be reset back to defaults through the service layer.
 - Strategy boundary apply/reset actions now keep a lightweight local change record.
 - Execution receipts now expose route, status, prepared time, export path, and next action as structured fields.
@@ -114,6 +116,7 @@ Everything else is supporting material, not a first-class entry.
 - [x] Add recap-driven strategy-boundary suggestions.
 - [x] Add user confirmation for applying proposed strategy adjustments.
 - [x] Persist confirmed strategy boundaries outside sample data.
+- [x] Validate local strategy boundaries before the next scan cycle.
 - [x] Add a lightweight reset/revert path for local strategy boundaries.
 - [x] Add a visible lightweight change trail for strategy boundary changes.
 - [x] Add structured execution receipt data for the semi-automatic CSV flow.
