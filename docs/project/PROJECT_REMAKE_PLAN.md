@@ -94,6 +94,7 @@ Everything else is supporting material, not a first-class entry.
 - Strategy boundary apply/reset actions now keep a lightweight local change record.
 - Execution receipts now expose route, status, prepared time, export path, and next action as structured fields.
 - Confirmed order drafts now generate a real local CSV export through the infrastructure layer.
+- Broker execution is now behind a project-owned adapter boundary, with local CSV as the first implementation.
 - Broker-side receipt CSV import now reconciles submitted/accepted/failed status back into the main workflow.
 - Broker-side fill detail import now feeds成交数量、成交均价和滑点 into recap.
 - Post-fill outcome cards now show current price, unrealized P/L, stop discipline, and next action.
@@ -121,6 +122,7 @@ Everything else is supporting material, not a first-class entry.
 - [x] Add a visible lightweight change trail for strategy boundary changes.
 - [x] Add structured execution receipt data for the semi-automatic CSV flow.
 - [x] Add real CSV file generation behind the execution route.
+- [x] Wrap the CSV execution path behind a broker adapter boundary.
 - [x] Add broker receipt import/reconciliation after the CSV file is submitted outside FireMoney.
 - [x] Add final fill-price/deal recap after the broker returns成交明细.
 - [x] Split the next cycle into a compact post-trade outcome card: unrealized P/L, stop discipline, and follow-up action.

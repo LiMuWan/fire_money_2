@@ -20,6 +20,10 @@ from server.firemoney_server.infrastructure.sample_data import (
     sample_universe_size,
 )
 from server.firemoney_server.infrastructure.archive_store import TradeArchiveStore
+from server.firemoney_server.infrastructure.broker_adapter import (
+    BrokerExecutionAdapter,
+    LocalCsvBrokerAdapter,
+)
 from server.firemoney_server.infrastructure.fill_import import BrokerFillImporter
 from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
 from server.firemoney_server.infrastructure.receipt_import import BrokerReceiptImporter
@@ -42,6 +46,7 @@ class MainChainService:
         strategy_config_policy: StrategyConfigPolicy | None = None,
         strategy_store: StrategyConfigStore | None = None,
         archive_store: TradeArchiveStore | None = None,
+        broker_adapter: BrokerExecutionAdapter | None = None,
         order_exporter: CsvOrderExporter | None = None,
         receipt_importer: BrokerReceiptImporter | None = None,
         fill_importer: BrokerFillImporter | None = None,
@@ -56,9 +61,11 @@ class MainChainService:
         self._strategy_config_policy = strategy_config_policy or StrategyConfigPolicy()
         self._strategy_store = strategy_store or StrategyConfigStore()
         self._archive_store = archive_store or TradeArchiveStore()
-        self._order_exporter = order_exporter or CsvOrderExporter()
-        self._receipt_importer = receipt_importer or BrokerReceiptImporter()
-        self._fill_importer = fill_importer or BrokerFillImporter()
+        self._broker_adapter = broker_adapter or LocalCsvBrokerAdapter(
+            order_exporter=order_exporter,
+            receipt_importer=receipt_importer,
+            fill_importer=fill_importer,
+        )
 
     def reset_strategy_config(self) -> bool:
         """Restore default strategy boundaries by clearing local overrides."""
@@ -119,7 +126,7 @@ class MainChainService:
             else None
         )
         export_result = (
-            self._order_exporter.export(order_ticket)
+            self._broker_adapter.export_order(order_ticket)
             if order_ticket and user_confirmed
             else None
         )
@@ -132,7 +139,7 @@ class MainChainService:
             else None
         )
         if receipt and broker_submitted:
-            imported_receipt = self._receipt_importer.import_for_order(
+            imported_receipt = self._broker_adapter.import_receipt(
                 receipt.order_id,
             )
             if imported_receipt:
@@ -145,12 +152,12 @@ class MainChainService:
                     failure_reason=imported_receipt.failure_reason,
                 )
         fill_execution = (
-            self._fill_importer.import_for_order(order_ticket)
+            self._broker_adapter.import_entry_fill(order_ticket)
             if order_ticket and receipt and receipt.accepted and fill_received
             else None
         )
         exit_execution = (
-            self._fill_importer.import_exit_for_order(fill_execution)
+            self._broker_adapter.import_exit_fill(fill_execution)
             if fill_execution and exit_received
             else None
         )

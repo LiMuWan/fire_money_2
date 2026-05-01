@@ -21,6 +21,7 @@ server/firemoney_server/
     strategy_config.py  confirmed strategy-boundary validation/application
   infrastructure/
     archive_store.py    local completed trade archive persistence/export/cleanup
+    broker_adapter.py   project-owned broker execution adapter boundary
     sample_data.py      deterministic smoke data
     config/             deterministic local input data
     fill_import.py      local broker fill-detail import adapter
@@ -53,6 +54,8 @@ keeps only the front candidates in the execution line.
 ## 5. Follow-up Rules
 
 - SDK, broker, and CSV details should enter `infrastructure` first, then be invoked by `application`.
+- `application/main_chain.py` depends on `BrokerExecutionAdapter`, not directly on broker SDKs or CSV import/export classes.
+- `LocalCsvBrokerAdapter` is the first implementation; a real broker SDK must implement the same boundary before entering the workflow.
 - Risk, position limits, blockers, receipts, and recap output should all be authoritative server/business-layer outputs.
 - Sample data may provide inputs, but it must not own business decisions.
 - Execution receipts are structured; `prepared` means CSV export is ready, while `accepted` must come from an imported broker receipt.

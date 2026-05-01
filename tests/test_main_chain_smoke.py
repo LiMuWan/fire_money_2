@@ -12,6 +12,10 @@ from server.firemoney_server.domain.message_catalog import load_domain_messages
 from server.firemoney_server.domain.signal_scan import SignalScanPolicy
 from server.firemoney_server.domain.strategy_config import StrategyConfigPolicy
 from server.firemoney_server.infrastructure.archive_store import TradeArchiveStore
+from server.firemoney_server.infrastructure.broker_adapter import (
+    BrokerExecutionAdapter,
+    LocalCsvBrokerAdapter,
+)
 from server.firemoney_server.infrastructure.fill_import import (
     BrokerExitRecord,
     BrokerFillImporter,
@@ -50,8 +54,10 @@ def _build_service(
     fill_importer: BrokerFillImporter | None = None,
     strategy_store: StrategyConfigStore | None = None,
     archive_store: TradeArchiveStore | None = None,
+    broker_adapter: BrokerExecutionAdapter | None = None,
 ) -> MainChainService:
     return MainChainService(
+        broker_adapter=broker_adapter,
         order_exporter=CsvOrderExporter(root / "orders"),
         receipt_importer=receipt_importer or BrokerReceiptImporter(root / "receipts"),
         fill_importer=fill_importer or BrokerFillImporter(root / "fills"),
@@ -189,6 +195,35 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsNone(snapshot.fill_execution)
             self.assertIsNotNone(snapshot.recap)
             self.assertEqual(snapshot.recent_archives, ())
+
+    def test_main_chain_uses_broker_adapter_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            receipt_importer = BrokerReceiptImporter(root / "receipts")
+            _seed_broker_receipt(receipt_importer)
+            fill_importer = BrokerFillImporter(root / "fills")
+            _seed_entry_fill(fill_importer)
+            _seed_exit_fill(fill_importer)
+            broker_adapter = LocalCsvBrokerAdapter(
+                order_exporter=CsvOrderExporter(root / "orders"),
+                receipt_importer=receipt_importer,
+                fill_importer=fill_importer,
+            )
+
+            snapshot = _build_service(
+                root,
+                broker_adapter=broker_adapter,
+            ).build_first_slice_snapshot(
+                user_confirmed=True,
+                broker_submitted=True,
+                fill_received=True,
+                exit_received=True,
+            )
+
+            self.assertEqual(snapshot.execution_receipt.status, ExecutionReceiptStatus.ACCEPTED)
+            self.assertIsInstance(snapshot.fill_execution, FillExecution)
+            self.assertIsInstance(snapshot.exit_execution, ExitExecution)
+            self.assertEqual(snapshot.exit_execution.realized_pnl, 49.0)
 
     def test_filled_vertical_slice_imports_deal_detail_for_recap(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
