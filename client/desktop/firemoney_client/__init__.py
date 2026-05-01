@@ -1,9 +1,5 @@
-"""FireMoney desktop client skeleton."""
+"""FireMoney one-to-two desktop client boundary."""
 
 from .adapter import LocalMainChainAdapter
-from .shell import FireMoneyShell
 
-__all__ = [
-    "FireMoneyShell",
-    "LocalMainChainAdapter",
-]
+__all__ = ["LocalMainChainAdapter"]

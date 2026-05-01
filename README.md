@@ -1,34 +1,32 @@
 # FireMoney
 
-FireMoney 是围绕短线/盘中交易者重新开发的交易辅助终端。当前产品方向锁定为主板 10cm “一进二”战法验证：看懂市场、筛出昨日首板里最值得观察的一进二候选、用事件驱动模拟盘执行纪律、通过飞书通知和尾盘复盘沉淀稳定性。
+FireMoney 当前只保留一条产品主线：主板 10cm “一进二”战法验证。
+
+第一版目标不是自动实盘交易，而是验证战法稳定性：用 AkShare 边界接行情，筛昨日首板，判断低位/突破/压力，事件驱动模拟盘执行纪律，通过飞书通知早盘、盘中和尾盘结果，并沉淀稳定性样本。
 
 核心业务线：
 
 ```text
-市场判断 -> 执行中控 -> 复盘改进
-```
-
-这三段内部承载的真实动作已经切到一进二验证：
-
-```text
-早盘判断 + 昨日首板池 + 一进二候选
--> 竞价/盘中事件 + 模拟买入 + T+1 风险纪律
--> 尾盘测评 + 样本归档 + 稳定性观察
+早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察
 ```
 
 ## 目录结构
 
 ```text
 client/
-  desktop/        桌面客户端，负责 UI、交互、确认和状态展示
+  desktop/        一进二本地 CLI、预览生成和静态渲染
   docs/           客户端设计和实现文档
 
 server/
   docs/           服务端/业务层设计和实现文档
+  firemoney_server/
+    application/  一进二用例编排
+    domain/       一进二评分、拦截和风险规则
+    infrastructure/ AkShare、飞书、模拟盘、策略配置
 
 shared/
-  contracts/      客户端和服务端共享契约、DTO、schema
-  docs/           共享协议、数据字典和配置规范
+  contracts/      一进二共享契约和 DTO
+  docs/           共享协议说明
 
 docs/
   common/         跨项目通用原则和协作规范
@@ -36,58 +34,40 @@ docs/
   archive/        历史参考资料
 ```
 
-## 开发原则
-
-- 先做好用户主线，再扩展功能。
-- 当前产品只保留一条一进二主线：`早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察`。
-- 客户端只捕获用户意图、展示状态、承载确认和反馈。
-- 服务端/业务层承载可信判断、风控、日志、模拟盘账本和可复盘状态。
-- 共享契约放在 `shared/contracts/`，避免客户端和服务端各自猜字段。
-- 界面文案优先放到配置或共享内容文件，方便后续多语言。
-- 文档和 TODO 是交付物的一部分。
-
-## 当前状态
-
-当前仓库保留的一条产品闭环是：
+## 当前闭环
 
 ```text
-AkShare 行情边界 -> 一进二评分/拦截 -> 事件驱动模拟盘
--> 止损/T+1 风险事件 -> 飞书通知结果 -> 尾盘测评 -> 稳定性报告
+MarketDataProvider/AkShare
+-> 一进二评分与硬拦截
+-> PaperTradeStore 事件驱动模拟盘
+-> 止损/T+1 风险事件
+-> FeishuNotifier 通知结果
+-> 尾盘测评
+-> 稳定性观察
 ```
 
-客户端入口仍然只保留三段核心工作区，辅助能力以当前决策上下文出现，不扩展成分散注意力的独立中心。
+默认边界：
 
-本地运行状态：
+- 只做 A 股主板 10cm 一进二。
+- 排除 ST、退市、新股前 5 日、创业板、科创板、北交所。
+- `min_score=70`，10 万模拟本金，单票最多 8%，每天最多 1 笔。
+- 当天跌破止损只发风险预警，次日仍低于止损才模拟卖出。
+- 样本少于 30 笔只显示观察期，不自动给策略边界结论。
 
-- 预览页：`client/desktop/preview/core_workflow.html`
-- 文案配置：`client/desktop/firemoney_client/content/zh_CN.json`
-- 策略边界：`.firemoney/strategy_config.json`
-- 交易归档：`.firemoney/trade_archives.json`
-- 归档导出：`exports/archives/trade_archives.json`
-- 归档复查导出：`exports/archives/trade_archive_review.md`
-- 策略边界审计导出：`exports/strategy/strategy_boundary_audit.md`
+## 配置与本地状态
+
 - 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
-- 一进二模拟盘账本：`.firemoney/paper_trades.json`
+- 模拟盘账本：`.firemoney/paper_trades.json`
 - AkShare 原始快照缓存：`.firemoney/market_data/`
-- 策略边界审计可由服务端按 `apply`、`reset` 等变更动作筛选导出，客户端不读取 `.firemoney` 历史文件。
-- 归档/策略导出清理由服务端按保留数量执行，只处理项目已知导出文件名，不直接清空整个 `exports/` 目录。
+- 本地预览：`client/desktop/preview/core_workflow.html`
 
-归档复查目前是服务端轻量摘要：样本质量、胜率、累计盈亏、最佳样本、最弱样本和下一步建议都由业务层产生。少于 3 笔闭环归档只作为观察样本，不驱动策略边界调整；达到门槛后的策略边界审查只生成待用户确认的建议。只有显式确认后，服务端才会应用并持久化策略配置；策略回退也先生成可确认的回退审查，再由服务端恢复默认边界。应用/回退记录可导出为轻量审计报告。客户端只展示审查结果或触发导出，不扩展成独立历史中心。
+飞书群机器人只读环境变量，不写入仓库：
 
-## 配置入口
+- `FEISHU_ENABLED=true/false`
+- `FEISHU_WEBHOOK_URL`
+- `FEISHU_WEBHOOK_SECRET` 可选
 
-可见文本和演示样例优先走配置文件，代码只消费配置键和共享契约，避免把业务文案散落在 Python 实现里：
-
-- 客户端界面文案：`client/desktop/firemoney_client/content/zh_CN.json`
-- 服务端业务消息：`server/firemoney_server/domain/messages/zh_CN.json`
-- 首版确定性样例行情和机会：`server/firemoney_server/infrastructure/config/sample_trading_data.zh_CN.json`
-- 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
-- 本地策略边界状态：`.firemoney/strategy_config.json`
-- 本地交易归档状态：`.firemoney/trade_archives.json`
-
-本地策略边界会在服务端进入下一轮扫描前校验；未知参数、类型错误和越界值会按默认边界纠偏。
-
-一进二运行入口：
+## 本地运行
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
@@ -96,28 +76,24 @@ python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli backtest
 ```
 
-飞书群机器人只读环境变量，不写入仓库：
+本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
 
-- `FEISHU_ENABLED=true/false`
-- `FEISHU_WEBHOOK_URL`
-- `FEISHU_WEBHOOK_SECRET` 可选
-
-本地看效果可以加 `--sample-data` 使用确定性样例；真实入口默认走 AkShare，AkShare 不可用时报告进入 blocked 状态，不产生模拟买入。
-
-新增功能时，如果文本、标签、提示、样例数据可以进入上述配置层，就不要写死在客户端、服务端或共享契约代码里。
-
-运行测试：
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-重新生成本地预览：
+重新生成预览：
 
 ```powershell
 python -m client.desktop.firemoney_client.preview
 ```
 
-## 下一步
+运行测试：
 
-短期不扩成多战法。下一步只围绕一进二专项补强：更完整的 AkShare 昨日涨停池/历史日线字段、常驻盘中扫描调度器、稳定性样本达到 30/50/100 笔后的策略边界建议。
+```powershell
+python -B -m unittest discover -s tests -v
+```
+
+## 开发原则
+
+- 只保留一进二这条核心业务线。
+- 客户端只展示服务端输出，不重新计算可信交易结论。
+- 服务端/业务层承载评分、风控、模拟盘账本、通知结果和复盘结论。
+- AkShare、飞书和本地文件都在基础设施层，策略和 UI 不依赖第三方字段名。
+- 新功能必须让 `早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察` 更清晰、更快或更可信。
