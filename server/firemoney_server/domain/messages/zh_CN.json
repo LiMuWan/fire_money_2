@@ -76,7 +76,13 @@
     "focus_worst": "最弱归档 {archive_id}({symbol}) 已实现盈亏 {pnl:.2f}，优先检查风控和退出原因。",
     "focus_recent": "最近归档 {archive_id} 的后续动作是：{next_action}",
     "next_action_loss": "先复查亏损样本，再决定是否收紧下一轮策略边界。",
-    "next_action_profit": "当前复查未发现亏损样本，保留策略边界并继续积累样本。"
+    "next_action_profit": "当前复查未发现亏损样本，保留策略边界并继续积累样本。",
+    "quality_empty": "暂无归档样本，不能判断策略边界质量。",
+    "quality_insufficient": "归档样本不足 3 笔，只能作为观察，不应直接调整策略边界。",
+    "quality_reviewable": "归档样本已达到轻量复查门槛，可以检查盈亏分布和执行纪律。",
+    "boundary_collect_more": "继续积累闭环样本，暂不调整策略边界。",
+    "boundary_review_losses": "先复查亏损样本的信号、风控和退出原因，再决定是否收紧策略边界。",
+    "boundary_keep_current": "当前样本未暴露亏损压力，保留现有策略边界并继续观察。"
   },
   "broker_import": {
     "entry_fill_default": "券商成交明细已写回",

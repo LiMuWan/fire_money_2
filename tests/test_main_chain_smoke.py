@@ -37,6 +37,7 @@ from server.firemoney_server.infrastructure.sample_data import (
 from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
 from shared.contracts import (
     AdjustmentStatus,
+    ArchiveReviewQuality,
     ConfirmationStatus,
     ExecutionReceiptStatus,
     ExecutionRoute,
@@ -45,6 +46,7 @@ from shared.contracts import (
     OutcomeCard,
     ReviewDecision,
     StrategyAdjustment,
+    StrategyBoundaryAction,
     TradeArchiveRecord,
     WorkflowStage,
     contract_to_dict,
@@ -384,6 +386,14 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(review.profit_count, 1)
             self.assertEqual(review.loss_count, 0)
             self.assertEqual(review.flat_count, 0)
+            self.assertEqual(
+                review.sample_quality,
+                ArchiveReviewQuality.INSUFFICIENT_SAMPLE,
+            )
+            self.assertEqual(
+                review.strategy_boundary_action,
+                StrategyBoundaryAction.COLLECT_MORE_SAMPLES,
+            )
             self.assertEqual(review.win_rate, 1.0)
             self.assertEqual(review.total_realized_pnl, 49.0)
             self.assertEqual(review.average_realized_pnl_pct, 0.0394)
@@ -420,6 +430,92 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("archive-draft-600001", content)
             self.assertIn("49.00", content)
             self.assertIn("## Focus Points", content)
+            self.assertIn("## Sample Quality", content)
+            self.assertIn("collect_more_samples", content)
+
+    def test_trade_archive_review_flags_reviewable_loss_sample_set(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            for record in (
+                TradeArchiveRecord(
+                    archive_id="archive-loss",
+                    order_id="draft-loss",
+                    symbol="600003",
+                    name="loss sample",
+                    trade_date="2026-05-01",
+                    opened_at="2026-05-01T09:30:00+08:00",
+                    closed_at="2026-05-01T10:30:00+08:00",
+                    realized_pnl=-18.0,
+                    realized_pnl_pct=-0.012,
+                    outcome="loss",
+                    signal_summary="loss signal",
+                    risk_summary="risk",
+                    execution_summary="execution",
+                    recap_summary="recap",
+                    next_action="review stop discipline",
+                    tags=("risk:medium",),
+                ),
+                TradeArchiveRecord(
+                    archive_id="archive-flat",
+                    order_id="draft-flat",
+                    symbol="600002",
+                    name="flat sample",
+                    trade_date="2026-05-01",
+                    opened_at="2026-05-01T09:30:00+08:00",
+                    closed_at="2026-05-01T10:30:00+08:00",
+                    realized_pnl=0.0,
+                    realized_pnl_pct=0.0,
+                    outcome="flat",
+                    signal_summary="flat signal",
+                    risk_summary="risk",
+                    execution_summary="execution",
+                    recap_summary="recap",
+                    next_action="keep watching",
+                    tags=("risk:low",),
+                ),
+                TradeArchiveRecord(
+                    archive_id="archive-profit",
+                    order_id="draft-profit",
+                    symbol="600001",
+                    name="profit sample",
+                    trade_date="2026-05-01",
+                    opened_at="2026-05-01T09:30:00+08:00",
+                    closed_at="2026-05-01T10:30:00+08:00",
+                    realized_pnl=42.0,
+                    realized_pnl_pct=0.028,
+                    outcome="profit",
+                    signal_summary="profit signal",
+                    risk_summary="risk",
+                    execution_summary="execution",
+                    recap_summary="recap",
+                    next_action="keep boundary",
+                    tags=("risk:low",),
+                ),
+            ):
+                archive_store.save(record)
+            service = _build_service(root, archive_store=archive_store)
+
+            review = service.build_trade_archive_review()
+            payload = contract_to_dict(review)
+
+            self.assertEqual(review.record_count, 3)
+            self.assertEqual(review.profit_count, 1)
+            self.assertEqual(review.loss_count, 1)
+            self.assertEqual(review.flat_count, 1)
+            self.assertEqual(review.sample_quality, ArchiveReviewQuality.REVIEWABLE)
+            self.assertEqual(
+                review.strategy_boundary_action,
+                StrategyBoundaryAction.REVIEW_LOSSES_FIRST,
+            )
+            self.assertEqual(review.win_rate, 0.3333)
+            self.assertEqual(review.total_realized_pnl, 24.0)
+            self.assertEqual(review.average_realized_pnl_pct, 0.0053)
+            self.assertEqual(review.best_archive_id, "archive-profit")
+            self.assertEqual(review.worst_archive_id, "archive-loss")
+            self.assertEqual(payload["sample_quality"], "reviewable")
+            self.assertEqual(payload["strategy_boundary_action"], "review_losses_first")
+            self.assertIn("亏损样本", review.strategy_boundary_note)
 
     def test_empty_trade_archive_review_has_safe_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -430,6 +526,11 @@ class MainChainSmokeTest(unittest.TestCase):
 
             self.assertEqual(review.record_count, 0)
             self.assertEqual(review.win_rate, 0.0)
+            self.assertEqual(review.sample_quality, ArchiveReviewQuality.EMPTY)
+            self.assertEqual(
+                review.strategy_boundary_action,
+                StrategyBoundaryAction.COLLECT_MORE_SAMPLES,
+            )
             self.assertIsNone(review.best_archive_id)
             self.assertIsNone(review.worst_archive_id)
             self.assertTrue(exported.exists())

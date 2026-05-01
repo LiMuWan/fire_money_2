@@ -70,6 +70,7 @@ keeps only the front candidates in the execution line.
 - Recent archive records can be exported through `MainChainService.export_trade_archives()` as JSON or CSV under `exports/archives/`.
 - Recent archive records can produce `TradeArchiveReview` through `MainChainService.build_trade_archive_review()` and Markdown through `MainChainService.export_trade_archive_review()`.
 - Archive review metrics are built by `domain/archive_review.py`; `infrastructure/archive_review_export.py` only formats the already-approved service output.
+- Archive review uses a minimum 3-record sample-quality gate before recommending strategy-boundary review; smaller samples are observation-only.
 - Local archive cleanup goes through `MainChainService.clear_trade_archives()`; client code must not delete `.firemoney` files directly.
 - Invalid local archive JSON is treated as empty local state so the main workflow can continue.
 - Recap may propose strategy adjustments, but it must not write new strategy config automatically.

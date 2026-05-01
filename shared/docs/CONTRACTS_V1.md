@@ -209,11 +209,15 @@ Key fields:
 - `profit_count`
 - `loss_count`
 - `flat_count`
+- `sample_quality`
 - `win_rate`
 - `total_realized_pnl`
 - `average_realized_pnl_pct`
 - `best_archive_id`
 - `worst_archive_id`
+- `sample_quality_note`
+- `strategy_boundary_action`
+- `strategy_boundary_note`
 - `summary`
 - `focus_points`
 - `next_action`
@@ -285,6 +289,8 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - `RiskLevel`: risk severity
 - `ReviewDecision`: execution review decision
 - `ConfirmationStatus`: order confirmation state before receipt generation
+- `ArchiveReviewQuality`: whether archive samples are empty, insufficient, or reviewable
+- `StrategyBoundaryAction`: service recommendation for archive-review-driven boundary follow-up
 
 ## 4. Rules
 
@@ -298,4 +304,5 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Outcome cards are service-owned outputs; the client must not calculate P/L or stop discipline itself.
 - Trade archive records are compact service-owned summaries; local storage, export, and cleanup are owned by infrastructure/service boundaries, not the client.
 - Trade archive reviews are service-owned outputs; clients may display them or trigger export, but must not calculate win rate, best/worst archive, or follow-up action.
+- Archive review requires at least 3 closed archive records before strategy-boundary review can be recommended; smaller sample sets remain observation-only.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.

@@ -60,6 +60,18 @@ class ExecutionReceiptStatus(str, Enum):
     FAILED = "failed"
 
 
+class ArchiveReviewQuality(str, Enum):
+    EMPTY = "empty"
+    INSUFFICIENT_SAMPLE = "insufficient_sample"
+    REVIEWABLE = "reviewable"
+
+
+class StrategyBoundaryAction(str, Enum):
+    COLLECT_MORE_SAMPLES = "collect_more_samples"
+    REVIEW_LOSSES_FIRST = "review_losses_first"
+    KEEP_CURRENT_BOUNDARY = "keep_current_boundary"
+
+
 @dataclass(frozen=True)
 class MarketContext:
     trade_date: str
@@ -215,11 +227,15 @@ class TradeArchiveReview:
     profit_count: int
     loss_count: int
     flat_count: int
+    sample_quality: ArchiveReviewQuality
     win_rate: float
     total_realized_pnl: float
     average_realized_pnl_pct: float
     best_archive_id: str | None
     worst_archive_id: str | None
+    sample_quality_note: str
+    strategy_boundary_action: StrategyBoundaryAction
+    strategy_boundary_note: str
     summary: str
     focus_points: tuple[str, ...]
     next_action: str
