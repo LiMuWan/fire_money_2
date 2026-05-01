@@ -1,6 +1,6 @@
 # FireMoney
 
-FireMoney 是围绕短线/盘中交易者重新开发的交易辅助终端。首版只专注一条用户最核心的业务线：看懂市场、处理一个最值得处理的机会、确认执行、看见结果、沉淀改进。
+FireMoney 是围绕短线/盘中交易者重新开发的交易辅助终端。当前产品方向锁定为主板 10cm “一进二”战法验证：看懂市场、筛出昨日首板里最值得观察的一进二候选、用事件驱动模拟盘执行纪律、通过飞书通知和尾盘复盘沉淀稳定性。
 
 核心业务线：
 
@@ -8,12 +8,12 @@ FireMoney 是围绕短线/盘中交易者重新开发的交易辅助终端。首
 市场判断 -> 执行中控 -> 复盘改进
 ```
 
-这三段内部承载的真实动作是：
+这三段内部承载的真实动作已经切到一进二验证：
 
 ```text
-全局态势 + 信号扫描 + 机会池
--> 执行审查 + 委托确认 + 回执跟踪
--> 单票复盘 + 策略边界改进
+早盘判断 + 昨日首板池 + 一进二候选
+-> 竞价/盘中事件 + 模拟买入 + T+1 风险纪律
+-> 尾盘测评 + 样本归档 + 稳定性观察
 ```
 
 ## 目录结构
@@ -56,6 +56,13 @@ docs/
 -> 结果卡 -> 策略边界建议 -> 交易归档 -> 最近归档复查
 ```
 
+一进二专项切片也已经接入：
+
+```text
+AkShare 行情边界 -> 一进二评分/拦截 -> 事件驱动模拟盘
+-> 止损/T+1 风险事件 -> 飞书通知结果 -> 尾盘测评 -> 稳定性报告
+```
+
 客户端入口仍然只保留三段核心工作区，辅助能力以当前决策上下文出现，不扩展成分散注意力的独立中心。
 
 本地运行状态：
@@ -68,6 +75,9 @@ docs/
 - 归档导出：`exports/archives/trade_archives.json` 或 `exports/archives/trade_archives.csv`
 - 归档复查导出：`exports/archives/trade_archive_review.md`
 - 策略边界审计导出：`exports/strategy/strategy_boundary_audit.md`
+- 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
+- 一进二模拟盘账本：`.firemoney/paper_trades.json`
+- AkShare 原始快照缓存：`.firemoney/market_data/`
 - 策略边界审计可由服务端按 `apply`、`reset` 等变更动作筛选导出，客户端不读取 `.firemoney` 历史文件。
 - 归档/策略导出清理由服务端按保留数量执行，只处理项目已知导出文件名，不直接清空整个 `exports/` 目录。
 
@@ -88,6 +98,23 @@ docs/
 
 本地策略边界会在服务端进入下一轮扫描前校验；未知参数、类型错误和越界值会按默认边界纠偏。
 
+一进二运行入口：
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli watch --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli backtest
+```
+
+飞书群机器人只读环境变量，不写入仓库：
+
+- `FEISHU_ENABLED=true/false`
+- `FEISHU_WEBHOOK_URL`
+- `FEISHU_WEBHOOK_SECRET` 可选
+
+本地看效果可以加 `--sample-data` 使用确定性样例；真实入口默认走 AkShare，AkShare 不可用时报告进入 blocked 状态，不产生模拟买入。
+
 新增功能时，如果文本、标签、提示、样例数据可以进入上述配置层，就不要写死在客户端、服务端或共享契约代码里。
 
 运行测试：
@@ -104,4 +131,4 @@ python -m client.desktop.firemoney_client.preview
 
 ## 下一步
 
-短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商 SDK 的 `BrokerExecutionAdapter` 实现，或把导出清理结果接入预览中的复盘操作反馈。
+短期不扩成多战法。下一步只围绕一进二专项补强：更完整的 AkShare 昨日涨停池/历史日线字段、常驻盘中扫描调度器、稳定性样本达到 30/50/100 笔后的策略边界建议。

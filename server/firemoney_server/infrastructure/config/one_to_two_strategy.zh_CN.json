@@ -1,0 +1,36 @@
+{
+  "strategy_id": "one-to-two-mainboard-v1",
+  "name": "主板一进二 10cm",
+  "market": "A股主板",
+  "description": "只观察主板 10cm 昨日首板到次日二板的半自动模拟盘策略。",
+  "parameters": {
+    "min_score": 70,
+    "max_position_pct": 0.08,
+    "max_daily_trades": 1,
+    "initial_cash": 100000,
+    "stop_loss_pct": 0.05,
+    "min_turnover_amount": 80000000,
+    "market_temperature_floor": 50,
+    "high_deviation_block_pct": 0.25,
+    "recent_gain_block_pct": 0.45,
+    "near_pressure_pct": 0.05,
+    "minimum_sample_for_stability": 30
+  },
+  "exclude": {
+    "st": true,
+    "delisting": true,
+    "new_stock_days": 5,
+    "boards": [
+      "创业板",
+      "科创板",
+      "北交所"
+    ]
+  },
+  "notification": {
+    "morning_time": "08:50",
+    "end_of_day_time": "15:10",
+    "feishu_enabled_env": "FEISHU_ENABLED",
+    "webhook_env": "FEISHU_WEBHOOK_URL",
+    "secret_env": "FEISHU_WEBHOOK_SECRET"
+  }
+}

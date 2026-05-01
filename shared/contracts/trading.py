@@ -72,6 +72,31 @@ class StrategyBoundaryAction(str, Enum):
     KEEP_CURRENT_BOUNDARY = "keep_current_boundary"
 
 
+class OneToTwoEventType(str, Enum):
+    MORNING_SCAN = "morning_scan"
+    CANDIDATE_SELECTED = "candidate_selected"
+    AUCTION_CONFIRMED = "auction_confirmed"
+    PAPER_BUY = "paper_buy"
+    STOP_WARNING = "stop_warning"
+    T1_SELL = "t1_sell"
+    END_OF_DAY_REVIEW = "end_of_day_review"
+    BLOCKED = "blocked"
+
+
+class NotificationStatus(str, Enum):
+    DISABLED = "disabled"
+    PREPARED = "prepared"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class PaperTradeStatus(str, Enum):
+    EMPTY = "empty"
+    HOLDING = "holding"
+    WARNING = "warning"
+    CLOSED = "closed"
+
+
 @dataclass(frozen=True)
 class MarketContext:
     trade_date: str
@@ -303,6 +328,138 @@ class ExportCleanupResult:
     kept_count: int
     deleted_files: tuple[str, ...]
     kept_files: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OneToTwoPositionProfile:
+    label: str
+    low_position_score: float
+    breakout_score: float
+    pressure_score: float
+    moving_average_score: float
+    volume_score: float
+    summary: str
+    risk_notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OneToTwoCandidate:
+    symbol: str
+    name: str
+    trade_date: str
+    score: float
+    status: str
+    latest_price: float
+    limit_up_price: float
+    entry_price: float
+    stop_loss: float
+    position_limit_pct: float
+    first_board_score: float
+    auction_score: float
+    position_score: float
+    theme_score: float
+    liquidity_score: float
+    position_profile: OneToTwoPositionProfile
+    blockers: tuple[str, ...]
+    warnings: tuple[str, ...]
+    rationale: str
+    next_action: str
+
+
+@dataclass(frozen=True)
+class PaperPosition:
+    symbol: str
+    name: str
+    quantity: int
+    entry_price: float
+    latest_price: float
+    stop_loss: float
+    position_value: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
+    opened_at: str
+    can_sell_today: bool
+    status: PaperTradeStatus
+    risk_note: str
+
+
+@dataclass(frozen=True)
+class PaperTradeEvent:
+    event_id: str
+    event_type: OneToTwoEventType
+    symbol: str
+    name: str
+    trade_date: str
+    price: float
+    quantity: int
+    amount: float
+    message: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class PaperAccount:
+    account_id: str
+    cash: float
+    initial_cash: float
+    equity: float
+    max_position_pct: float
+    max_daily_trades: int
+    daily_trade_count: int
+    positions: tuple[PaperPosition, ...]
+    events: tuple[PaperTradeEvent, ...]
+
+
+@dataclass(frozen=True)
+class FeishuNotificationResult:
+    status: NotificationStatus
+    title: str
+    message: str
+    webhook_configured: bool
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class OneToTwoMorningReport:
+    report_id: str
+    trade_date: str
+    market_temperature: int
+    status: str
+    summary: str
+    candidates: tuple[OneToTwoCandidate, ...]
+    account: PaperAccount
+    notification: FeishuNotificationResult
+    next_action: str
+
+
+@dataclass(frozen=True)
+class OneToTwoEndOfDayReview:
+    review_id: str
+    trade_date: str
+    sample_count: int
+    success_count: int
+    warning_count: int
+    realized_pnl: float
+    max_drawdown: float
+    summary: str
+    focus_points: tuple[str, ...]
+    account: PaperAccount
+    notification: FeishuNotificationResult
+    next_action: str
+
+
+@dataclass(frozen=True)
+class OneToTwoStabilityReport:
+    report_id: str
+    sample_count: int
+    success_rate: float
+    average_return_pct: float
+    max_drawdown: float
+    stop_warning_rate: float
+    low_breakout_success_rate: float
+    status: str
+    summary: str
+    next_action: str
 
 
 @dataclass(frozen=True)

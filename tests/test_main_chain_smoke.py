@@ -26,6 +26,9 @@ from server.firemoney_server.infrastructure.fill_import import (
     BrokerFillRecord,
 )
 from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
+from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
+from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
+from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.receipt_import import (
     BrokerReceiptImporter,
     BrokerReceiptRecord,
@@ -39,6 +42,7 @@ from server.firemoney_server.infrastructure.sample_data import (
     sample_strategy_config,
 )
 from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
+from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
 from shared.contracts import (
     AdjustmentStatus,
     ArchiveReviewQuality,
@@ -47,8 +51,12 @@ from shared.contracts import (
     ExecutionReceiptStatus,
     ExecutionRoute,
     ExitExecution,
+    FeishuNotificationResult,
     FillExecution,
+    NotificationStatus,
     OutcomeCard,
+    OneToTwoMorningReport,
+    PaperTradeStatus,
     ReviewDecision,
     StrategyAdjustment,
     StrategyBoundaryAction,
@@ -69,6 +77,8 @@ def _build_service(
     archive_store: TradeArchiveStore | None = None,
     archive_review_exporter: MarkdownArchiveReviewExporter | None = None,
     broker_adapter: BrokerExecutionAdapter | None = None,
+    market_data_provider=None,
+    paper_store: PaperTradeStore | None = None,
 ) -> MainChainService:
     return MainChainService(
         broker_adapter=broker_adapter,
@@ -85,6 +95,8 @@ def _build_service(
             archive_review_exporter
             or MarkdownArchiveReviewExporter(root / "archive_exports")
         ),
+        market_data_provider=market_data_provider,
+        paper_store=paper_store or PaperTradeStore(root / "paper_trades.json"),
     )
 
 
@@ -155,7 +167,253 @@ def _archive_record(
     )
 
 
+def _risk_break_row(trade_date: str) -> OneToTwoMarketRow:
+    return OneToTwoMarketRow(
+        symbol="600001",
+        name="低位突破样例",
+        trade_date=trade_date,
+        board="主板",
+        is_st=False,
+        is_delisting=False,
+        listing_days=1200,
+        latest_price=9.8,
+        previous_close=9.56,
+        limit_up_price=10.52,
+        first_limit_up_time="10:05",
+        sealed_amount=32000000,
+        turnover_amount=180000000,
+        turnover_rate=6.2,
+        open_pct=0.03,
+        auction_amount=12000000,
+        low_20=8.8,
+        high_60=10.6,
+        pressure_price=11.8,
+        ma_5=9.3,
+        ma_10=9.2,
+        ma_20=9.1,
+        recent_gain_pct=0.12,
+        theme="低位平台突破",
+        market_temperature=74,
+    )
+
+
+class StaticOneToTwoProvider:
+    def __init__(self, rows: tuple[OneToTwoMarketRow, ...]) -> None:
+        self._rows = rows
+
+    def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        return tuple(
+            OneToTwoMarketRow(
+                symbol=row.symbol,
+                name=row.name,
+                trade_date=trade_date,
+                board=row.board,
+                is_st=row.is_st,
+                is_delisting=row.is_delisting,
+                listing_days=row.listing_days,
+                latest_price=row.latest_price,
+                previous_close=row.previous_close,
+                limit_up_price=row.limit_up_price,
+                first_limit_up_time=row.first_limit_up_time,
+                sealed_amount=row.sealed_amount,
+                turnover_amount=row.turnover_amount,
+                turnover_rate=row.turnover_rate,
+                open_pct=row.open_pct,
+                auction_amount=row.auction_amount,
+                low_20=row.low_20,
+                high_60=row.high_60,
+                pressure_price=row.pressure_price,
+                ma_5=row.ma_5,
+                ma_10=row.ma_10,
+                ma_20=row.ma_20,
+                recent_gain_pct=row.recent_gain_pct,
+                theme=row.theme,
+                market_temperature=row.market_temperature,
+            )
+            for row in self._rows
+        )
+
+
+class FailingOneToTwoProvider:
+    def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        raise RuntimeError("market data unavailable")
+
+
 class MainChainSmokeTest(unittest.TestCase):
+    def test_one_to_two_contracts_are_json_friendly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            ).build_one_to_two_morning_report(
+                notify=False,
+            )
+            payload = contract_to_dict(report)
+
+            self.assertIsInstance(report, OneToTwoMorningReport)
+            self.assertEqual(payload["notification"]["status"], "prepared")
+            self.assertEqual(payload["status"], "ready")
+            self.assertIsInstance(payload["candidates"], list)
+            self.assertEqual(
+                payload["candidates"][0]["position_profile"]["label"],
+                "低位平台突破",
+            )
+
+    def test_one_to_two_scores_low_breakout_and_blocks_risky_boards(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sample_provider = SampleMarketDataProvider()
+            report = _build_service(
+                Path(temp_dir),
+                market_data_provider=sample_provider,
+            ).build_one_to_two_morning_report(
+                notify=False,
+            )
+
+            candidates = {candidate.symbol: candidate for candidate in report.candidates}
+            one_word_row = OneToTwoMarketRow(
+                symbol="600004",
+                name="一字买不到样例",
+                trade_date="2026-05-01",
+                board="主板",
+                is_st=False,
+                is_delisting=False,
+                listing_days=700,
+                latest_price=11.0,
+                previous_close=10.0,
+                limit_up_price=11.0,
+                first_limit_up_time="09:30",
+                sealed_amount=88000000,
+                turnover_amount=120000000,
+                turnover_rate=1.2,
+                open_pct=0.1,
+                auction_amount=100000,
+                low_20=9.4,
+                high_60=10.9,
+                pressure_price=12.4,
+                ma_5=10.6,
+                ma_10=10.1,
+                ma_20=9.8,
+                recent_gain_pct=0.15,
+                theme="一字观察",
+                market_temperature=74,
+            )
+            one_word = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider((one_word_row,)),
+            ).build_one_to_two_morning_report(notify=False).candidates[0]
+            self.assertEqual(candidates["600001"].status, "ready")
+            self.assertGreaterEqual(candidates["600001"].score, 70)
+            self.assertEqual(
+                candidates["600001"].position_profile.label,
+                "低位平台突破",
+            )
+            self.assertEqual(candidates["600002"].status, "blocked")
+            self.assertTrue(
+                any("乖离" in blocker or "高位" in blocker for blocker in candidates["600002"].blockers)
+            )
+            self.assertEqual(candidates["300003"].status, "blocked")
+            self.assertTrue(
+                any("创业板" in blocker for blocker in candidates["300003"].blockers)
+            )
+            self.assertEqual(one_word.status, "blocked")
+            self.assertTrue(any("买不到" in blocker for blocker in one_word.blockers))
+
+    def test_one_to_two_market_data_failure_blocks_trading(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=FailingOneToTwoProvider(),
+            )
+
+            report = service.build_one_to_two_morning_report(notify=False)
+            watch = service.run_one_to_two_watch(notify=False)
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(report.candidates, ())
+            self.assertIn("行情数据不可用", report.summary)
+            self.assertEqual(watch.account.positions, ())
+            self.assertEqual(watch.account.events, ())
+
+    def test_one_to_two_paper_buy_respects_position_and_daily_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            watch = service.run_one_to_two_watch(notify=False)
+            second_watch = service.run_one_to_two_watch(notify=False)
+
+            self.assertEqual(len(watch.account.positions), 1)
+            position = watch.account.positions[0]
+            self.assertEqual(position.status, PaperTradeStatus.HOLDING)
+            self.assertLessEqual(
+                position.position_value,
+                watch.account.initial_cash * watch.account.max_position_pct,
+            )
+            self.assertEqual(watch.account.daily_trade_count, 1)
+            self.assertEqual(watch.account.events[0].event_type.value, "paper_buy")
+            self.assertEqual(len(second_watch.account.events), 1)
+            self.assertEqual(second_watch.account.daily_trade_count, 1)
+
+    def test_one_to_two_stop_warning_obeys_t1_before_sell(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            buy_service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+            buy_service.run_one_to_two_watch(notify=False)
+            risk_service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider(
+                    (_risk_break_row("2026-05-01"),)
+                ),
+                paper_store=paper_store,
+            )
+
+            warning = risk_service.run_one_to_two_watch(notify=False)
+            paper_store.roll_to_next_day()
+            sold = risk_service.run_one_to_two_watch(
+                trade_date="2026-05-02",
+                notify=False,
+            )
+
+            self.assertEqual(warning.account.positions[0].status, PaperTradeStatus.WARNING)
+            self.assertEqual(
+                warning.account.events[0].event_type.value,
+                "stop_warning",
+            )
+            self.assertEqual(sold.account.positions, ())
+            self.assertEqual(sold.account.events[0].event_type.value, "t1_sell")
+
+    def test_feishu_notifier_is_safe_without_webhook(self) -> None:
+        old_enabled = os.environ.get("FEISHU_ENABLED")
+        old_webhook = os.environ.get("FEISHU_WEBHOOK_URL")
+        try:
+            os.environ["FEISHU_ENABLED"] = "false"
+            os.environ.pop("FEISHU_WEBHOOK_URL", None)
+
+            disabled = FeishuNotifier().notify("title", "message")
+            os.environ["FEISHU_ENABLED"] = "true"
+            prepared = FeishuNotifier().notify("title", "message")
+
+            self.assertIsInstance(disabled, FeishuNotificationResult)
+            self.assertEqual(disabled.status, NotificationStatus.DISABLED)
+            self.assertEqual(prepared.status, NotificationStatus.PREPARED)
+            self.assertFalse(prepared.webhook_configured)
+        finally:
+            if old_enabled is None:
+                os.environ.pop("FEISHU_ENABLED", None)
+            else:
+                os.environ["FEISHU_ENABLED"] = old_enabled
+            if old_webhook is None:
+                os.environ.pop("FEISHU_WEBHOOK_URL", None)
+            else:
+                os.environ["FEISHU_WEBHOOK_URL"] = old_webhook
+
     def test_first_vertical_slice_waits_for_user_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             snapshot = _build_service(Path(temp_dir)).build_first_slice_snapshot()

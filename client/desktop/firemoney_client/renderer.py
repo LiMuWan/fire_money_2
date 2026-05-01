@@ -5,7 +5,12 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
-from shared.contracts import MainChainSnapshot
+from shared.contracts import (
+    MainChainSnapshot,
+    OneToTwoEndOfDayReview,
+    OneToTwoMorningReport,
+    OneToTwoStabilityReport,
+)
 
 from .content import load_client_content
 from .view_model import CoreWorkflowView, build_core_workflow_view
@@ -190,6 +195,87 @@ def _render_archives(view: CoreWorkflowView) -> str:
     return "\n".join(cards)
 
 
+def _render_one_to_two_panel(
+    report: OneToTwoMorningReport | None,
+    watch_report: OneToTwoMorningReport | None,
+    eod_review: OneToTwoEndOfDayReview | None,
+    stability_report: OneToTwoStabilityReport | None,
+) -> str:
+    if not report:
+        return ""
+
+    account = (watch_report or report).account
+    position = account.positions[0] if account.positions else None
+    candidates = "\n".join(
+        f"""
+        <article class="one-to-two-card" data-status="{_text(candidate.status)}">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">{_text(candidate.name)}</div>
+              <div class="candidate-code">{_text(candidate.symbol)} / {_text(candidate.position_profile.label)}</div>
+            </div>
+            <div class="candidate-score">{_text(candidate.score)}</div>
+          </div>
+          <div class="tags">
+            <span class="tag">{_text(candidate.status)}</span>
+            <span class="tag">{_text(candidate.position_profile.summary)}</span>
+            <span class="tag is-risk">止损 {_text(candidate.stop_loss)}</span>
+          </div>
+          <p>{_text(candidate.rationale)}</p>
+          <ul class="detail-list compact">
+            <li>首板 {candidate.first_board_score}/25，竞价 {candidate.auction_score}/20，位置 {candidate.position_score}/25</li>
+            <li>仓位上限 {candidate.position_limit_pct:.0%}，买入价 {_text(candidate.entry_price)}，严格 T+1</li>
+            {"".join(f"<li>{_text(item)}</li>" for item in candidate.blockers[:2])}
+            {"".join(f"<li>{_text(item)}</li>" for item in candidate.warnings[:2])}
+          </ul>
+        </article>
+        """
+        for candidate in report.candidates[:4]
+    )
+    position_html = (
+        f"""
+        <article class="one-to-two-card">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">{_text(position.name)}</div>
+              <div class="candidate-code">{_text(position.symbol)} / {_text(position.status.value)}</div>
+            </div>
+            <div class="candidate-score">{position.unrealized_pnl_pct:.2%}</div>
+          </div>
+          <p>持仓 {position.quantity} 股，现价 {_text(position.latest_price)}，止损 {_text(position.stop_loss)}。</p>
+          <p>{_text(position.risk_note)}</p>
+        </article>
+        """
+        if position
+        else '<p class="empty-note">当前没有模拟持仓，等待候选达到一进二触发条件。</p>'
+    )
+    notification = (watch_report or report).notification
+    latest_event = account.events[0].message if account.events else "暂无模拟盘事件"
+    eod_summary = eod_review.summary if eod_review else "尾盘测评待生成。"
+    stability_summary = stability_report.summary if stability_report else "稳定性报告待生成。"
+    return f"""
+      <section class="panel one-to-two-panel">
+        <h2>一进二专项台</h2>
+        <div class="one-to-two-kpis">
+          <div class="metric"><span class="metric-label">市场温度</span><span class="metric-value">{_text(report.market_temperature)}</span></div>
+          <div class="metric"><span class="metric-label">候选数</span><span class="metric-value">{len(report.candidates)}</span></div>
+          <div class="metric"><span class="metric-label">模拟权益</span><span class="metric-value">{account.equity:.2f}</span></div>
+        </div>
+        <p class="next-action">{_text(report.summary)}</p>
+        <div class="candidate-list">{candidates}</div>
+        <h3>模拟盘与风险</h3>
+        {position_html}
+        <h3>飞书与复盘</h3>
+        <ul class="detail-list compact">
+          <li>通知状态：{_text(notification.status.value)} / Webhook {_text("已配置" if notification.webhook_configured else "未配置")}</li>
+          <li>最新事件：{_text(latest_event)}</li>
+          <li>{_text(eod_summary)}</li>
+          <li>{_text(stability_summary)}</li>
+        </ul>
+      </section>
+    """
+
+
 def _render_view(view: CoreWorkflowView, content) -> str:
     steps = "\n".join(_render_step(step, index) for index, step in enumerate(view.steps, 1))
     return f"""
@@ -210,6 +296,10 @@ def render_core_workflow_html(
     closed_snapshot: MainChainSnapshot | None = None,
     adjusted_snapshot: MainChainSnapshot | None = None,
     reset_snapshot: MainChainSnapshot | None = None,
+    one_to_two_report: OneToTwoMorningReport | None = None,
+    one_to_two_watch_report: OneToTwoMorningReport | None = None,
+    one_to_two_eod_review: OneToTwoEndOfDayReview | None = None,
+    one_to_two_stability_report: OneToTwoStabilityReport | None = None,
     locale: str = "zh_CN",
 ) -> str:
     """Render a self-contained HTML page for the core workflow."""
@@ -312,6 +402,12 @@ def render_core_workflow_html(
             {_render_archives(view)}
           </div>
         </section>
+        {_render_one_to_two_panel(
+            one_to_two_report,
+            one_to_two_watch_report,
+            one_to_two_eod_review,
+            one_to_two_stability_report,
+        )}
         <section class="panel">
           <h2>{_text(view.next_action_label)}</h2>
           <p class="next-action">{_text(view.next_action)}</p>

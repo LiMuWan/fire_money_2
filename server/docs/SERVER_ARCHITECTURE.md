@@ -13,6 +13,7 @@ server/firemoney_server/
   domain/
     archive.py          completed trade archive record policy
     archive_review.py   lightweight completed-archive review policy
+    one_to_two.py       mainboard 10cm one-to-two scoring and blocker policy
     signal_scan.py      explainable signal scan policy
     opportunity.py      opportunity ranking
     outcome.py          post-fill result card policy
@@ -27,6 +28,10 @@ server/firemoney_server/
     archive_review_export.py  Markdown export for lightweight archive reviews
     broker_adapter.py   project-owned broker execution adapter boundary
     export_cleanup.py   retention cleanup for service-owned export files
+    feishu_notifier.py  Feishu group robot webhook notification adapter
+    market_data.py      MarketDataProvider boundary and AkShare adapter
+    one_to_two_config.py  one-to-two strategy config loader
+    paper_store.py      local event-driven paper-trading account
     sample_data.py      deterministic smoke data
     config/             deterministic local input data
     fill_import.py      local broker fill-detail import adapter
@@ -91,10 +96,18 @@ keeps only the front candidates in the execution line.
 - Strategy boundary change records can be exported through `MainChainService.export_strategy_boundary_audit()` as Markdown under `exports/strategy/`.
 - Strategy boundary audit export can filter records by action through `actions=("apply",)` or `actions=("reset",)`; filtering stays in infrastructure/service code, not the client.
 - Strategy export cleanup goes through `MainChainService.cleanup_strategy_exports(retention_count=...)`; it only deletes service-owned strategy audit filenames and returns an `ExportCleanupResult`.
+- One-to-two strategy settings are loaded from `infrastructure/config/one_to_two_strategy.zh_CN.json`; default capital is 100000, single position cap is 8%, and daily paper buys are capped at 1.
+- One-to-two market data enters through `MarketDataProvider`; the first real implementation is `AkshareMarketDataProvider`. AkShare fields are normalized into project-owned DTOs before domain scoring.
+- AkShare raw snapshots are cached under `.firemoney/market_data/`. If AkShare is unavailable and no explicit fallback is supplied, `MarketDataUnavailable` is raised inside infrastructure, the service converts it into a blocked morning report, and no paper buy can be generated.
+- One-to-two scoring lives in `domain/one_to_two.py`: first-board quality, auction/open strength, position structure, theme/market context, and liquidity. ST, delisting, new stocks, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, and one-word unreachable boards are hard blockers.
+- Paper trading lives in `infrastructure/paper_store.py` under `.firemoney/paper_trades.json`. Same-day stop loss breaches create warning events only; T+1 sell events are allowed only after the position rolls to the next day.
+- Feishu notification lives in `infrastructure/feishu_notifier.py` and reads only `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`. Notification failures return structured results and do not stop strategy execution.
+- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, and `backtest`.
 
 ## 6. Configuration Entry Points
 
 - `domain/messages/zh_CN.json` owns domain-facing business messages, review notes, blocker labels, receipt defaults, and strategy adjustment reasons.
 - `infrastructure/config/sample_trading_data.zh_CN.json` owns deterministic local market, opportunity, price, and default strategy data for the first runnable slice.
+- `infrastructure/config/one_to_two_strategy.zh_CN.json` owns one-to-two product defaults, exclusion rules, position/risk limits, and notification environment variable names.
 - Domain and infrastructure modules should load these files through project-owned loaders, then return structured contracts to the client.
 - New user-visible business text should enter the domain message catalog first whenever practical; code should keep policies and state transitions, not locale text.

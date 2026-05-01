@@ -336,6 +336,81 @@ Key fields:
 - `deleted_files`
 - `kept_files`
 
+### `OneToTwoCandidate`
+
+Describes one mainboard 10cm one-to-two candidate and answers: "Why can this be observed, bought in the paper account, or blocked?"
+
+Key fields:
+
+- `symbol`
+- `name`
+- `score`
+- `status`
+- `latest_price`
+- `entry_price`
+- `stop_loss`
+- `position_limit_pct`
+- `first_board_score`
+- `auction_score`
+- `position_score`
+- `theme_score`
+- `liquidity_score`
+- `position_profile`
+- `blockers`
+- `warnings`
+- `rationale`
+- `next_action`
+
+### `OneToTwoPositionProfile`
+
+Describes the candidate's location and pressure structure.
+
+Key fields:
+
+- `label`
+- `low_position_score`
+- `breakout_score`
+- `pressure_score`
+- `moving_average_score`
+- `volume_score`
+- `summary`
+- `risk_notes`
+
+### `PaperAccount`, `PaperPosition`, `PaperTradeEvent`
+
+Describe the local event-driven simulation account.
+
+Rules represented by the contracts:
+
+- initial cash and daily trade limits are visible on `PaperAccount`
+- same-day positions carry `can_sell_today=False`
+- same-day stop loss breaches are warning events, not sell events
+- T+1 exits are represented by `OneToTwoEventType.T1_SELL`
+
+### `FeishuNotificationResult`
+
+Describes notification outcome without making notification delivery a blocker for strategy execution.
+
+Key fields:
+
+- `status`
+- `title`
+- `message`
+- `webhook_configured`
+- `error`
+
+### `OneToTwoMorningReport`
+
+Describes the 08:50 one-to-two report: market temperature, yesterday first-board candidates, paper-account state, notification result, and next action.
+
+### `OneToTwoEndOfDayReview`
+
+Describes the 15:10 one-to-two review: sample count, warning count, realized P/L observation, focus points, paper-account state, notification result, and next action.
+
+### `OneToTwoStabilityReport`
+
+Describes the strategy stability observation. Fewer than 30 samples must remain `observation` and must not automatically produce strategy-boundary conclusions.
+
 ### `MainChainSnapshot`
 
 Aggregated main-chain snapshot. The client consumes this structure to render the main workflow state and does not re-judge business conclusions in the UI.
@@ -349,6 +424,9 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - `ConfirmationStatus`: order confirmation state before receipt generation
 - `ArchiveReviewQuality`: whether archive samples are empty, insufficient, or reviewable
 - `StrategyBoundaryAction`: service recommendation for archive-review-driven boundary follow-up
+- `OneToTwoEventType`: one-to-two morning scan, candidate, paper buy, stop warning, T+1 sell, end-of-day review, and blocked events
+- `NotificationStatus`: disabled, prepared, sent, failed
+- `PaperTradeStatus`: empty, holding, warning, closed
 
 ## 4. Rules
 
@@ -369,3 +447,6 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Strategy boundary audit action filtering is a service/export concern over `StrategyChangeRecord.action`; clients may request filters but must not re-implement history parsing.
 - Export cleanup results are service-owned outputs; clients may display deleted/kept filenames but must not delete export files directly.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.
+- One-to-two candidates, risk notes, stop loss, paper-trading state, and Feishu notification results are shared contracts; clients must not recompute them from raw AkShare fields.
+- AkShare and Feishu details stay behind infrastructure adapters. Shared contracts use project-owned field names only.
+- One-to-two paper trading is simulation only; these contracts do not represent real account orders or unattended live trading.

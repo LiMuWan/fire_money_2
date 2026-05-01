@@ -412,6 +412,23 @@ button {
   letter-spacing: 0;
 }
 
+.panel h3 {
+  margin: 16px 0 10px;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.detail-list.compact {
+  gap: 6px;
+  font-size: 12px;
+}
+
+.empty-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .candidate-list {
   display: grid;
   gap: 10px;
@@ -473,6 +490,49 @@ button {
 
 .candidate p {
   margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.one-to-two-panel {
+  border-color: rgba(31, 122, 90, 0.32);
+}
+
+.one-to-two-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.one-to-two-kpis .metric {
+  min-height: 62px;
+  padding: 10px;
+}
+
+.one-to-two-kpis .metric-value {
+  font-size: 16px;
+}
+
+.one-to-two-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.one-to-two-card[data-status="ready"] {
+  border-color: rgba(31, 122, 90, 0.45);
+  background: var(--accent-soft);
+}
+
+.one-to-two-card[data-status="blocked"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
+}
+
+.one-to-two-card p {
+  margin: 8px 0 0;
   color: var(--muted);
   line-height: 1.5;
 }
@@ -543,6 +603,10 @@ button {
 
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .one-to-two-kpis {
+    grid-template-columns: 1fr;
   }
 
   .order-summary {
@@ -1746,6 +1810,107 @@ button {
 
           </div>
         </section>
+
+      <section class="panel one-to-two-panel">
+        <h2>一进二专项台</h2>
+        <div class="one-to-two-kpis">
+          <div class="metric"><span class="metric-label">市场温度</span><span class="metric-value">74</span></div>
+          <div class="metric"><span class="metric-label">候选数</span><span class="metric-value">3</span></div>
+          <div class="metric"><span class="metric-label">模拟权益</span><span class="metric-value">100000.00</span></div>
+        </div>
+        <p class="next-action">一进二早盘：3 个昨日首板样本，1 个进入模拟盘观察。</p>
+        <div class="candidate-list">
+        <article class="one-to-two-card" data-status="ready">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">低位突破样例</div>
+              <div class="candidate-code">600001 / 低位平台突破</div>
+            </div>
+            <div class="candidate-score">92.0</div>
+          </div>
+          <div class="tags">
+            <span class="tag">ready</span>
+            <span class="tag">低位平台突破，位置结构 25/25</span>
+            <span class="tag is-risk">止损 10.0</span>
+          </div>
+          <p>低位突破样例 属于低位平台突破，首板质量、竞价强度和流动性进入一进二观察。</p>
+          <ul class="detail-list compact">
+            <li>首板 25.0/25，竞价 20.0/20，位置 25.0/25</li>
+            <li>仓位上限 8%，买入价 10.52，严格 T+1</li>
+
+            <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li>
+          </ul>
+        </article>
+
+
+        <article class="one-to-two-card" data-status="blocked">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">创业板样例</div>
+              <div class="candidate-code">300003 / 低位启动</div>
+            </div>
+            <div class="candidate-score">88.0</div>
+          </div>
+          <div class="tags">
+            <span class="tag">blocked</span>
+            <span class="tag">低位启动，位置结构 21/25</span>
+            <span class="tag is-risk">止损 21.0</span>
+          </div>
+          <p>创业板样例 被拦截：创业板 不在主板 10cm 一进二范围内</p>
+          <ul class="detail-list compact">
+            <li>首板 25.0/25，竞价 20.0/20，位置 21.0/25</li>
+            <li>仓位上限 8%，买入价 22.0，严格 T+1</li>
+            <li>创业板 不在主板 10cm 一进二范围内</li>
+            <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li>
+          </ul>
+        </article>
+
+
+        <article class="one-to-two-card" data-status="blocked">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">高位乖离样例</div>
+              <div class="candidate-code">600002 / 平台突破</div>
+            </div>
+            <div class="candidate-score">77.0</div>
+          </div>
+          <div class="tags">
+            <span class="tag">blocked</span>
+            <span class="tag">平台突破，位置结构 17/25</span>
+            <span class="tag is-risk">止损 15.67</span>
+          </div>
+          <p>高位乖离样例 被拦截：首板前涨幅过大，疑似高位接力</p>
+          <ul class="detail-list compact">
+            <li>首板 25.0/25，竞价 13.0/20，位置 17.0/25</li>
+            <li>仓位上限 8%，买入价 16.5，严格 T+1</li>
+            <li>首板前涨幅过大，疑似高位接力</li><li>距离 20 日均线过远，短线乖离过大</li>
+            <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li><li>竞价/开盘涨幅偏高，防止高开兑现</li>
+          </ul>
+        </article>
+        </div>
+        <h3>模拟盘与风险</h3>
+
+        <article class="one-to-two-card">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">低位突破样例</div>
+              <div class="candidate-code">600001 / holding</div>
+            </div>
+            <div class="candidate-score">0.00%</div>
+          </div>
+          <p>持仓 700 股，现价 10.52，止损 10.0。</p>
+          <p>严格 T+1：当天跌破止损只预警，不模拟卖出。</p>
+        </article>
+
+        <h3>飞书与复盘</h3>
+        <ul class="detail-list compact">
+          <li>通知状态：prepared / Webhook 未配置</li>
+          <li>最新事件：模拟买入，一进二事件驱动账本已记录。</li>
+          <li>一进二尾盘：权益 100000.00，事件 1 个，风险预警 0 个。</li>
+          <li>样本处于观察期，暂不自动给出策略边界结论。</li>
+        </ul>
+      </section>
+
         <section class="panel">
           <h2>下一步</h2>
           <p class="next-action">先处理 示例龙头，进入执行审查前确认风险、仓位和价格。</p>

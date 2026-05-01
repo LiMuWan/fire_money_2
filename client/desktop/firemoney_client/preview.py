@@ -16,6 +16,8 @@ from server.firemoney_server.infrastructure.fill_import import (
     BrokerFillRecord,
 )
 from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
+from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
+from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
 from server.firemoney_server.infrastructure.receipt_import import (
     BrokerReceiptImporter,
     BrokerReceiptRecord,
@@ -91,6 +93,7 @@ def build_preview(output_path: str | Path) -> Path:
         store = StrategyConfigStore(preview_root / "strategy_config.json")
         receipt_importer = BrokerReceiptImporter(preview_root / "receipts")
         fill_importer = BrokerFillImporter(preview_root / "fills")
+        paper_store = PaperTradeStore(preview_root / "paper_trades.json")
         adapter = LocalMainChainAdapter(
             MainChainService(
                 strategy_store=store,
@@ -98,6 +101,8 @@ def build_preview(output_path: str | Path) -> Path:
                 order_exporter=CsvOrderExporter(preview_root / "orders"),
                 receipt_importer=receipt_importer,
                 fill_importer=fill_importer,
+                paper_store=paper_store,
+                market_data_provider=SampleMarketDataProvider(),
             )
         )
         snapshot = adapter.load_snapshot()
@@ -137,6 +142,10 @@ def build_preview(output_path: str | Path) -> Path:
             fill_received=True,
             exit_received=True,
         )
+        one_to_two_report = adapter.build_one_to_two_morning_report(notify=False)
+        one_to_two_watch_report = adapter.run_one_to_two_watch(notify=False)
+        one_to_two_eod_review = adapter.build_one_to_two_end_of_day_review(notify=False)
+        one_to_two_stability_report = adapter.build_one_to_two_stability_report()
         target.write_text(
             render_core_workflow_html(
                 snapshot,
@@ -146,6 +155,10 @@ def build_preview(output_path: str | Path) -> Path:
                 closed_snapshot=closed_snapshot,
                 adjusted_snapshot=adjusted_snapshot,
                 reset_snapshot=reset_snapshot,
+                one_to_two_report=one_to_two_report,
+                one_to_two_watch_report=one_to_two_watch_report,
+                one_to_two_eod_review=one_to_two_eod_review,
+                one_to_two_stability_report=one_to_two_stability_report,
             ),
             encoding="utf-8",
         )

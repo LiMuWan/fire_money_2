@@ -8,6 +8,9 @@ from server.firemoney_server import MainChainService
 from shared.contracts import (
     ExportCleanupResult,
     MainChainSnapshot,
+    OneToTwoEndOfDayReview,
+    OneToTwoMorningReport,
+    OneToTwoStabilityReport,
     StrategyBoundaryReview,
     StrategyConfig,
     StrategyResetReview,
@@ -111,3 +114,36 @@ class LocalMainChainAdapter:
         retention_count: int = 1,
     ) -> ExportCleanupResult:
         return self._service.cleanup_strategy_exports(retention_count=retention_count)
+
+    def build_one_to_two_morning_report(
+        self,
+        trade_date: str | None = None,
+        notify: bool = True,
+    ) -> OneToTwoMorningReport:
+        return self._service.build_one_to_two_morning_report(
+            trade_date=trade_date,
+            notify=notify,
+        )
+
+    def run_one_to_two_watch(
+        self,
+        trade_date: str | None = None,
+        notify: bool = True,
+    ) -> OneToTwoMorningReport:
+        return self._service.run_one_to_two_watch(
+            trade_date=trade_date,
+            notify=notify,
+        )
+
+    def build_one_to_two_end_of_day_review(
+        self,
+        trade_date: str | None = None,
+        notify: bool = True,
+    ) -> OneToTwoEndOfDayReview:
+        return self._service.build_one_to_two_end_of_day_review(
+            trade_date=trade_date,
+            notify=notify,
+        )
+
+    def build_one_to_two_stability_report(self) -> OneToTwoStabilityReport:
+        return self._service.build_one_to_two_stability_report()

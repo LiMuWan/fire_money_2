@@ -11,6 +11,7 @@ client/desktop/firemoney_client/
   adapter.py     adapter from client to business layer
   content.py     localizable content loader
   content/       locale-specific UI text
+  one_to_two_cli.py  local command entry for one-to-two morning/watch/eod/backtest
   renderer.py    HTML renderer for the simplified core interface
   static/        CSS for the interface preview
   view_model.py  display-only view model derived from contracts
@@ -20,8 +21,9 @@ client/desktop/firemoney_client/
 ## 3. Client Responsibilities
 
 - Render the three core user workspaces: market judgment, execution control, and recap improvement.
-- Keep signal scan and opportunity pool inside market judgment.
-- Keep strategy boundary and parameter impact inside recap improvement.
+- Keep one-to-two candidate review, position score, and pressure/stop notes inside market judgment.
+- Keep paper-trading risk discipline and T+1 status inside execution control.
+- Keep end-of-day review and stability observation inside recap improvement.
 - Capture user confirmations, cancellations, refresh intent, and navigation intent.
 - Consume `MainChainSnapshot` without re-computing business conclusions.
 - Load display text from content files when practical.
@@ -59,7 +61,7 @@ The first interface is a restrained three-part workspace:
 
 - Top: product name, core path, and only three workspace switches.
 - Main column: `市场判断 -> 执行审查 -> 复盘改进` as stacked decision steps.
-- Side column: front candidates and next action only.
+- Side column: front candidates, one-to-two specialty panel, and next action.
 
 Design constraints:
 
@@ -68,6 +70,7 @@ Design constraints:
 - Risk, position limit, price, route, and confirmation stay close together.
 - The UI may render an order draft, but it must not turn it into a receipt or recap before user confirmation.
 - The preview includes both confirmation states: before confirmation and after confirmation.
+- The one-to-two specialty panel displays server-owned candidates, position labels, stop loss, strict T+1 risk notes, paper-account state, Feishu notification status, and end-of-day/stability summaries.
 - Visible text should come from `content/*.json` when practical.
 
 ## 7. Content Configuration
