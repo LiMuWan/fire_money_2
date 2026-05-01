@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from server.firemoney_server.domain.archive import TradeArchivePolicy
 from server.firemoney_server.domain.execution import ExecutionPolicy
 from server.firemoney_server.domain.opportunity import OpportunityRanker
@@ -62,6 +64,25 @@ class MainChainService:
         """Restore default strategy boundaries by clearing local overrides."""
 
         return self._strategy_store.reset(sample_strategy_config()) is not None
+
+    def export_trade_archives(
+        self,
+        target_path: str | Path | None = None,
+        format: str = "json",
+        limit: int = 50,
+    ) -> Path:
+        """Export compact completed-trade archives through the service boundary."""
+
+        return self._archive_store.export_recent(
+            target_path=target_path,
+            format=format,
+            limit=limit,
+        )
+
+    def clear_trade_archives(self) -> bool:
+        """Clear local completed-trade archives through the service boundary."""
+
+        return self._archive_store.clear()
 
     def build_first_slice_snapshot(
         self,

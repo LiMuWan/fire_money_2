@@ -99,6 +99,8 @@ Everything else is supporting material, not a first-class entry.
 - Completed round trips now produce a compact trade archive record for review.
 - Completed archive records are persisted locally under `.firemoney/trade_archives.json`.
 - Client preview now shows a lightweight recent-archives review strip beside the core workflow.
+- Archive records can now be exported as JSON or CSV through the service boundary.
+- Local archive cleanup now goes through the service boundary and bad archive JSON is treated as empty local state.
 - Smoke tests cover the new contract field and the main client rendering path.
 
 ## 6. Next TODO
@@ -123,7 +125,7 @@ Everything else is supporting material, not a first-class entry.
 - [x] Add a compact final trade archive record for the completed round trip.
 - [x] Persist completed archive records to local storage after the in-memory contract is stable.
 - [x] Add a compact recent-archives review strip without turning it into a full history dashboard.
-- [ ] Add archive export or cleanup controls only after the core local record format settles.
+- [x] Add archive export or cleanup controls only after the core local record format settles.
 
 ## 7. Validation Entry Points
 

@@ -269,6 +269,62 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(len(reloaded.recent_archives), 1)
             self.assertEqual(reloaded.recent_archives[0].archive_id, "archive-draft-600001")
 
+    def test_archive_store_exports_and_clears_recent_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            receipt_importer = BrokerReceiptImporter(root / "receipts")
+            _seed_broker_receipt(receipt_importer)
+            fill_importer = BrokerFillImporter(root / "fills")
+            _seed_entry_fill(fill_importer)
+            _seed_exit_fill(fill_importer)
+            archive_store = TradeArchiveStore(
+                root / "trade_archives.json",
+                export_dir=root / "archive_exports",
+            )
+            service = _build_service(
+                root,
+                receipt_importer=receipt_importer,
+                fill_importer=fill_importer,
+                archive_store=archive_store,
+            )
+            service.build_first_slice_snapshot(
+                user_confirmed=True,
+                broker_submitted=True,
+                fill_received=True,
+                exit_received=True,
+            )
+
+            json_export = service.export_trade_archives(format="json")
+            csv_export = service.export_trade_archives(format="csv")
+
+            self.assertEqual(json_export.name, "trade_archives.json")
+            self.assertEqual(csv_export.name, "trade_archives.csv")
+            self.assertEqual(
+                json.loads(json_export.read_text(encoding="utf-8"))[0]["archive_id"],
+                "archive-draft-600001",
+            )
+            csv_content = csv_export.read_text(encoding="utf-8-sig")
+            self.assertIn("archive_id", csv_content)
+            self.assertIn("archive-draft-600001", csv_content)
+            self.assertIn("risk:medium", csv_content)
+
+            self.assertTrue(service.clear_trade_archives())
+            self.assertFalse(archive_store.path.exists())
+            self.assertEqual(archive_store.load_recent(), ())
+            self.assertFalse(service.clear_trade_archives())
+
+    def test_bad_archive_store_file_is_treated_as_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            archive_store.path.write_text("{", encoding="utf-8")
+
+            self.assertEqual(archive_store.load_recent(), ())
+            exported = archive_store.export_recent(root / "empty_archives.csv", format="csv")
+
+            self.assertTrue(exported.exists())
+            self.assertIn("archive_id", exported.read_text(encoding="utf-8-sig"))
+
     def test_adjustment_confirmation_updates_next_strategy_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

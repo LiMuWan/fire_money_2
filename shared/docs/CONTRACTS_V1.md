@@ -286,4 +286,4 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Fill execution data can enter recap only after an accepted broker receipt has been imported.
 - Exit execution data can enter outcome only after an entry fill has been imported.
 - Outcome cards are service-owned outputs; the client must not calculate P/L or stop discipline itself.
-- Trade archive records are compact service-owned summaries; local storage is owned by infrastructure, not the client.
+- Trade archive records are compact service-owned summaries; local storage, export, and cleanup are owned by infrastructure/service boundaries, not the client.

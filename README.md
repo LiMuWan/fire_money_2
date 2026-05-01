@@ -65,6 +65,7 @@ docs/
 - 策略边界：`.firemoney/strategy_config.json`
 - 交易归档：`.firemoney/trade_archives.json`
 - 委托/回执/成交样本：`exports/`
+- 归档导出：`exports/archives/trade_archives.json` 或 `exports/archives/trade_archives.csv`
 
 ## 配置入口
 
@@ -93,4 +94,4 @@ python -m client.desktop.firemoney_client.preview
 
 ## 下一步
 
-短期不继续扩入口。下一步只在当前闭环上做小步增强：归档导出/清理、真实券商适配器、或更完整的策略边界验证。
+短期不继续扩入口。下一步只在当前闭环上做小步增强：真实券商适配器、更完整的策略边界验证、或归档导出后的轻量复查体验。

@@ -20,7 +20,7 @@ server/firemoney_server/
     recap.py            execution recap and strategy-boundary suggestions
     strategy_config.py  confirmed strategy-boundary application
   infrastructure/
-    archive_store.py    local completed trade archive persistence
+    archive_store.py    local completed trade archive persistence/export/cleanup
     sample_data.py      deterministic smoke data
     config/             deterministic local input data
     fill_import.py      local broker fill-detail import adapter
@@ -62,6 +62,9 @@ keeps only the front candidates in the execution line.
 - Post-fill outcome cards are built by `domain/outcome.py` from fill detail, optional exit detail, risk review, and current price; the client only renders the resulting contract.
 - Completed trade archive records are built by `domain/archive.py`; they summarize the closed round trip without introducing a separate history surface yet.
 - Completed trade archive records are persisted by `infrastructure/archive_store.py` under `.firemoney/trade_archives.json`.
+- Recent archive records can be exported through `MainChainService.export_trade_archives()` as JSON or CSV under `exports/archives/`.
+- Local archive cleanup goes through `MainChainService.clear_trade_archives()`; client code must not delete `.firemoney` files directly.
+- Invalid local archive JSON is treated as empty local state so the main workflow can continue.
 - Recap may propose strategy adjustments, but it must not write new strategy config automatically.
 - Strategy config changes require explicit adjustment confirmation before they affect the next scan cycle.
 - Confirmed strategy boundaries are stored locally under `.firemoney/strategy_config.json`.
