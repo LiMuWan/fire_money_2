@@ -1,0 +1,20 @@
+{
+  "receipt": {
+    "submitted_at": "2026-05-01T09:36:00+08:00",
+    "message": "券商端已受理 CSV 委托，后续成交结果将继续写回回执",
+    "next_action": "等待真实成交结果写回，再进入下一轮复盘校准"
+  },
+  "entry_fill": {
+    "filled_quantity": 100,
+    "avg_price": 12.43,
+    "filled_at": "2026-05-01T09:41:00+08:00",
+    "message": "券商成交明细已写回，成交均价略高于计划限价"
+  },
+  "exit_fill": {
+    "exited_quantity": 100,
+    "avg_price": 12.92,
+    "exited_at": "2026-05-01T10:18:00+08:00",
+    "reason": "target_follow",
+    "message": "退出成交明细已写回，本次交易形成已实现收益"
+  }
+}

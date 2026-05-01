@@ -1,81 +1,103 @@
-"""Deterministic sample data for the first remake smoke path."""
+"""Config-backed deterministic sample data for the first remake smoke path."""
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
 from shared.contracts import (
+    AdjustmentStatus,
     MarketContext,
     Opportunity,
     RiskLevel,
+    StrategyChangeRecord,
     StrategyConfig,
     WorkflowStage,
 )
 
 
-def sample_market_context() -> MarketContext:
+_CONFIG_DIR = Path(__file__).with_name("config")
+_DEFAULT_LOCALE = "zh_CN"
+
+
+@lru_cache(maxsize=4)
+def _load_sample_payload(locale: str = _DEFAULT_LOCALE) -> dict[str, Any]:
+    config_path = _CONFIG_DIR / f"sample_trading_data.{locale}.json"
+    with config_path.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def sample_market_context(locale: str = _DEFAULT_LOCALE) -> MarketContext:
+    payload = _load_sample_payload(locale)["market_context"]
     return MarketContext(
-        trade_date="2026-05-01",
-        market_temperature=74,
-        trend="主线活跃，短线情绪可交易",
-        risk_level=RiskLevel.MEDIUM,
-        summary="市场处于可观察的短线窗口，但追高和流动性风险需要审查。",
-        next_action="先进入信号扫描，筛出可执行候选",
+        trade_date=str(payload["trade_date"]),
+        market_temperature=int(payload["market_temperature"]),
+        trend=str(payload["trend"]),
+        risk_level=RiskLevel(str(payload["risk_level"])),
+        summary=str(payload["summary"]),
+        next_action=str(payload["next_action"]),
     )
 
 
-def sample_opportunity_candidates() -> tuple[Opportunity, ...]:
-    return (
+def sample_opportunity_candidates(locale: str = _DEFAULT_LOCALE) -> tuple[Opportunity, ...]:
+    return tuple(
         Opportunity(
-            symbol="600001",
-            name="示例龙头",
-            score=86.0,
-            confidence=0.81,
-            source_stage=WorkflowStage.SIGNAL_SCAN,
-            strategy_tags=("主线题材", "放量突破", "盘中强势"),
-            entry_price=12.34,
-            stop_loss=11.72,
-            target_price=13.28,
-            risk_flags=("gap_high",),
-            rationale="题材热度和资金强度靠前，但高开缺口需要控制仓位。",
-        ),
-        Opportunity(
-            symbol="300002",
-            name="示例跟随",
-            score=78.0,
-            confidence=0.76,
-            source_stage=WorkflowStage.SIGNAL_SCAN,
-            strategy_tags=("跟随补涨", "量价改善"),
-            entry_price=24.2,
-            stop_loss=23.1,
-            target_price=26.0,
-            risk_flags=(),
-            rationale="补涨结构较清晰，适合进入观察池等待确认。",
-        ),
-        Opportunity(
-            symbol="002003",
-            name="示例观察",
-            score=63.0,
-            confidence=0.68,
-            source_stage=WorkflowStage.SIGNAL_SCAN,
-            strategy_tags=("异动",),
-            entry_price=8.6,
-            stop_loss=8.18,
-            target_price=9.2,
-            risk_flags=("liquidity_thin",),
-            rationale="异动存在但流动性不足，暂不进入执行链。",
-        ),
+            symbol=str(item["symbol"]),
+            name=str(item["name"]),
+            score=float(item["score"]),
+            confidence=float(item["confidence"]),
+            source_stage=WorkflowStage(str(item["source_stage"])),
+            strategy_tags=tuple(str(tag) for tag in item.get("strategy_tags", ())),
+            entry_price=float(item["entry_price"]),
+            stop_loss=float(item["stop_loss"]),
+            target_price=float(item["target_price"]),
+            risk_flags=tuple(str(flag) for flag in item.get("risk_flags", ())),
+            rationale=str(item["rationale"]),
+        )
+        for item in _load_sample_payload(locale)["opportunities"]
     )
 
 
-def sample_strategy_config() -> StrategyConfig:
+def sample_strategy_config(locale: str = _DEFAULT_LOCALE) -> StrategyConfig:
+    payload = _load_sample_payload(locale)["strategy_config"]
     return StrategyConfig(
-        strategy_id="intraday-mainline-v1",
-        name="盘中主线机会",
-        version="0.1.0",
-        risk_profile="semi_auto_review_required",
-        parameters={
-            "min_score": 70,
-            "max_position_pct": 0.12,
-            "confidence_floor": 0.72,
-        },
-        impact_summary="提高 min_score 会减少候选数量；提高仓位上限会放大执行风险。",
+        strategy_id=str(payload["strategy_id"]),
+        name=str(payload["name"]),
+        version=str(payload["version"]),
+        risk_profile=str(payload["risk_profile"]),
+        parameters=dict(payload["parameters"]),
+        impact_summary=str(payload["impact_summary"]),
+        adjustment_status=AdjustmentStatus(
+            str(payload.get("adjustment_status", AdjustmentStatus.NOT_AVAILABLE.value))
+        ),
+        adjustment_message=str(payload.get("adjustment_message", "")),
+        source=str(payload.get("source", "default")),
+        recent_changes=_change_records_from_payload(payload.get("recent_changes", ())),
+    )
+
+
+def sample_universe_size(locale: str = _DEFAULT_LOCALE) -> int:
+    return int(_load_sample_payload(locale)["universe_size"])
+
+
+def sample_current_price(symbol: str, locale: str = _DEFAULT_LOCALE) -> float:
+    prices = _load_sample_payload(locale)["current_prices"]
+    return float(prices.get(symbol, 0))
+
+
+def _change_records_from_payload(payload: Any) -> tuple[StrategyChangeRecord, ...]:
+    return tuple(
+        StrategyChangeRecord(
+            record_id=str(item["record_id"]),
+            action=str(item["action"]),
+            strategy_id=str(item["strategy_id"]),
+            from_version=str(item["from_version"]),
+            to_version=str(item["to_version"]),
+            changes=tuple(str(change) for change in item.get("changes", ())),
+            reason=str(item["reason"]),
+            created_at=str(item["created_at"]),
+        )
+        for item in payload
     )

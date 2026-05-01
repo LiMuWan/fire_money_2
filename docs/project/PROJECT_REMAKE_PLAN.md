@@ -1,85 +1,146 @@
-# FireMoney 重制计划
+# FireMoney Core Business Plan
 
-## 1. 重制目标
+## 1. Goal
 
-FireMoney 重制不是推倒旧项目，而是保留旧项目里已经验证过的能力，重新建立清晰产品主链和工程边界。
-
-重制后的项目必须优先服务这一条链路：
+FireMoney is being rebuilt around the shortest useful trading-assistant loop for the user:
 
 ```text
-看市场 -> 找机会 -> 做判断 -> 控风险 -> 执行 -> 复盘 -> 改策略
+judge market -> control execution -> improve from recap
 ```
 
-所有功能先归类为：
+In product terms, the first version should feel like:
 
-- P0 主链能力
-- P1 增强能力
-- P2 暂缓扩展
+```text
+see signal -> check risk -> confirm order -> see receipt -> learn one improvement
+```
 
-不允许在首版重制中继续堆叠与主链无关的功能。
+Everything else is supporting material, not a first-class entry.
 
-## 2. 分层边界
+## 2. Core Business Line
 
-### 客户端
+### P0: Keep
 
-客户端负责：
+- `市场判断`: market context, signal scan, focus candidate, and only the necessary opportunity pool.
+- `执行中控`: risk review, order draft, user confirmation, submission status, and receipt tracking.
+- `复盘改进`: execution recap, one clear lesson, and the next strategy-boundary adjustment.
 
-- UI 和交互
-- 图表、表格、状态展示
-- 用户输入、确认、取消
-- 风险提示展示
-- 执行结果和回执展示
+### P1: Fold Into P0
 
-客户端不负责：
+- `信号扫描`: lives inside `市场判断`, not as a separate primary workspace.
+- `机会池`: becomes the selected candidate list under `市场判断`, not a standalone destination.
+- `策略配置`: appears as strategy boundary and parameter-impact editing inside `复盘改进`.
+- `单票复盘`: becomes the main recap state inside `复盘改进`.
 
-- 最终风控裁决
-- 可信交易结果判定
-- 账户和持仓的权威状态
-- SDK 细节和凭据处理
+### P2: Drop From The First Version
 
-### 服务器/业务层
+- independent message center
+- AI playground or generic AI center
+- complex historical-statistics pages
+- decorative command-center dashboards
+- repeated subpages that restate the same market, risk, or recap summary
+- multi-account and vendor-maintenance surfaces until the core chain is trusted
 
-服务器或业务层负责：
+## 3. Layer Split
 
-- 策略扫描、推荐和评分
-- 风控审查和异常阻断
-- 委托建议生成
-- 账户、资金、持仓、回执状态
-- 执行日志、复盘记录和报告生成
-- 外部券商、GM SDK、文件桥接适配
+### Client
 
-### 共享层
+- UI and interaction
+- tables, charts, state display
+- input, confirmation, cancellation
+- execution result and recap display
+- localizable content loading
 
-共享层负责：
+### Server / Business Layer
 
-- DTO 和 schema
-- 错误码和状态枚举
-- 配置字段规范
-- API 或本地 RPC 协议
-- 文档化的数据字典
+- strategy scan, recommendation, scoring
+- risk review and abnormal blocking
+- order draft generation
+- account, funds, positions, and execution state
+- execution logs, recap records, and report generation
 
-## 3. 首版落地顺序
+### Shared
 
-1. 建立共享契约：机会、执行审查、委托、回执、复盘、策略配置。
-2. 建立服务器/业务层骨架：Application、Domain、Infrastructure、Contracts。
-3. 建立客户端骨架：Shell、Workspace、状态条、主链导航、确认弹窗、结果回写。
-4. 迁移 P0 业务：全局态势、信号扫描、机会池、执行中控、单票复盘、策略配置。
-5. 接入风控审查和半自动执行：CSV 导出、GM SDK 桥接、执行日志、失败导出。
-6. 补测试和文档：契约测试、业务单元测试、UI smoke、端到端主链脚本。
+- DTOs and schemas
+- error codes and state enums
+- API or local RPC protocol
+- documented data dictionary
 
-## 4. 禁止事项
+## 4. First Release Sequence
 
-- 不直接把旧项目大文件原样搬进重制项目。
-- 不把 UI 事件写成业务规则中心。
-- 不在客户端硬编码可信风控结论。
-- 不在没有共享契约的情况下让客户端和服务端各自定义字段。
-- 不先做花哨大屏、复杂多账户、社交、复杂商业化权限。
-- 不为了重构而重构，所有重构都必须服务主链和边界清晰。
+1. Establish shared contracts: opportunity, risk review, order draft, recap, strategy config, signal scan report.
+2. Establish server architecture: application, domain, infrastructure, contracts.
+3. Establish client architecture around three primary workspaces: `市场判断`, `执行中控`, `复盘改进`.
+4. Strengthen the P0 business chain from the validated core business rules.
+5. Add risk controls and semi-automatic execution only after confirmation and recap are clear.
+6. Complete tests and docs.
 
-## 5. 下一步 TODO
+## 5. Current State
 
-- [x] 制定 `shared/contracts` 第一版契约清单。
-- [x] 制定服务端目录结构和模块边界。
-- [x] 制定客户端工作区结构和路由方案。
-- [ ] 从旧项目筛选可迁移的 P0 业务模块。
-- [x] 建立第一条端到端 smoke：信号扫描 -> 机会池 -> 执行审查 -> 回执复盘。
+- Shared contracts already include the first-slice chain and the new `SignalScanReport`.
+- Server now emits a deterministic signal scan report before selecting the first opportunity.
+- Signal scan policy now lives in the domain layer and filters by strategy score, confidence, and liquidity constraints.
+- Client shell renders the signal scan summary and next action before the opportunity and execution sections.
+- Client shell now exposes only the three core workspaces.
+- Client text starts from a localizable content catalog.
+- Client preview renders a clean three-step interface from the same shared snapshot.
+- The default flow now stops at order draft until the user explicitly confirms.
+- `OrderTicket` now carries explicit confirmation status and confirmation copy.
+- Recap now proposes strategy-boundary adjustments without automatically writing config.
+- Strategy-boundary adjustments now require explicit user confirmation before updating the next cycle.
+- Confirmed strategy boundaries are persisted locally under `.firemoney/strategy_config.json`.
+- Local strategy boundaries can be reset back to defaults through the service layer.
+- Strategy boundary apply/reset actions now keep a lightweight local change record.
+- Execution receipts now expose route, status, prepared time, export path, and next action as structured fields.
+- Confirmed order drafts now generate a real local CSV export through the infrastructure layer.
+- Broker-side receipt CSV import now reconciles submitted/accepted/failed status back into the main workflow.
+- Broker-side fill detail import now feeds成交数量、成交均价和滑点 into recap.
+- Post-fill outcome cards now show current price, unrealized P/L, stop discipline, and next action.
+- Exit fill import now closes the trade with realized P/L and a final recap state.
+- Completed round trips now produce a compact trade archive record for review.
+- Completed archive records are persisted locally under `.firemoney/trade_archives.json`.
+- Client preview now shows a lightweight recent-archives review strip beside the core workflow.
+- Smoke tests cover the new contract field and the main client rendering path.
+
+## 6. Next TODO
+
+- [x] Define the first version of `shared/contracts`.
+- [x] Define server folder structure and module boundaries.
+- [x] Define the simplified three-workspace client structure.
+- [x] Establish the first end-to-end smoke path: signal scan -> opportunity pool -> risk review -> recap.
+- [x] Add explicit user confirmation state before any executable order route.
+- [x] Replace deterministic sample scan data with the first domain signal-scan policy.
+- [x] Add recap-driven strategy-boundary suggestions.
+- [x] Add user confirmation for applying proposed strategy adjustments.
+- [x] Persist confirmed strategy boundaries outside sample data.
+- [x] Add a lightweight reset/revert path for local strategy boundaries.
+- [x] Add a visible lightweight change trail for strategy boundary changes.
+- [x] Add structured execution receipt data for the semi-automatic CSV flow.
+- [x] Add real CSV file generation behind the execution route.
+- [x] Add broker receipt import/reconciliation after the CSV file is submitted outside FireMoney.
+- [x] Add final fill-price/deal recap after the broker returns成交明细.
+- [x] Split the next cycle into a compact post-trade outcome card: unrealized P/L, stop discipline, and follow-up action.
+- [x] Add realized P/L after an exit fill is imported.
+- [x] Add a compact final trade archive record for the completed round trip.
+- [x] Persist completed archive records to local storage after the in-memory contract is stable.
+- [x] Add a compact recent-archives review strip without turning it into a full history dashboard.
+- [ ] Add archive export or cleanup controls only after the core local record format settles.
+
+## 7. Validation Entry Points
+
+Run the smoke suite:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Regenerate the local HTML preview:
+
+```powershell
+python -m client.desktop.firemoney_client.preview
+```
+
+Open:
+
+```text
+client/desktop/preview/core_workflow.html
+```

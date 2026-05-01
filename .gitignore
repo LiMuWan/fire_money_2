@@ -12,6 +12,7 @@ venv/
 env/
 
 # Local app state and caches
+.firemoney/
 .quant_hunter/app_state.json
 .quant_hunter/cache/
 .codex_stage/

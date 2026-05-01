@@ -1,0 +1,75 @@
+{
+  "execution": {
+    "confirmation_confirmed": "用户已确认风险、仓位和价格，可进入回执跟踪",
+    "confirmation_waiting": "等待用户确认风险、仓位和价格，不会自动提交",
+    "receipt_prepared_message": "CSV 委托文件已准备，等待用户在券商终端完成最终提交",
+    "receipt_prepared_next_action": "打开导出文件并在券商终端复核，提交后等待真实回执写回"
+  },
+  "outcome": {
+    "closed_next_action": "交易已闭环，进入最终复盘",
+    "closed_summary": "退出均价 {avg_price:.2f}，已实现盈亏 {realized_pnl:.2f} ({realized_pnl_pct:.2%})",
+    "floating_summary": "当前价 {current_price:.2f}，浮动盈亏 {pnl:.2f} ({pnl_pct:.2%})",
+    "stop_exit": "触及止损线，必须优先退出",
+    "stop_reduce": "接近止损线，降低仓位或等待确认",
+    "stop_hold": "未触及止损线，继续按计划跟踪",
+    "next_exit": "退出",
+    "next_take_profit": "分批止盈",
+    "next_hold": "继续持有并跟踪止损纪律"
+  },
+  "risk": {
+    "blocker_low_score": "策略评分低于执行门槛",
+    "blocker_liquidity_thin": "流动性不足，禁止自动送审",
+    "warning_gap_high": "高开缺口偏大，需要人工复核追价风险",
+    "warning_low_confidence": "信号置信度不足，建议降低仓位",
+    "next_blocked": "回到机会池，等待更高质量候选",
+    "next_needs_review": "进入执行审查，人工确认风险后再提交",
+    "next_approved": "生成委托草稿，等待二次确认"
+  },
+  "strategy_config": {
+    "waiting_adjustment_message": "复盘已生成策略边界建议，等待用户确认应用。",
+    "applied_impact_summary": "已应用复盘建议：{labels}",
+    "applied_label_separator": "、",
+    "applied_adjustment_message": "策略边界建议已应用到下一轮参数。"
+  },
+  "recap": {
+    "conclusion_closed": "退出成交已写回，交易闭环可进入最终复盘",
+    "conclusion_filled": "已收到真实成交明细，复盘可基于成交偏差推进",
+    "conclusion_prepared": "已形成可追踪的委托准备样本",
+    "deviation_waiting_fill": "当前处于 CSV 准备态，真实成交偏差需等待券商终端回执写回",
+    "lesson_keep_confirmation": "保留二次确认，避免无审查自动交易",
+    "lesson_wait_real_submission": "先记录导出路径和准备时间，再等待真实提交结果",
+    "adjustment_position_label": "单票仓位上限",
+    "adjustment_position_reason": "本次执行存在需要人工复核的风险提示。",
+    "adjustment_position_impact": "降低单票暴露，优先保证确认前可控。",
+    "adjustment_min_score_label": "执行评分门槛",
+    "adjustment_min_score_reason": "候选带有风险标签，下一轮应提高进入执行审查的质量线。",
+    "adjustment_min_score_impact": "减少低质量或高波动候选进入执行主线。",
+    "adjustment_slippage_label": "最大成交滑点",
+    "adjustment_slippage_reason": "真实成交价高于委托限价容忍线，下一轮应降低追价空间。",
+    "adjustment_slippage_impact": "减少高位追价带来的成交偏差，优先保证执行质量。",
+    "next_strategy_keep": "保留当前策略边界，等待真实回执写回后再评估。",
+    "next_strategy_review": "先复核建议参数，不自动改配置；确认后再写入下一轮策略边界。",
+    "fill_deviation": "成交均价 {avg_price:.2f}，计划限价 {target_price:.2f}，滑点 {slippage_pct:.2%}",
+    "fill_lesson_high_slippage": "本次成交滑点偏高，下一轮应收紧追价和委托确认阈值。",
+    "fill_lesson_acceptable": "本次成交偏差可接受，继续观察后续收益和止损纪律。"
+  },
+  "signal_scan": {
+    "summary": "扫描 {total} 个候选，按评分不低于 {min_score:.0f}、置信度不低于 {confidence_floor:.0%}、流动性可执行过滤后，保留 {executable_count} 个前排候选。",
+    "note_threshold": "执行候选必须同时满足评分 {min_score:.0f}+ 和置信度 {confidence_floor:.0%}+。",
+    "note_liquidity": "流动性不足的候选只保留观察，不进入执行审查。",
+    "note_gap_high": "前排存在高开缺口，确认前必须复核追价风险。",
+    "note_filtered": "{filtered_count} 个候选未过门槛，已从执行主线下沉。",
+    "next_empty": "当前没有可执行候选，继续观察市场温度和信号质量。",
+    "next_focus": "先处理 {name}，进入执行审查前确认风险、仓位和价格。"
+  },
+  "broker_import": {
+    "entry_fill_default": "券商成交明细已写回",
+    "exit_fill_default": "退出成交明细已写回"
+  },
+  "strategy_store": {
+    "apply_reason": "用户确认应用策略边界建议",
+    "reset_change": "恢复默认策略边界",
+    "reset_reason": "用户确认恢复默认策略边界",
+    "no_parameter_change": "策略边界确认，无参数变化"
+  }
+}

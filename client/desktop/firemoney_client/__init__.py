@@ -3,4 +3,7 @@
 from .adapter import LocalMainChainAdapter
 from .shell import FireMoneyShell
 
-__all__ = ["FireMoneyShell", "LocalMainChainAdapter"]
+__all__ = [
+    "FireMoneyShell",
+    "LocalMainChainAdapter",
+]

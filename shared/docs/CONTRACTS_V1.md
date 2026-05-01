@@ -1,26 +1,25 @@
-# FireMoney 共享契约 V1
+# FireMoney Shared Contracts V1
 
-## 1. 目的
+## 1. Purpose
 
-共享契约定义客户端和服务器/业务层之间的共同语言，避免两边各自猜字段。
-
-V1 只覆盖第一条主链 smoke：
+Shared contracts define the stable language between the client and the service layer.
+V1 covers the first smoke path:
 
 ```text
-全局态势 -> 信号扫描 -> 机会池 -> 执行审查 -> 委托提交 -> 回执跟踪 -> 复盘改进
+market overview -> signal scan -> opportunity pool -> risk review -> order draft -> execution receipt -> recap
 ```
 
-代码入口：
+Code entry point:
 
 - `shared/contracts/trading.py`
 
-## 2. 主要契约
+## 2. Core Contracts
 
 ### `MarketContext`
 
-描述当前市场状态，回答“现在有没有机会、风险如何、下一步看哪里”。
+Describes the current market state and answers: "Is there an opportunity now, what is the risk, and what should we look at next?"
 
-关键字段：
+Key fields:
 
 - `trade_date`
 - `market_temperature`
@@ -29,11 +28,30 @@ V1 只覆盖第一条主链 smoke：
 - `summary`
 - `next_action`
 
+### `SignalScanReport`
+
+Describes the signal scan result and answers: "What did the scan find, who is in front, and what should we inspect next?"
+
+The first domain policy filters candidates by strategy score, confidence, and liquidity before exposing `focus_opportunities` to the execution line.
+
+Key fields:
+
+- `report_id`
+- `stage`
+- `universe_size`
+- `candidate_count`
+- `ranked_opportunities`
+- `focus_opportunities`
+- `focus_opportunity`
+- `summary`
+- `watch_notes`
+- `next_action`
+
 ### `Opportunity`
 
-描述一个候选机会，回答“这只票为什么值得看”。
+Describes a candidate opportunity and answers: "Why is this one worth looking at?"
 
-关键字段：
+Key fields:
 
 - `symbol`
 - `name`
@@ -48,9 +66,9 @@ V1 只覆盖第一条主链 smoke：
 
 ### `RiskReview`
 
-描述执行前审查结论，回答“这笔交易能不能做、有什么风险”。
+Describes the pre-execution review outcome and answers: "Can this trade be done and what is the risk?"
 
-关键字段：
+Key fields:
 
 - `review_id`
 - `decision`
@@ -62,9 +80,9 @@ V1 只覆盖第一条主链 smoke：
 
 ### `OrderTicket`
 
-描述待确认委托草稿，回答“系统准备提交什么”。
+Describes the draft order and answers: "What is ready to confirm?"
 
-关键字段：
+Key fields:
 
 - `order_id`
 - `review_id`
@@ -74,39 +92,170 @@ V1 只覆盖第一条主链 smoke：
 - `limit_price`
 - `route`
 - `requires_confirmation`
+- `confirmation_status`
+- `confirmation_message`
 - `status`
 
 ### `ExecutionReceipt`
 
-描述执行回执，回答“委托准备/提交后结果是什么”。
+Describes the execution receipt and answers: "What happened after submission?"
 
-关键字段：
+V1 uses a semi-automatic receipt. `prepared` means the CSV export is ready for user review; it does not mean the broker accepted the order.
+`exported_path` points to the generated local CSV file for the confirmed order draft.
+`accepted` means a broker-side receipt has been imported and reconciled into the workflow.
+
+### `FillExecution`
+
+Describes the broker-side fill detail and answers: "What actually traded, at what price, and how far did it deviate from the plan?"
+
+Key fields:
+
+- `fill_id`
+- `order_id`
+- `symbol`
+- `filled_quantity`
+- `avg_price`
+- `target_price`
+- `slippage_pct`
+- `filled_at`
+- `source`
+- `message`
+
+### `ExitExecution`
+
+Describes the broker-side exit fill and answers: "How did the trade close and what P/L was realized?"
+
+Key fields:
+
+- `exit_id`
+- `order_id`
+- `symbol`
+- `exited_quantity`
+- `avg_price`
+- `entry_avg_price`
+- `realized_pnl`
+- `realized_pnl_pct`
+- `exited_at`
+- `reason`
+- `message`
+
+### `OutcomeCard`
+
+Describes the post-fill result card and answers: "What is the current outcome, is stop discipline intact, and what should happen next?"
+
+Key fields:
+
+- `outcome_id`
+- `order_id`
+- `symbol`
+- `current_price`
+- `unrealized_pnl`
+- `unrealized_pnl_pct`
+- `realized_pnl`
+- `realized_pnl_pct`
+- `stop_loss`
+- `stop_discipline`
+- `next_action`
+- `summary`
+
+### `TradeArchiveRecord`
+
+Describes one completed round trip and answers: "What happened in this trade, why, and what should we inspect later?"
+
+Key fields:
+
+- `archive_id`
+- `order_id`
+- `symbol`
+- `name`
+- `trade_date`
+- `opened_at`
+- `closed_at`
+- `realized_pnl`
+- `realized_pnl_pct`
+- `outcome`
+- `signal_summary`
+- `risk_summary`
+- `execution_summary`
+- `recap_summary`
+- `next_action`
+- `tags`
+
+Key fields:
 
 - `receipt_id`
 - `order_id`
 - `accepted`
 - `status`
+- `route`
 - `message`
+- `prepared_at`
+- `submitted_at`
+- `confirmed_by_user`
+- `failure_reason`
+- `next_action`
 - `exported_path`
 
 ### `Recap`
 
-描述执行复盘，回答“这次执行如何沉淀为改进”。
+Describes the execution recap and answers: "How should this execution improve future strategy?"
 
-关键字段：
+Key fields:
 
 - `recap_id`
 - `order_id`
 - `conclusion`
 - `execution_deviation`
 - `lessons`
+- `strategy_adjustments`
 - `next_strategy_action`
+
+### `StrategyAdjustment`
+
+Describes one proposed strategy-boundary change. The service layer may propose it, but the UI must present it as a suggestion, not an automatic configuration write.
+
+Key fields:
+
+- `key`
+- `label`
+- `current_value`
+- `suggested_value`
+- `reason`
+- `impact`
 
 ### `StrategyConfig`
 
-描述策略边界，回答“参数怎么影响风险和候选”。
+Describes the strategy boundary used for the next scan and execution cycle.
 
-关键字段：
+Additional adjustment fields:
+
+- `adjustment_status`
+- `adjustment_message`
+
+Strategy adjustments become effective only after the user explicitly confirms applying them.
+The local service can persist confirmed boundaries and mark `source` as `local`.
+Resetting local strategy boundaries restores the default strategy config and source.
+
+### `StrategyChangeRecord`
+
+Describes a lightweight local strategy-boundary change record.
+
+Key fields:
+
+- `record_id`
+- `action`
+- `strategy_id`
+- `from_version`
+- `to_version`
+- `changes`
+- `reason`
+- `created_at`
+
+### `StrategyConfig`
+
+Describes the strategy boundary and answers: "How do parameter changes affect risk and opportunity?"
+
+Key fields:
 
 - `strategy_id`
 - `name`
@@ -117,17 +266,24 @@ V1 只覆盖第一条主链 smoke：
 
 ### `MainChainSnapshot`
 
-聚合主链快照，客户端只消费这个结构来展示主链状态，不在 UI 中重新判断业务结论。
+Aggregated main-chain snapshot. The client consumes this structure to render the main workflow state and does not re-judge business conclusions in the UI.
+When a closed trade has been archived, `recent_archives` carries the compact local archive records for review context.
 
-## 3. 状态枚举
+## 3. State Enums
 
-- `WorkflowStage`：主链阶段。
-- `RiskLevel`：风险等级。
-- `ReviewDecision`：执行审查结论。
+- `WorkflowStage`: main workflow stages
+- `RiskLevel`: risk severity
+- `ReviewDecision`: execution review decision
+- `ConfirmationStatus`: order confirmation state before receipt generation
 
-## 4. 规则
+## 4. Rules
 
-- 新增跨端字段必须先更新共享契约和本文档。
-- 客户端不得根据私有字段推断可信业务结果。
-- 服务端/业务层必须返回足够支持 UI 展示的 `summary`、`next_action`、`status` 或等价字段。
-- 交易相关契约默认支持半自动确认，不默认支持无审查自动交易。
+- New cross-layer fields must be added to the shared contract and this document first.
+- The client must not infer trusted business outcomes from private fields.
+- The service layer must return enough `summary`, `next_action`, `status`, or equivalent fields to support UI display.
+- Trading-related contracts default to semi-automatic confirmation, not unattended automatic trading.
+- An order draft can become an execution receipt only after `confirmation_status` is `confirmed`.
+- Fill execution data can enter recap only after an accepted broker receipt has been imported.
+- Exit execution data can enter outcome only after an entry fill has been imported.
+- Outcome cards are service-owned outputs; the client must not calculate P/L or stop discipline itself.
+- Trade archive records are compact service-owned summaries; local storage is owned by infrastructure, not the client.

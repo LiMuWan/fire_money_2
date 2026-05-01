@@ -35,6 +35,31 @@ class ReviewDecision(str, Enum):
     BLOCK = "block"
 
 
+class ConfirmationStatus(str, Enum):
+    NOT_REQUIRED = "not_required"
+    WAITING_USER = "waiting_user"
+    CONFIRMED = "confirmed"
+    BLOCKED = "blocked"
+
+
+class AdjustmentStatus(str, Enum):
+    NOT_AVAILABLE = "not_available"
+    WAITING_USER = "waiting_user"
+    APPLIED = "applied"
+
+
+class ExecutionRoute(str, Enum):
+    CSV_EXPORT = "csv_export"
+    BROKER_BRIDGE = "broker_bridge"
+
+
+class ExecutionReceiptStatus(str, Enum):
+    PREPARED = "prepared"
+    SUBMITTED = "submitted"
+    ACCEPTED = "accepted"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True)
 class MarketContext:
     trade_date: str
@@ -42,6 +67,20 @@ class MarketContext:
     trend: str
     risk_level: RiskLevel
     summary: str
+    next_action: str
+
+
+@dataclass(frozen=True)
+class SignalScanReport:
+    report_id: str
+    stage: WorkflowStage
+    universe_size: int
+    candidate_count: int
+    ranked_opportunities: tuple[Opportunity, ...]
+    focus_opportunities: tuple[Opportunity, ...]
+    focus_opportunity: Opportunity | None
+    summary: str
+    watch_notes: tuple[str, ...]
     next_action: str
 
 
@@ -83,6 +122,8 @@ class OrderTicket:
     limit_price: float
     route: str
     requires_confirmation: bool
+    confirmation_status: ConfirmationStatus
+    confirmation_message: str
     status: str
 
 
@@ -91,9 +132,102 @@ class ExecutionReceipt:
     receipt_id: str
     order_id: str
     accepted: bool
-    status: str
+    status: ExecutionReceiptStatus
+    route: ExecutionRoute
     message: str
+    prepared_at: str
+    submitted_at: str | None
+    confirmed_by_user: bool
+    failure_reason: str | None
+    next_action: str
     exported_path: str | None = None
+
+
+@dataclass(frozen=True)
+class FillExecution:
+    fill_id: str
+    order_id: str
+    symbol: str
+    filled_quantity: int
+    avg_price: float
+    target_price: float
+    slippage_pct: float
+    filled_at: str
+    source: str
+    message: str
+
+
+@dataclass(frozen=True)
+class ExitExecution:
+    exit_id: str
+    order_id: str
+    symbol: str
+    exited_quantity: int
+    avg_price: float
+    entry_avg_price: float
+    realized_pnl: float
+    realized_pnl_pct: float
+    exited_at: str
+    reason: str
+    message: str
+
+
+@dataclass(frozen=True)
+class OutcomeCard:
+    outcome_id: str
+    order_id: str
+    symbol: str
+    current_price: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
+    realized_pnl: float | None
+    realized_pnl_pct: float | None
+    stop_loss: float
+    stop_discipline: str
+    next_action: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class TradeArchiveRecord:
+    archive_id: str
+    order_id: str
+    symbol: str
+    name: str
+    trade_date: str
+    opened_at: str
+    closed_at: str
+    realized_pnl: float
+    realized_pnl_pct: float
+    outcome: str
+    signal_summary: str
+    risk_summary: str
+    execution_summary: str
+    recap_summary: str
+    next_action: str
+    tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StrategyAdjustment:
+    key: str
+    label: str
+    current_value: float | int | str
+    suggested_value: float | int | str
+    reason: str
+    impact: str
+
+
+@dataclass(frozen=True)
+class StrategyChangeRecord:
+    record_id: str
+    action: str
+    strategy_id: str
+    from_version: str
+    to_version: str
+    changes: tuple[str, ...]
+    reason: str
+    created_at: str
 
 
 @dataclass(frozen=True)
@@ -103,6 +237,7 @@ class Recap:
     conclusion: str
     execution_deviation: str
     lessons: tuple[str, ...]
+    strategy_adjustments: tuple[StrategyAdjustment, ...]
     next_strategy_action: str
 
 
@@ -114,16 +249,26 @@ class StrategyConfig:
     risk_profile: str
     parameters: dict[str, float | int | str]
     impact_summary: str
+    adjustment_status: AdjustmentStatus = AdjustmentStatus.NOT_AVAILABLE
+    adjustment_message: str = "not_available"
+    source: str = "default"
+    recent_changes: tuple[StrategyChangeRecord, ...] = ()
 
 
 @dataclass(frozen=True)
 class MainChainSnapshot:
     market_context: MarketContext
+    signal_scan: SignalScanReport
     opportunities: tuple[Opportunity, ...]
     selected_opportunity: Opportunity | None
     risk_review: RiskReview | None
     order_ticket: OrderTicket | None
     execution_receipt: ExecutionReceipt | None
+    fill_execution: FillExecution | None
+    exit_execution: ExitExecution | None
+    outcome_card: OutcomeCard | None
+    archive_record: TradeArchiveRecord | None
+    recent_archives: tuple[TradeArchiveRecord, ...]
     recap: Recap | None
     strategy_config: StrategyConfig
     next_stage: WorkflowStage
