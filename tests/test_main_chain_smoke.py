@@ -567,6 +567,121 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["adjustment_status"], "waiting_user")
             self.assertEqual(payload["source_action"], "review_losses_first")
 
+    def test_strategy_boundary_review_requires_confirmation_before_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            for record in (
+                _archive_record(
+                    "archive-loss",
+                    "600003",
+                    -18.0,
+                    -0.012,
+                    "loss",
+                    "review stop discipline",
+                ),
+                _archive_record(
+                    "archive-flat",
+                    "600002",
+                    0.0,
+                    0.0,
+                    "flat",
+                    "keep watching",
+                ),
+                _archive_record(
+                    "archive-profit",
+                    "600001",
+                    42.0,
+                    0.028,
+                    "profit",
+                    "keep boundary",
+                ),
+            ):
+                archive_store.save(record)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store, archive_store=archive_store)
+
+            unchanged = service.apply_strategy_boundary_review(confirm=False)
+
+            self.assertEqual(unchanged.version, "0.1.0")
+            self.assertEqual(unchanged.parameters["max_position_pct"], 0.12)
+            self.assertFalse(store.path.exists())
+
+    def test_confirmed_strategy_boundary_review_persists_adjustments(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            for record in (
+                _archive_record(
+                    "archive-loss",
+                    "600003",
+                    -18.0,
+                    -0.012,
+                    "loss",
+                    "review stop discipline",
+                ),
+                _archive_record(
+                    "archive-flat",
+                    "600002",
+                    0.0,
+                    0.0,
+                    "flat",
+                    "keep watching",
+                ),
+                _archive_record(
+                    "archive-profit",
+                    "600001",
+                    42.0,
+                    0.028,
+                    "profit",
+                    "keep boundary",
+                ),
+            ):
+                archive_store.save(record)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store, archive_store=archive_store)
+
+            applied = service.apply_strategy_boundary_review(confirm=True)
+            reloaded = _build_service(
+                root,
+                strategy_store=store,
+                archive_store=archive_store,
+            ).build_first_slice_snapshot()
+
+            self.assertEqual(applied.adjustment_status, AdjustmentStatus.APPLIED)
+            self.assertEqual(applied.version, "0.1.1")
+            self.assertEqual(applied.parameters["max_position_pct"], 0.08)
+            self.assertEqual(applied.parameters["min_score"], 75)
+            self.assertTrue(store.path.exists())
+            self.assertEqual(applied.recent_changes[0].action, "apply")
+            self.assertIn("归档复查", applied.recent_changes[0].reason)
+            self.assertEqual(reloaded.strategy_config.source, "local")
+            self.assertEqual(reloaded.strategy_config.parameters["max_position_pct"], 0.08)
+            self.assertEqual(reloaded.strategy_config.parameters["min_score"], 75)
+
+    def test_confirmed_strategy_boundary_review_skips_blocked_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            archive_store.save(
+                _archive_record(
+                    "archive-one",
+                    "600001",
+                    20.0,
+                    0.018,
+                    "profit",
+                    "keep boundary",
+                )
+            )
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store, archive_store=archive_store)
+
+            unchanged = service.apply_strategy_boundary_review(confirm=True)
+
+            self.assertEqual(unchanged.version, "0.1.0")
+            self.assertEqual(unchanged.parameters["max_position_pct"], 0.12)
+            self.assertFalse(store.path.exists())
+
     def test_strategy_boundary_review_blocks_insufficient_archive_samples(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

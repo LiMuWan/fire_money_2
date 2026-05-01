@@ -8,6 +8,7 @@ from server.firemoney_server import MainChainService
 from shared.contracts import (
     MainChainSnapshot,
     StrategyBoundaryReview,
+    StrategyConfig,
     TradeArchiveReview,
 )
 
@@ -64,6 +65,16 @@ class LocalMainChainAdapter:
 
     def build_strategy_boundary_review(self, limit: int = 50) -> StrategyBoundaryReview:
         return self._service.build_strategy_boundary_review(limit=limit)
+
+    def apply_strategy_boundary_review(
+        self,
+        confirm: bool = False,
+        limit: int = 50,
+    ) -> StrategyConfig:
+        return self._service.apply_strategy_boundary_review(
+            confirm=confirm,
+            limit=limit,
+        )
 
     def clear_trade_archives(self) -> bool:
         return self._service.clear_trade_archives()

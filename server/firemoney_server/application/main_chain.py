@@ -36,8 +36,10 @@ from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
 from server.firemoney_server.infrastructure.receipt_import import BrokerReceiptImporter
 from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
 from shared.contracts import (
+    AdjustmentStatus,
     MainChainSnapshot,
     StrategyBoundaryReview,
+    StrategyConfig,
     TradeArchiveReview,
     WorkflowStage,
 )
@@ -145,6 +147,35 @@ class MainChainService:
         return self._strategy_boundary_review_policy.build_review(
             archive_review=archive_review,
             strategy_config=strategy_config,
+        )
+
+    def apply_strategy_boundary_review(
+        self,
+        confirm: bool = False,
+        limit: int = 50,
+    ) -> StrategyConfig:
+        """Apply archive-driven boundary suggestions only after confirmation."""
+
+        default_strategy_config = sample_strategy_config()
+        base_strategy_config = self._strategy_config_policy.normalize_config(
+            self._strategy_store.load_or_default(default_strategy_config),
+            default_strategy_config,
+        )
+        if not confirm:
+            return base_strategy_config
+
+        review = self.build_strategy_boundary_review(limit=limit)
+        if review.adjustment_status is not AdjustmentStatus.WAITING_USER:
+            return base_strategy_config
+
+        strategy_config = self._strategy_config_policy.apply_adjustments(
+            strategy_config=base_strategy_config,
+            adjustments=review.adjustments,
+        )
+        return self._strategy_store.save(
+            strategy_config,
+            previous_config=base_strategy_config,
+            reason=review.summary,
         )
 
     def clear_trade_archives(self) -> bool:

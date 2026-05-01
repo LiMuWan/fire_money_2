@@ -325,5 +325,5 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Trade archive records are compact service-owned summaries; local storage, export, and cleanup are owned by infrastructure/service boundaries, not the client.
 - Trade archive reviews are service-owned outputs; clients may display them or trigger export, but must not calculate win rate, best/worst archive, or follow-up action.
 - Archive review requires at least 3 closed archive records before strategy-boundary review can be recommended; smaller sample sets remain observation-only.
-- Strategy-boundary reviews may propose adjustments from archive-review signals, but those adjustments still require explicit user confirmation before `StrategyConfig` changes.
+- Strategy-boundary reviews may propose adjustments from archive-review signals, but those adjustments affect `StrategyConfig` only through an explicit confirmation/apply service path.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.
