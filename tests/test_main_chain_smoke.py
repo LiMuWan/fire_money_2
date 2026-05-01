@@ -47,6 +47,7 @@ from shared.contracts import (
     ReviewDecision,
     StrategyAdjustment,
     StrategyBoundaryAction,
+    StrategyBoundaryReview,
     TradeArchiveRecord,
     WorkflowStage,
     contract_to_dict,
@@ -112,6 +113,34 @@ def _seed_exit_fill(fill_importer: BrokerFillImporter) -> None:
             reason="target_follow",
             message="exit fill imported",
         )
+    )
+
+
+def _archive_record(
+    archive_id: str,
+    symbol: str,
+    realized_pnl: float,
+    realized_pnl_pct: float,
+    outcome: str,
+    next_action: str,
+) -> TradeArchiveRecord:
+    return TradeArchiveRecord(
+        archive_id=archive_id,
+        order_id=archive_id.replace("archive-", "draft-"),
+        symbol=symbol,
+        name=f"{outcome} sample",
+        trade_date="2026-05-01",
+        opened_at="2026-05-01T09:30:00+08:00",
+        closed_at="2026-05-01T10:30:00+08:00",
+        realized_pnl=realized_pnl,
+        realized_pnl_pct=realized_pnl_pct,
+        outcome=outcome,
+        signal_summary=f"{outcome} signal",
+        risk_summary="risk",
+        execution_summary="execution",
+        recap_summary="recap",
+        next_action=next_action,
+        tags=("risk:medium" if outcome == "loss" else "risk:low",),
     )
 
 
@@ -438,59 +467,29 @@ class MainChainSmokeTest(unittest.TestCase):
             root = Path(temp_dir)
             archive_store = TradeArchiveStore(root / "trade_archives.json")
             for record in (
-                TradeArchiveRecord(
-                    archive_id="archive-loss",
-                    order_id="draft-loss",
-                    symbol="600003",
-                    name="loss sample",
-                    trade_date="2026-05-01",
-                    opened_at="2026-05-01T09:30:00+08:00",
-                    closed_at="2026-05-01T10:30:00+08:00",
-                    realized_pnl=-18.0,
-                    realized_pnl_pct=-0.012,
-                    outcome="loss",
-                    signal_summary="loss signal",
-                    risk_summary="risk",
-                    execution_summary="execution",
-                    recap_summary="recap",
-                    next_action="review stop discipline",
-                    tags=("risk:medium",),
+                _archive_record(
+                    "archive-loss",
+                    "600003",
+                    -18.0,
+                    -0.012,
+                    "loss",
+                    "review stop discipline",
                 ),
-                TradeArchiveRecord(
-                    archive_id="archive-flat",
-                    order_id="draft-flat",
-                    symbol="600002",
-                    name="flat sample",
-                    trade_date="2026-05-01",
-                    opened_at="2026-05-01T09:30:00+08:00",
-                    closed_at="2026-05-01T10:30:00+08:00",
-                    realized_pnl=0.0,
-                    realized_pnl_pct=0.0,
-                    outcome="flat",
-                    signal_summary="flat signal",
-                    risk_summary="risk",
-                    execution_summary="execution",
-                    recap_summary="recap",
-                    next_action="keep watching",
-                    tags=("risk:low",),
+                _archive_record(
+                    "archive-flat",
+                    "600002",
+                    0.0,
+                    0.0,
+                    "flat",
+                    "keep watching",
                 ),
-                TradeArchiveRecord(
-                    archive_id="archive-profit",
-                    order_id="draft-profit",
-                    symbol="600001",
-                    name="profit sample",
-                    trade_date="2026-05-01",
-                    opened_at="2026-05-01T09:30:00+08:00",
-                    closed_at="2026-05-01T10:30:00+08:00",
-                    realized_pnl=42.0,
-                    realized_pnl_pct=0.028,
-                    outcome="profit",
-                    signal_summary="profit signal",
-                    risk_summary="risk",
-                    execution_summary="execution",
-                    recap_summary="recap",
-                    next_action="keep boundary",
-                    tags=("risk:low",),
+                _archive_record(
+                    "archive-profit",
+                    "600001",
+                    42.0,
+                    0.028,
+                    "profit",
+                    "keep boundary",
                 ),
             ):
                 archive_store.save(record)
@@ -516,6 +515,116 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["sample_quality"], "reviewable")
             self.assertEqual(payload["strategy_boundary_action"], "review_losses_first")
             self.assertIn("亏损样本", review.strategy_boundary_note)
+
+    def test_strategy_boundary_review_waits_for_user_after_reviewable_loss_set(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            for record in (
+                _archive_record(
+                    "archive-loss",
+                    "600003",
+                    -18.0,
+                    -0.012,
+                    "loss",
+                    "review stop discipline",
+                ),
+                _archive_record(
+                    "archive-flat",
+                    "600002",
+                    0.0,
+                    0.0,
+                    "flat",
+                    "keep watching",
+                ),
+                _archive_record(
+                    "archive-profit",
+                    "600001",
+                    42.0,
+                    0.028,
+                    "profit",
+                    "keep boundary",
+                ),
+            ):
+                archive_store.save(record)
+            store = StrategyConfigStore(root / "strategy_config.json")
+            service = _build_service(root, strategy_store=store, archive_store=archive_store)
+
+            review = service.build_strategy_boundary_review()
+            payload = contract_to_dict(review)
+
+            self.assertIsInstance(review, StrategyBoundaryReview)
+            self.assertEqual(review.adjustment_status, AdjustmentStatus.WAITING_USER)
+            self.assertEqual(review.source_action, StrategyBoundaryAction.REVIEW_LOSSES_FIRST)
+            self.assertEqual(review.sample_quality, ArchiveReviewQuality.REVIEWABLE)
+            self.assertEqual(review.blockers, ())
+            self.assertEqual(len(review.adjustments), 2)
+            self.assertEqual(review.adjustments[0].key, "max_position_pct")
+            self.assertEqual(review.adjustments[0].suggested_value, 0.08)
+            self.assertEqual(review.adjustments[1].key, "min_score")
+            self.assertEqual(review.adjustments[1].suggested_value, 75)
+            self.assertFalse(store.path.exists())
+            self.assertEqual(payload["adjustment_status"], "waiting_user")
+            self.assertEqual(payload["source_action"], "review_losses_first")
+
+    def test_strategy_boundary_review_blocks_insufficient_archive_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            archive_store.save(
+                _archive_record(
+                    "archive-one",
+                    "600001",
+                    20.0,
+                    0.018,
+                    "profit",
+                    "keep boundary",
+                )
+            )
+            service = _build_service(root, archive_store=archive_store)
+
+            review = service.build_strategy_boundary_review()
+
+            self.assertEqual(review.adjustment_status, AdjustmentStatus.NOT_AVAILABLE)
+            self.assertEqual(
+                review.source_action,
+                StrategyBoundaryAction.COLLECT_MORE_SAMPLES,
+            )
+            self.assertEqual(
+                review.sample_quality,
+                ArchiveReviewQuality.INSUFFICIENT_SAMPLE,
+            )
+            self.assertEqual(review.adjustments, ())
+            self.assertGreaterEqual(len(review.blockers), 1)
+
+    def test_strategy_boundary_review_keeps_boundary_for_reviewable_profit_set(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_store = TradeArchiveStore(root / "trade_archives.json")
+            for index, pnl in enumerate((12.0, 20.0, 32.0), start=1):
+                archive_store.save(
+                    _archive_record(
+                        f"archive-profit-{index}",
+                        f"60000{index}",
+                        pnl,
+                        0.01 * index,
+                        "profit",
+                        "keep boundary",
+                    )
+                )
+            service = _build_service(root, archive_store=archive_store)
+
+            review = service.build_strategy_boundary_review()
+
+            self.assertEqual(review.adjustment_status, AdjustmentStatus.NOT_AVAILABLE)
+            self.assertEqual(
+                review.source_action,
+                StrategyBoundaryAction.KEEP_CURRENT_BOUNDARY,
+            )
+            self.assertEqual(review.sample_quality, ArchiveReviewQuality.REVIEWABLE)
+            self.assertEqual(review.adjustments, ())
+            self.assertEqual(review.blockers, ())
+            self.assertIn("保留", review.summary)
 
     def test_empty_trade_archive_review_has_safe_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

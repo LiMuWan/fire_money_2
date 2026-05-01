@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from server.firemoney_server import MainChainService
-from shared.contracts import MainChainSnapshot, TradeArchiveReview
+from shared.contracts import (
+    MainChainSnapshot,
+    StrategyBoundaryReview,
+    TradeArchiveReview,
+)
 
 
 class LocalMainChainAdapter:
@@ -57,6 +61,9 @@ class LocalMainChainAdapter:
             target_path=target_path,
             limit=limit,
         )
+
+    def build_strategy_boundary_review(self, limit: int = 50) -> StrategyBoundaryReview:
+        return self._service.build_strategy_boundary_review(limit=limit)
 
     def clear_trade_archives(self) -> bool:
         return self._service.clear_trade_archives()

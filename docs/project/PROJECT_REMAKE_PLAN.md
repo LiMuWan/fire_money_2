@@ -106,6 +106,7 @@ Everything else is supporting material, not a first-class entry.
 - Local archive cleanup now goes through the service boundary and bad archive JSON is treated as empty local state.
 - Recent archive records can now produce a lightweight service-owned review summary and Markdown export without adding a history center.
 - Archive review now reports sample quality and prevents fewer than 3 closed archives from driving strategy-boundary action.
+- Archive-review signals can now produce a separate strategy-boundary review with confirmable adjustments, without writing strategy config automatically.
 - Smoke tests cover the new contract field and the main client rendering path.
 
 ## 6. Next TODO
@@ -135,6 +136,7 @@ Everything else is supporting material, not a first-class entry.
 - [x] Add archive export or cleanup controls only after the core local record format settles.
 - [x] Add lightweight archive review summary/export after archive export settles.
 - [x] Add an archive-review sample-quality gate before strategy-boundary guidance.
+- [x] Add a service-owned strategy-boundary review from archive-review signals without auto-applying it.
 
 ## 7. Validation Entry Points
 

@@ -264,6 +264,21 @@ class StrategyChangeRecord:
 
 
 @dataclass(frozen=True)
+class StrategyBoundaryReview:
+    review_id: str
+    source_review_id: str
+    strategy_id: str
+    from_version: str
+    sample_quality: ArchiveReviewQuality
+    source_action: StrategyBoundaryAction
+    adjustment_status: AdjustmentStatus
+    adjustments: tuple[StrategyAdjustment, ...]
+    blockers: tuple[str, ...]
+    summary: str
+    next_action: str
+
+
+@dataclass(frozen=True)
 class Recap:
     recap_id: str
     order_id: str

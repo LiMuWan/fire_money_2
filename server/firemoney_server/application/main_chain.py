@@ -12,6 +12,9 @@ from server.firemoney_server.domain.outcome import OutcomePolicy
 from server.firemoney_server.domain.recap import RecapPolicy
 from server.firemoney_server.domain.risk import RiskReviewPolicy
 from server.firemoney_server.domain.signal_scan import SignalScanPolicy
+from server.firemoney_server.domain.strategy_boundary_review import (
+    StrategyBoundaryReviewPolicy,
+)
 from server.firemoney_server.domain.strategy_config import StrategyConfigPolicy
 from server.firemoney_server.infrastructure.sample_data import (
     sample_market_context,
@@ -32,7 +35,12 @@ from server.firemoney_server.infrastructure.fill_import import BrokerFillImporte
 from server.firemoney_server.infrastructure.order_export import CsvOrderExporter
 from server.firemoney_server.infrastructure.receipt_import import BrokerReceiptImporter
 from server.firemoney_server.infrastructure.strategy_store import StrategyConfigStore
-from shared.contracts import MainChainSnapshot, TradeArchiveReview, WorkflowStage
+from shared.contracts import (
+    MainChainSnapshot,
+    StrategyBoundaryReview,
+    TradeArchiveReview,
+    WorkflowStage,
+)
 
 
 class MainChainService:
@@ -48,6 +56,7 @@ class MainChainService:
         outcome_policy: OutcomePolicy | None = None,
         recap_policy: RecapPolicy | None = None,
         signal_scan_policy: SignalScanPolicy | None = None,
+        strategy_boundary_review_policy: StrategyBoundaryReviewPolicy | None = None,
         strategy_config_policy: StrategyConfigPolicy | None = None,
         strategy_store: StrategyConfigStore | None = None,
         archive_store: TradeArchiveStore | None = None,
@@ -65,6 +74,9 @@ class MainChainService:
         self._outcome_policy = outcome_policy or OutcomePolicy()
         self._recap_policy = recap_policy or RecapPolicy()
         self._signal_scan_policy = signal_scan_policy or SignalScanPolicy()
+        self._strategy_boundary_review_policy = (
+            strategy_boundary_review_policy or StrategyBoundaryReviewPolicy()
+        )
         self._strategy_config_policy = strategy_config_policy or StrategyConfigPolicy()
         self._strategy_store = strategy_store or StrategyConfigStore()
         self._archive_store = archive_store or TradeArchiveStore()
@@ -116,6 +128,23 @@ class MainChainService:
             review=review,
             records=records,
             target_path=target_path,
+        )
+
+    def build_strategy_boundary_review(
+        self,
+        limit: int = 50,
+    ) -> StrategyBoundaryReview:
+        """Build confirmable strategy-boundary guidance from archive review."""
+
+        default_strategy_config = sample_strategy_config()
+        strategy_config = self._strategy_config_policy.normalize_config(
+            self._strategy_store.load_or_default(default_strategy_config),
+            default_strategy_config,
+        )
+        archive_review = self.build_trade_archive_review(limit=limit)
+        return self._strategy_boundary_review_policy.build_review(
+            archive_review=archive_review,
+            strategy_config=strategy_config,
         )
 
     def clear_trade_archives(self) -> bool:

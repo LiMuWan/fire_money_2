@@ -19,6 +19,7 @@ server/firemoney_server/
     risk.py             pre-execution risk review
     execution.py        semi-automatic order draft and receipt prep
     recap.py            execution recap and strategy-boundary suggestions
+    strategy_boundary_review.py  archive-review-driven boundary guidance
     strategy_config.py  confirmed strategy-boundary validation/application
   infrastructure/
     archive_store.py    local completed trade archive persistence/export/cleanup
@@ -71,6 +72,7 @@ keeps only the front candidates in the execution line.
 - Recent archive records can produce `TradeArchiveReview` through `MainChainService.build_trade_archive_review()` and Markdown through `MainChainService.export_trade_archive_review()`.
 - Archive review metrics are built by `domain/archive_review.py`; `infrastructure/archive_review_export.py` only formats the already-approved service output.
 - Archive review uses a minimum 3-record sample-quality gate before recommending strategy-boundary review; smaller samples are observation-only.
+- Archive-review-driven strategy boundary guidance is built by `domain/strategy_boundary_review.py` and exposed through `MainChainService.build_strategy_boundary_review()`; it returns confirmable `StrategyAdjustment` items but does not write config.
 - Local archive cleanup goes through `MainChainService.clear_trade_archives()`; client code must not delete `.firemoney` files directly.
 - Invalid local archive JSON is treated as empty local state so the main workflow can continue.
 - Recap may propose strategy adjustments, but it must not write new strategy config automatically.

@@ -278,6 +278,26 @@ Key fields:
 - `reason`
 - `created_at`
 
+### `StrategyBoundaryReview`
+
+Describes archive-review-driven strategy-boundary guidance and answers: "Is the archive sample strong enough to suggest a parameter review, and what must the user confirm before it can affect the next cycle?"
+
+It reuses `StrategyAdjustment` items and never represents an automatic config write.
+
+Key fields:
+
+- `review_id`
+- `source_review_id`
+- `strategy_id`
+- `from_version`
+- `sample_quality`
+- `source_action`
+- `adjustment_status`
+- `adjustments`
+- `blockers`
+- `summary`
+- `next_action`
+
 ### `MainChainSnapshot`
 
 Aggregated main-chain snapshot. The client consumes this structure to render the main workflow state and does not re-judge business conclusions in the UI.
@@ -305,4 +325,5 @@ When a closed trade has been archived, `recent_archives` carries the compact loc
 - Trade archive records are compact service-owned summaries; local storage, export, and cleanup are owned by infrastructure/service boundaries, not the client.
 - Trade archive reviews are service-owned outputs; clients may display them or trigger export, but must not calculate win rate, best/worst archive, or follow-up action.
 - Archive review requires at least 3 closed archive records before strategy-boundary review can be recommended; smaller sample sets remain observation-only.
+- Strategy-boundary reviews may propose adjustments from archive-review signals, but those adjustments still require explicit user confirmation before `StrategyConfig` changes.
 - Strategy parameters are service-validated before scanning; clients must not apply strategy-boundary changes directly.

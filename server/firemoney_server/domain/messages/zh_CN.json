@@ -84,6 +84,22 @@
     "boundary_review_losses": "先复查亏损样本的信号、风控和退出原因，再决定是否收紧策略边界。",
     "boundary_keep_current": "当前样本未暴露亏损压力，保留现有策略边界并继续观察。"
   },
+  "strategy_boundary_review": {
+    "blocker_empty": "暂无归档样本，不能生成策略边界审查建议。",
+    "blocker_insufficient": "当前只有 {count} 笔归档样本，未达到 3 笔轻量审查门槛。",
+    "summary_waiting": "归档复查已触发策略边界审查，建议等待用户确认后再写入下一轮参数。",
+    "summary_blocked": "归档复查尚不足以支持策略边界调整。",
+    "summary_keep": "当前策略边界可以继续保留。",
+    "next_waiting": "先人工复核亏损样本和建议参数，再决定是否应用到下一轮策略边界。",
+    "next_blocked": "继续积累闭环归档样本，不写入策略配置。",
+    "next_keep": "保留当前策略边界，继续观察下一轮归档。",
+    "adjustment_position_label": "归档亏损后的单票仓位上限",
+    "adjustment_position_reason": "近期归档中出现 {loss_count} 笔亏损样本，先降低单票暴露。",
+    "adjustment_position_impact": "降低单笔亏损对下一轮交易的影响，保留人工确认。",
+    "adjustment_min_score_label": "归档亏损后的执行评分门槛",
+    "adjustment_min_score_reason": "最弱归档 {worst_archive_id} 需要复核信号质量，下一轮先提高进入执行审查的门槛。",
+    "adjustment_min_score_impact": "减少低质量机会进入执行中控，优先积累更稳的闭环样本。"
+  },
   "broker_import": {
     "entry_fill_default": "券商成交明细已写回",
     "exit_fill_default": "退出成交明细已写回"
