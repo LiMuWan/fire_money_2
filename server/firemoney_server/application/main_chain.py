@@ -333,6 +333,7 @@ class MainChainService:
         )
         checks = (
             self._doctor_strategy_check(),
+            self._doctor_trading_day_check(trade_context, beta=beta),
             self._doctor_market_data_check(trade_context.trade_date),
             self._doctor_paper_store_check(),
             self._doctor_notification_store_check(),
@@ -616,6 +617,34 @@ class MainChainService:
                 "配置有效，继续保持单一一进二主线。"
                 if valid
                 else "修复 one_to_two_strategy JSON 后再运行策略。"
+            ),
+        )
+
+    def _doctor_trading_day_check(
+        self,
+        trade_context,
+        beta: bool = False,
+    ) -> OneToTwoDoctorCheck:
+        if trade_context.is_trading_day:
+            return OneToTwoDoctorCheck(
+                check_id="trading_day",
+                label="交易日",
+                status="ready",
+                detail=f"{trade_context.requested_date} 是 A 股交易日。",
+                next_action="可以按当日一进二主线运行。",
+            )
+        return OneToTwoDoctorCheck(
+            check_id="trading_day",
+            label="交易日",
+            status="blocked" if beta else "warning",
+            detail=(
+                f"{trade_context.requested_date} 非交易日，"
+                f"当前只解析到上一交易日 {trade_context.trade_date}。"
+            ),
+            next_action=(
+                "模拟盘 Beta 只在真实交易日启动；如需演示请指定交易日并使用 --sample-data。"
+                if beta
+                else "非交易日不会触发 schedule 实际交易任务，可指定交易日做本地演示。"
             ),
         )
 

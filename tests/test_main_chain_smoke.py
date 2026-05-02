@@ -325,6 +325,31 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(service._paper_store.load().events, ())
             self.assertEqual(payload["checks"][0]["check_id"], "strategy_config")
 
+    def test_beta_doctor_blocks_non_trading_day_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://example.com/hook",
+                },
+                clear=True,
+            ):
+                report = service.build_one_to_two_doctor_report(
+                    trade_date="2026-05-02",
+                    beta=True,
+                )
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["trading_day"].status, "blocked")
+            self.assertIn("非交易日", checks["trading_day"].detail)
+
     def test_doctor_blocks_when_local_state_path_is_not_writable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -380,12 +405,13 @@ class MainChainSmokeTest(unittest.TestCase):
                 clear=True,
             ):
                 report = service.build_one_to_two_doctor_report(
-                    trade_date="2026-05-01",
+                    trade_date="2026-04-30",
                     beta=True,
                 )
             checks = {check.check_id: check for check in report.checks}
 
             self.assertEqual(report.status, "ready")
+            self.assertEqual(checks["trading_day"].status, "ready")
             self.assertEqual(checks["feishu"].status, "ready")
 
     def test_doctor_report_blocks_when_market_data_unavailable(self) -> None:
