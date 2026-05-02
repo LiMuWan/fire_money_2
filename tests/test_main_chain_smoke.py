@@ -1860,6 +1860,50 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertFalse(scheduler_run_path.exists())
             self.assertFalse(notifications_path.exists())
 
+    def test_beta_plan_cli_brief_prints_human_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_path = root / "paper_trades.json"
+            scheduler_path = root / "scheduler_state.json"
+            scheduler_run_path = root / "scheduler_runs.json"
+            notifications_path = root / "notifications.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "beta-plan",
+                    "--brief",
+                    "--sample-data",
+                    "--trade-date",
+                    "2026-05-03",
+                    "--paper-store",
+                    str(paper_path),
+                    "--scheduler-state",
+                    str(scheduler_path),
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
+                    "--notification-store",
+                    str(notifications_path),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+
+            self.assertIn("FireMoney Beta 上线计划：ready", completed.stdout)
+            self.assertIn("下一交易日：2026-05-06", completed.stdout)
+            self.assertIn("阻断项：无", completed.stdout)
+            self.assertIn("beta-check --trade-date 2026-05-06", completed.stdout)
+            self.assertFalse(paper_path.exists())
+            self.assertFalse(scheduler_path.exists())
+            self.assertFalse(scheduler_run_path.exists())
+            self.assertFalse(notifications_path.exists())
+
     def test_beta_rehearsal_cli_does_not_touch_live_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -2161,6 +2205,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("prepared", html)
             self.assertIn("Beta 预检", html)
             self.assertIn("beta-plan", html)
+            self.assertIn("beta-plan --brief", html)
             self.assertIn("beta-rehearsal", html)
             self.assertIn("beta-check", html)
             self.assertIn("beta-start", html)

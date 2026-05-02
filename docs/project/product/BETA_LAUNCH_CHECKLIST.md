@@ -5,8 +5,10 @@
 先看只读上线计划，它会告诉你下一交易日、当前阻断项和建议命令，不发飞书、不改账本：
 
 ```powershell
-python -m client.desktop.firemoney_client.one_to_two_cli beta-plan
+python -m client.desktop.firemoney_client.one_to_two_cli beta-plan --brief
 ```
+
+不加 `--brief` 会输出完整 JSON，适合排查字段和程序读取。
 
 先运行隔离彩排，不发飞书、不污染真实 `.firemoney/paper_trades.json`：
 

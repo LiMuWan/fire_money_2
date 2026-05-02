@@ -6,7 +6,7 @@ import argparse
 import json
 import time
 
-from shared.contracts import contract_to_dict
+from shared.contracts import OneToTwoBetaLaunchPlan, contract_to_dict
 
 from .adapter import LocalMainChainAdapter
 from server.firemoney_server import MainChainService
@@ -105,14 +105,19 @@ def main() -> None:
         action="store_true",
         help="Use stricter readiness checks for simulated Beta watch mode.",
     )
+    parser.add_argument(
+        "--brief",
+        action="store_true",
+        help="Print a compact human-readable summary for beta-plan.",
+    )
     args = parser.parse_args()
     load_local_feishu_env()
     if args.mode == "beta-start" and args.no_notify:
         result = {
             "mode": "beta-start",
             "status": "blocked",
-            "summary": "beta-start å¿…é¡»å‘é€é£žä¹¦é€šçŸ¥ï¼Œä¸èƒ½ä½¿ç”¨ --no-notifyã€‚",
-            "next_action": "ç§»é™¤ --no-notifyï¼Œå¹¶å…ˆç”¨ beta-check éªŒè¯é£žä¹¦ sent è®°å½•ã€‚",
+            "summary": "beta-start 必须发送飞书通知，不能使用 --no-notify。",
+            "next_action": "移除 --no-notify，并先用 beta-check 验证飞书 sent 记录。",
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
@@ -292,7 +297,37 @@ def main() -> None:
             notify=not args.no_notify,
         )
         scheduler_run_store.append(result)
+    if args.brief and args.mode == "beta-plan":
+        print(_format_beta_plan_brief(result))
+        return
     print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
+
+
+def _format_beta_plan_brief(plan: OneToTwoBetaLaunchPlan) -> str:
+    lines = [
+        f"FireMoney Beta 上线计划：{plan.status}",
+        f"请求日期：{plan.requested_date}",
+        f"最近交易日：{plan.trade_date}",
+        f"下一交易日：{plan.next_trade_date}",
+        (
+            "彩排状态："
+            f"{plan.rehearsal.status}，事件 {plan.rehearsal.paper_event_count}，"
+            f"通知 {plan.rehearsal.notification_record_count}"
+        ),
+        f"体检状态：{plan.doctor_report.status}",
+    ]
+    if plan.blockers:
+        lines.append("阻断项：")
+        lines.extend(f"- {item}" for item in plan.blockers)
+    else:
+        lines.append("阻断项：无")
+    lines.append("建议命令：")
+    lines.extend(
+        f"{index}. {command}"
+        for index, command in enumerate(plan.launch_commands, start=1)
+    )
+    lines.append(f"下一步：{plan.next_action}")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
