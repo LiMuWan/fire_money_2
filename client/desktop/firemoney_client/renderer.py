@@ -6,6 +6,7 @@ from html import escape
 from pathlib import Path
 
 from shared.contracts import (
+    NotificationRecord,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
     OneToTwoScheduleRun,
@@ -126,12 +127,28 @@ def _render_notification_message(title: str, message: str) -> str:
     """
 
 
+def _render_notification_records(records: tuple[NotificationRecord, ...]) -> str:
+    if not records:
+        return '<p class="empty-note">暂无通知记录。</p>'
+    return "\n".join(
+        f"""
+        <li class="notification-record" data-status="{_text(record.status.value)}">
+          <span>{_text(record.workflow)}</span>
+          <span>{_text(record.status.value)}</span>
+          <span>{_text(record.created_at)}</span>
+        </li>
+        """
+        for record in records[:6]
+    )
+
+
 def render_one_to_two_workflow_html(
     report: OneToTwoMorningReport,
     watch_report: OneToTwoMorningReport,
     eod_review: OneToTwoEndOfDayReview,
     stability_report: OneToTwoStabilityReport,
     schedule_run: OneToTwoScheduleRun | None = None,
+    notification_records: tuple[NotificationRecord, ...] = (),
 ) -> str:
     """Render the current one-to-two product surface only."""
 
@@ -205,6 +222,10 @@ def render_one_to_two_workflow_html(
               {_render_notification_message("盘中事件", watch_report.notification.message)}
               {_render_notification_message("15:10 尾盘测评", eod_review.notification.message)}
             </div>
+            <h3 class="panel-subtitle">通知记录</h3>
+            <ul class="notification-records">
+              {_render_notification_records(notification_records)}
+            </ul>
           </section>
           <section class="panel one-to-two-panel">
             <h2>尾盘测评</h2>

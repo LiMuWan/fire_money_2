@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from server.firemoney_server import MainChainService
 from shared.contracts import (
+    NotificationRecord,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
     OneToTwoStabilityReport,
@@ -50,6 +51,9 @@ class LocalMainChainAdapter:
 
     def build_one_to_two_stability_report(self) -> OneToTwoStabilityReport:
         return self._service.build_one_to_two_stability_report()
+
+    def load_notification_records(self) -> tuple[NotificationRecord, ...]:
+        return self._service.load_notification_records()
 
     def run_one_to_two_backtest(
         self,

@@ -2,6 +2,7 @@
 
 from .trading import (
     FeishuNotificationResult,
+    NotificationRecord,
     NotificationStatus,
     OneToTwoCandidate,
     OneToTwoEndOfDayReview,
@@ -22,6 +23,7 @@ from .trading import (
 
 __all__ = [
     "FeishuNotificationResult",
+    "NotificationRecord",
     "NotificationStatus",
     "OneToTwoCandidate",
     "OneToTwoEndOfDayReview",

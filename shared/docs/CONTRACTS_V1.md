@@ -93,6 +93,21 @@ Key fields:
 - `webhook_configured`
 - `error`
 
+### `NotificationRecord`
+
+Describes a persisted notification outcome for review and troubleshooting.
+
+Key fields:
+
+- `channel`
+- `workflow`
+- `trade_date`
+- `status`
+- `title`
+- `message`
+- `created_at`
+- `error`
+
 ### `OneToTwoMorningReport`
 
 Describes the 08:50 one-to-two report: trading-day context, market temperature, yesterday first-board candidates, paper-account state, notification result, and next action.
@@ -127,7 +142,7 @@ Rules represented by the contracts:
 - New cross-layer fields must be added to the shared contract and this document first.
 - The client must not infer trusted business outcomes from private fields.
 - The service layer must return enough `summary`, `next_action`, `status`, or equivalent fields to support UI display.
-- One-to-two candidates, risk notes, stop loss, paper-trading state, and Feishu notification results are shared contracts; clients must not recompute them from raw AkShare fields.
+- One-to-two candidates, risk notes, stop loss, paper-trading state, Feishu notification results, and notification records are shared contracts; clients must not recompute them from raw AkShare fields.
 - Stability reports must use closed `PaperTradeRecord` samples. Samples below 30 remain observation-only.
 - Backtest output reuses `OneToTwoStabilityReport`; it does not introduce a separate product surface or write live paper-account state.
 - AkShare and Feishu details stay behind infrastructure adapters. Shared contracts use project-owned field names only.

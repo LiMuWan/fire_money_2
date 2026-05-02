@@ -11,6 +11,7 @@ from server.firemoney_server import MainChainService
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
+from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 
@@ -26,9 +27,11 @@ def build_preview(output_path: str | Path) -> Path:
     with TemporaryDirectory() as temp_dir:
         preview_root = Path(temp_dir)
         paper_store = PaperTradeStore(preview_root / "paper_trades.json")
+        notification_store = NotificationRecordStore(preview_root / "notifications.json")
         service = MainChainService(
             paper_store=paper_store,
             market_data_provider=SampleMarketDataProvider(),
+            notification_store=notification_store,
             trading_calendar=WeekdayTradingCalendar(),
         )
         adapter = LocalMainChainAdapter(service)
@@ -56,6 +59,7 @@ def build_preview(output_path: str | Path) -> Path:
             notify=False,
         )
         one_to_two_stability_report = adapter.build_one_to_two_stability_report()
+        notification_records = adapter.load_notification_records()
         schedule_run = OneToTwoScheduler(
             service=service,
             state_store=SchedulerStateStore(preview_root / "scheduler_state.json"),
@@ -71,6 +75,7 @@ def build_preview(output_path: str | Path) -> Path:
                 eod_review=one_to_two_eod_review,
                 stability_report=one_to_two_stability_report,
                 schedule_run=schedule_run,
+                notification_records=notification_records,
             ),
             encoding="utf-8",
         )

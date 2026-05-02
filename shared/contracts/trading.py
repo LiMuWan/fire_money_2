@@ -168,6 +168,19 @@ class FeishuNotificationResult:
 
 
 @dataclass(frozen=True)
+class NotificationRecord:
+    record_id: str
+    channel: str
+    workflow: str
+    trade_date: str
+    status: NotificationStatus
+    title: str
+    message: str
+    created_at: str
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class OneToTwoMorningReport:
     report_id: str
     trade_date: str

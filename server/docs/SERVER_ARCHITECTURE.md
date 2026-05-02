@@ -16,6 +16,7 @@ server/firemoney_server/
   infrastructure/
     feishu_notifier.py     Feishu group robot webhook adapter
     market_data.py         MarketDataProvider boundary and AkShare adapter
+    notification_store.py  local notification result records
     one_to_two_config.py   one-to-two strategy config loader
     paper_store.py         local event-driven paper-trading account
     scheduler_state.py     completed local scheduler task state
@@ -60,6 +61,7 @@ MarketDataProvider/AkShare
 - `run_one_to_two_backtest()` replays historical dates into an isolated temporary paper ledger, then returns a stability report without mutating the live `.firemoney/paper_trades.json`.
 - Feishu reads only `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`.
 - Application workflows format one-to-two notification content before calling Feishu: morning messages include candidates, blockers, stop loss, and position cap; watch messages include event, position, stop loss, T+1 status, and simulation-only warning; end-of-day messages include events, warnings, closed samples, and observation discipline.
+- Notification results are appended to `.firemoney/notifications.json` for review. Internal workflow reuse must not duplicate records, so `watch` suppresses its internal morning-report record.
 - Notification failures return structured results and do not stop strategy execution.
 - Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, and `schedule`.
 - `schedule` runs only the one-to-two jobs that are due for the requested clock time, skips non-trading requested dates, and records completed task keys in `.firemoney/scheduler_state.json` so loop mode does not duplicate same-day notifications or paper-trading events.

@@ -199,6 +199,13 @@ button {
   letter-spacing: 0;
 }
 
+.panel-subtitle {
+  margin: 14px 0 8px;
+  color: var(--text);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
 .one-to-two-candidate-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -369,6 +376,36 @@ button {
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.notification-records {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification-record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: #fbfcfb;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notification-record[data-status="sent"] {
+  border-color: rgba(31, 122, 90, 0.38);
+}
+
+.notification-record[data-status="failed"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
 }
 
 @media (max-width: 980px) {
@@ -629,6 +666,44 @@ button {
       </article>
 
             </div>
+            <h3 class="panel-subtitle">通知记录</h3>
+            <ul class="notification-records">
+
+        <li class="notification-record" data-status="prepared">
+          <span>eod</span>
+          <span>prepared</span>
+          <span>20260502113438</span>
+        </li>
+
+
+        <li class="notification-record" data-status="prepared">
+          <span>watch:open</span>
+          <span>prepared</span>
+          <span>20260502113438</span>
+        </li>
+
+
+        <li class="notification-record" data-status="prepared">
+          <span>watch:auction</span>
+          <span>prepared</span>
+          <span>20260502113438</span>
+        </li>
+
+
+        <li class="notification-record" data-status="prepared">
+          <span>watch:scan</span>
+          <span>prepared</span>
+          <span>20260502113438</span>
+        </li>
+
+
+        <li class="notification-record" data-status="prepared">
+          <span>morning</span>
+          <span>prepared</span>
+          <span>20260502113438</span>
+        </li>
+
+            </ul>
           </section>
           <section class="panel one-to-two-panel">
             <h2>尾盘测评</h2>

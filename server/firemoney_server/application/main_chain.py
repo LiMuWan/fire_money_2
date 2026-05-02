@@ -16,6 +16,7 @@ from server.firemoney_server.infrastructure.one_to_two_config import (
     OneToTwoStrategySettings,
     load_one_to_two_settings,
 )
+from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.trading_calendar import (
     AkshareTradingCalendar,
@@ -24,6 +25,7 @@ from server.firemoney_server.infrastructure.trading_calendar import (
 from shared.contracts import (
     FeishuNotificationResult,
     NotificationStatus,
+    NotificationRecord,
     OneToTwoCandidate,
     OneToTwoEventType,
     OneToTwoEndOfDayReview,
@@ -43,6 +45,7 @@ class MainChainService:
         market_data_provider: MarketDataProvider | None = None,
         paper_store: PaperTradeStore | None = None,
         feishu_notifier: FeishuNotifier | None = None,
+        notification_store: NotificationRecordStore | None = None,
         trading_calendar: TradingCalendar | None = None,
     ) -> None:
         self._one_to_two_settings = one_to_two_settings or load_one_to_two_settings()
@@ -54,6 +57,7 @@ class MainChainService:
             max_daily_trades=self._one_to_two_settings.max_daily_trades,
         )
         self._feishu_notifier = feishu_notifier or FeishuNotifier()
+        self._notification_store = notification_store or NotificationRecordStore()
         self._trading_calendar = trading_calendar or AkshareTradingCalendar()
 
     def resolve_trading_day(self, trade_date: str | None = None) -> TradingDayContext:
@@ -67,6 +71,7 @@ class MainChainService:
         self,
         trade_date: str | None = None,
         notify: bool = True,
+        record_notification: bool = True,
     ) -> OneToTwoMorningReport:
         """Build the 08:50 one-to-two report and optional Feishu notice."""
 
@@ -101,6 +106,8 @@ class MainChainService:
                 account=account,
             ),
         )
+        if record_notification:
+            self._record_notification("morning", report_date, notification)
         return OneToTwoMorningReport(
             report_id=f"one-to-two-morning-{report_date}",
             trade_date=report_date,
@@ -131,6 +138,7 @@ class MainChainService:
         report = self.build_one_to_two_morning_report(
             trade_date=trade_date,
             notify=False,
+            record_notification=False,
         )
         ready = tuple(item for item in report.candidates if item.status == "ready")
         account = self._paper_store.prepare_for_trade_date(report.trade_date)
@@ -171,6 +179,7 @@ class MainChainService:
                 latest_event=latest_event,
             ),
         )
+        self._record_notification(f"watch:{phase}", report.trade_date, notification)
         return OneToTwoMorningReport(
             report_id=report.report_id,
             trade_date=report.trade_date,
@@ -218,6 +227,7 @@ class MainChainService:
                 realized_pnl=realized_pnl,
             ),
         )
+        self._record_notification("eod", report_date, notification)
         return OneToTwoEndOfDayReview(
             review_id=f"one-to-two-eod-{report_date}",
             trade_date=report_date,
@@ -242,6 +252,11 @@ class MainChainService:
 
         account = self._paper_store.load()
         return self._stability_from_account(account)
+
+    def load_notification_records(self) -> tuple[NotificationRecord, ...]:
+        """Return recent one-to-two notification delivery records."""
+
+        return self._notification_store.load()
 
     def run_one_to_two_backtest(
         self,
@@ -414,6 +429,18 @@ class MainChainService:
             message=message,
             webhook_configured=False,
             error="notification skipped",
+        )
+
+    def _record_notification(
+        self,
+        workflow: str,
+        trade_date: str,
+        result: FeishuNotificationResult,
+    ) -> None:
+        self._notification_store.append(
+            workflow=workflow,
+            trade_date=trade_date,
+            result=result,
         )
 
     def _morning_notification_message(

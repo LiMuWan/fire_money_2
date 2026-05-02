@@ -11,12 +11,14 @@ from server.firemoney_server.application.one_to_two_scheduler import OneToTwoSch
 from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
 from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
+from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.one_to_two_config import load_one_to_two_settings
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
     FeishuNotificationResult,
+    NotificationRecord,
     NotificationStatus,
     OneToTwoMorningReport,
     OneToTwoScheduleRun,
@@ -29,11 +31,14 @@ def _build_service(
     root: Path,
     market_data_provider=None,
     paper_store: PaperTradeStore | None = None,
+    notification_store: NotificationRecordStore | None = None,
     trading_calendar=None,
 ) -> MainChainService:
     return MainChainService(
         market_data_provider=market_data_provider,
         paper_store=paper_store or PaperTradeStore(root / "paper_trades.json"),
+        notification_store=notification_store
+        or NotificationRecordStore(root / "notifications.json"),
         trading_calendar=trading_calendar or WeekdayTradingCalendar(),
     )
 
@@ -310,6 +315,44 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("模拟盘不是实盘", open_trigger.notification.message)
             self.assertIn("样本少于 30 笔", eod.notification.message)
 
+    def test_notification_records_are_persisted_for_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = NotificationRecordStore(root / "notifications.json")
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=store,
+            )
+
+            service.build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+            service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            service.build_one_to_two_end_of_day_review(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+
+            records = service.load_notification_records()
+            payload = contract_to_dict(records)
+
+            self.assertGreaterEqual(len(records), 3)
+            self.assertIsInstance(records[0], NotificationRecord)
+            self.assertEqual(records[0].status, NotificationStatus.PREPARED)
+            self.assertEqual(payload[0]["status"], "prepared")
+            self.assertIn("eod", {record.workflow for record in records})
+            self.assertIn("watch:open", {record.workflow for record in records})
+            self.assertEqual(
+                sum(1 for record in records if record.workflow == "morning"),
+                1,
+            )
+
     def test_one_to_two_stop_warning_obeys_t1_before_sell(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -543,6 +586,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("模拟盘不是实盘", html)
             self.assertIn("15:10 尾盘测评", html)
             self.assertIn("样本少于 30 笔", html)
+            self.assertIn("通知记录", html)
+            self.assertIn("watch:open", html)
+            self.assertIn("prepared", html)
             self.assertIn("本地调度", html)
             self.assertIn("09:31", html)
             self.assertIn("watch / open", html)
