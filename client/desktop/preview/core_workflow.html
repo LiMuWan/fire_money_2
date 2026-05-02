@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FireMoney 一进二</title>
+  <title>FireMoney 主线首板</title>
   <style>
 :root {
   --bg: #f6f7f5;
@@ -574,52 +574,55 @@ button {
     <header class="topbar">
       <div class="brand">
         <div class="brand-row">
-          <h1 class="app-name">FireMoney 一进二</h1>
-          <span class="subtitle">主板 10cm 模拟盘验证</span>
+          <h1 class="app-name">FireMoney 主线首板</h1>
+          <span class="subtitle">龙头预判 + 封板纪律验证</span>
         </div>
-        <div class="core-path">早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察</div>
+        <div class="core-path">主线首板预选 -> 封板纪律确认 -> 一进二确认 -> 稳定性观察</div>
       </div>
       <nav class="nav" aria-label="一进二产品阶段">
-        <button class="nav-item is-active" type="button">一进二专项台</button>
+        <button class="nav-item is-active" type="button">主线首板专项台</button>
       </nav>
     </header>
     <div class="one-to-two-dashboard">
       <section class="one-to-two-hero">
         <div>
           <div class="mode-label">今日策略边界</div>
-          <h2>只做主板 10cm 一进二</h2>
-          <p>一进二早盘：3 个昨日首板样本，1 个进入模拟盘观察。</p>
+          <h2>只做主板 10cm 主线首板龙头候选</h2>
+          <p>主线首板早盘：4 个首板龙头候选样本，1 个进入模拟盘观察。</p>
         </div>
         <div class="one-to-two-kpis">
           <div class="metric"><span class="metric-label">市场温度</span><span class="metric-value">74</span></div>
           <div class="metric"><span class="metric-label">交易日</span><span class="metric-value">2026-04-30</span></div>
-          <div class="metric"><span class="metric-label">候选数</span><span class="metric-value">3</span></div>
+          <div class="metric"><span class="metric-label">候选数</span><span class="metric-value">4</span></div>
           <div class="metric"><span class="metric-label">模拟权益</span><span class="metric-value">99496.00</span></div>
           <div class="metric"><span class="metric-label">持仓数</span><span class="metric-value">1</span></div>
         </div>
       </section>
       <div class="one-to-two-main-grid">
         <section class="panel one-to-two-panel">
-          <h2>候选池与位置评分</h2>
+          <h2>候选池与封板纪律</h2>
           <div class="one-to-two-candidate-grid">
 
         <article class="one-to-two-card" data-status="ready">
           <div class="candidate-head">
             <div>
-              <div class="candidate-name">低位突破候选</div>
-              <div class="candidate-code">600001 / 低位平台突破</div>
+              <div class="candidate-name">主线首板候选</div>
+              <div class="candidate-code">600001 / 主线龙头候选</div>
             </div>
-            <div class="candidate-score">92.0</div>
+            <div class="candidate-score">100.0</div>
           </div>
           <div class="tags">
             <span class="tag">ready</span>
             <span class="tag">低位平台突破，位置结构 25/25</span>
+            <span class="tag">主线龙头候选</span><span class="tag">封板纪律达标</span><span class="tag">主线强度高</span>
             <span class="tag is-risk">止损 10.0</span>
           </div>
-          <p>低位突破候选 属于低位平台突破，首板质量、竞价强度和流动性进入一进二观察。</p>
+          <p>主线首板候选 属于低位平台突破，封板纪律、主线强度和龙头候选辨识度进入观察。</p>
           <ul class="detail-list compact">
-            <li>首板 25.0/25，竞价 20.0/20，位置 25.0/25，流动性 10.0/15</li>
-            <li>买入价 10.52，仓位上限 8%，严格 T+1，2 个交易日不走强则纪律退出</li>
+            <li>封板 20.0/20，主线 20.0/20，龙头 20.0/20，竞价 20.0/20</li>
+            <li>位置 25.0/25，流动性 10.0/15，首板质量 25.0/25</li>
+            <li>封板资金占比 20.0%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>买入价 10.52，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
 
             <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li>
           </ul>
@@ -630,19 +633,22 @@ button {
           <div class="candidate-head">
             <div>
               <div class="candidate-name">非主板拦截</div>
-              <div class="candidate-code">300003 / 低位启动</div>
+              <div class="candidate-code">300003 / 龙头候选</div>
             </div>
-            <div class="candidate-score">88.0</div>
+            <div class="candidate-score">100.0</div>
           </div>
           <div class="tags">
             <span class="tag">blocked</span>
             <span class="tag">低位启动，位置结构 21/25</span>
+            <span class="tag">龙头候选</span><span class="tag">封板纪律达标</span>
             <span class="tag is-risk">止损 21.0</span>
           </div>
           <p>非主板拦截 被拦截：创业板 不在主板 10cm 一进二范围内</p>
           <ul class="detail-list compact">
-            <li>首板 25.0/25，竞价 20.0/20，位置 21.0/25，流动性 10.0/15</li>
-            <li>买入价 22.0，仓位上限 8%，严格 T+1，2 个交易日不走强则纪律退出</li>
+            <li>封板 19.0/20，主线 17.0/20，龙头 19.0/20，竞价 20.0/20</li>
+            <li>位置 21.0/25，流动性 10.0/15，首板质量 25.0/25</li>
+            <li>封板资金占比 13.8%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>买入价 22.0，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
             <li>创业板 不在主板 10cm 一进二范围内</li>
             <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li>
           </ul>
@@ -652,22 +658,51 @@ button {
         <article class="one-to-two-card" data-status="blocked">
           <div class="candidate-head">
             <div>
-              <div class="candidate-name">高位乖离拦截</div>
-              <div class="candidate-code">600002 / 平台突破</div>
+              <div class="candidate-name">高位跟风拦截</div>
+              <div class="candidate-code">600002 / 龙头候选</div>
             </div>
-            <div class="candidate-score">77.0</div>
+            <div class="candidate-score">94.0</div>
           </div>
           <div class="tags">
             <span class="tag">blocked</span>
             <span class="tag">平台突破，位置结构 17/25</span>
+            <span class="tag">龙头候选</span><span class="tag">封板纪律达标</span><span class="tag">高开谨慎</span>
             <span class="tag is-risk">止损 15.67</span>
           </div>
-          <p>高位乖离拦截 被拦截：首板前涨幅过大，疑似高位接力</p>
+          <p>高位跟风拦截 被拦截：首板前涨幅过大，疑似高位接力</p>
           <ul class="detail-list compact">
-            <li>首板 25.0/25，竞价 13.0/20，位置 17.0/25，流动性 10.0/15</li>
-            <li>买入价 16.5，仓位上限 8%，严格 T+1，2 个交易日不走强则纪律退出</li>
+            <li>封板 20.0/20，主线 16.0/20，龙头 18.0/20，竞价 13.0/20</li>
+            <li>位置 17.0/25，流动性 10.0/15，首板质量 25.0/25</li>
+            <li>封板资金占比 15.0%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>买入价 16.5，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
             <li>首板前涨幅过大，疑似高位接力</li><li>距离 20 日均线过远，短线乖离过大</li><li>上方压力位过近</li>
             <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li><li>竞价/开盘涨幅偏高，防止高开兑现</li>
+          </ul>
+        </article>
+
+
+        <article class="one-to-two-card" data-status="blocked">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">弱封板拦截</div>
+              <div class="candidate-code">600004 / 普通首板观察</div>
+            </div>
+            <div class="candidate-score">84.0</div>
+          </div>
+          <div class="tags">
+            <span class="tag">blocked</span>
+            <span class="tag">低位平台突破，位置结构 24/25</span>
+            <span class="tag">普通首板观察</span><span class="tag">主线强度高</span><span class="tag">低位突破</span>
+            <span class="tag is-risk">止损 8.4</span>
+          </div>
+          <p>弱封板拦截 被拦截：封板资金不足，不能作为主线首板龙头候选</p>
+          <ul class="detail-list compact">
+            <li>封板 11.0/20，主线 20.0/20，龙头 12.0/20，竞价 11.0/20</li>
+            <li>位置 24.0/25，流动性 10.0/15，首板质量 14.0/25</li>
+            <li>封板资金占比 2.3%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>买入价 8.8，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
+            <li>封板资金不足，不能作为主线首板龙头候选</li><li>龙头候选辨识度不足，避免普通跟风票</li>
+            <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li><li>封板资金刚过线，盘中炸板风险需要重点盯</li>
           </ul>
         </article>
 
@@ -677,7 +712,7 @@ button {
 
       <section class="panel one-to-two-panel">
         <h2>Beta 预检</h2>
-        <p class="next-action">一进二运行体检有可选项未就绪，核心模拟盘可以继续。</p>
+        <p class="next-action">主线首板运行体检有可选项未就绪，核心模拟盘可以继续。</p>
         <ul class="detail-list compact">
           <li>上线测试入口：先运行 beta-check，返回 ready 后再启动 beta-start。</li>
           <li>beta-check 会发送飞书测试并执行严格体检，不触发模拟买入或卖出。</li>
@@ -686,7 +721,7 @@ button {
         <ul class="doctor-list">
 
               <li class="doctor-item" data-status="ready">
-                <span class="doctor-label">一进二策略配置</span>
+                <span class="doctor-label">主线首板策略配置</span>
                 <span class="doctor-status">可运行</span>
                 <span class="doctor-detail">min_score=70, initial_cash=100000.00, max_position_pct=8%, max_daily_trades=1</span>
               </li>
@@ -700,7 +735,7 @@ button {
               <li class="doctor-item" data-status="ready">
                 <span class="doctor-label">行情源</span>
                 <span class="doctor-status">可运行</span>
-                <span class="doctor-detail">2026-04-30 已读取 3 条候选原始行。</span>
+                <span class="doctor-detail">2026-04-30 已读取 4 条候选原始行。</span>
               </li>
 
               <li class="doctor-item" data-status="ready">
@@ -819,7 +854,7 @@ button {
       <article class="one-to-two-card position-card" data-status="warning">
         <div class="candidate-head">
           <div>
-            <div class="candidate-name">低位突破候选</div>
+            <div class="candidate-name">主线首板候选</div>
             <div class="candidate-code">600001 / 低位平台突破</div>
           </div>
           <div class="candidate-score">-6.84%</div>
@@ -850,7 +885,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">08:50 早盘判断</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>市场温度：74</li><li>昨日首板样本：3，可执行候选：1，硬拦截：2</li><li>模拟盘：权益 100000.00，当日已交易 0/1</li><li>候选入池：</li><li>- 低位突破候选(600001) 分数 92.0，低位平台突破，买入参考 10.52，止损 10.0，仓位上限 8%</li><li>主要拦截：</li><li>- 非主板拦截(300003)：创业板 不在主板 10cm 一进二范围内</li><li>- 高位乖离拦截(600002)：首板前涨幅过大，疑似高位接力</li><li>纪律：只做主板 10cm 一进二；当天跌破止损只预警，T+1 再处理。</li>
+          <li>交易日：2026-04-30</li><li>市场温度：74</li><li>主线首板候选：4，可执行候选：1，硬拦截：3</li><li>模拟盘：权益 100000.00，当日已交易 0/1</li><li>主线首板候选入池：</li><li>- 主线首板候选(600001) 分数 100.0，主线龙头候选，封板 20.0/20，主线 20.0/20，龙头 20.0/20，买入参考 10.52，止损 10.0，仓位上限 8%</li><li>主要拦截：</li><li>- 非主板拦截(300003)：创业板 不在主板 10cm 一进二范围内</li><li>- 高位跟风拦截(600002)：首板前涨幅过大，疑似高位接力</li><li>纪律：只做主板 10cm 主线首板龙头候选；一进二只是确认点，当天跌破止损只预警，T+1 再处理。</li>
         </ul>
       </article>
 
@@ -858,7 +893,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">盘中事件</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>阶段：risk</li><li>最新事件：跌破止损，已发出 T+1 风险预警。</li><li>止损预警：低位突破候选(600001)</li><li>当前价 9.8，止损价 10.0</li><li>浮动盈亏：-504.00 (-6.84%)</li><li>位置：低位平台突破</li><li>T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
+          <li>交易日：2026-04-30</li><li>阶段：risk</li><li>最新事件：跌破止损，已发出 T+1 风险预警。</li><li>止损预警：主线首板候选(600001)</li><li>当前价 9.8，止损价 10.0</li><li>浮动盈亏：-504.00 (-6.84%)</li><li>位置：低位平台突破</li><li>T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
         </ul>
       </article>
 
@@ -866,7 +901,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">15:10 尾盘测评</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>权益：99496.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：4，止损预警：1，当日 T+1 卖出：0</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：低位突破候选(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
+          <li>交易日：2026-04-30</li><li>权益：99496.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：4，止损预警：1，当日 T+1 卖出：0</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：主线首板候选(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
         </ul>
       </article>
 
@@ -919,7 +954,7 @@ button {
           </section>
           <section class="panel one-to-two-panel">
             <h2>尾盘测评</h2>
-            <p class="next-action">一进二尾盘：完成样本 1 笔，成功 1 笔，已实现盈亏 266.00。</p>
+            <p class="next-action">主线首板尾盘：完成样本 1 笔，成功 1 笔，已实现盈亏 266.00。</p>
             <ul class="detail-list compact">
               <li>完成样本：1，成功样本：1</li>
               <li>已实现盈亏：266.00，最大回撤：0.00</li>
@@ -941,7 +976,7 @@ button {
               <li>位置分布：低位平台突破 1</li>
               <li>退出原因：discipline_take_profit 1</li>
               <li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li>
-              <li>继续积累至 30 笔一进二样本。</li>
+              <li>继续积累至 30 笔主线首板样本。</li>
             </ul>
             <h3 class="panel-subtitle">最近样本</h3>
             <ul class="sample-list">

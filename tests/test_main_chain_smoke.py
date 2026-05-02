@@ -249,6 +249,10 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["trade_context"]["trade_date"], "2026-04-30")
             self.assertIsInstance(payload["candidates"], list)
             self.assertEqual(payload["candidates"][0]["position_profile"]["label"], "低位平台突破")
+            self.assertGreaterEqual(payload["candidates"][0]["sealing_score"], 18)
+            self.assertGreaterEqual(payload["candidates"][0]["mainline_score"], 14)
+            self.assertGreaterEqual(payload["candidates"][0]["leader_score"], 16)
+            self.assertIn("龙头候选", payload["candidates"][0]["leader_label"])
 
     def test_weekend_request_uses_previous_trading_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -313,6 +317,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(candidates["600001"].status, "ready")
             self.assertGreaterEqual(candidates["600001"].score, 70)
             self.assertEqual(candidates["600001"].position_profile.label, "低位平台突破")
+            self.assertGreaterEqual(candidates["600001"].sealing_score, 18)
+            self.assertGreaterEqual(candidates["600001"].leader_score, 16)
+            self.assertIn("封板", candidates["600001"].discipline_summary)
             self.assertEqual(candidates["600002"].status, "blocked")
             self.assertTrue(
                 any("乖离" in blocker or "高位" in blocker for blocker in candidates["600002"].blockers)
@@ -321,6 +328,46 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertTrue(any("创业板" in blocker for blocker in candidates["300003"].blockers))
             self.assertEqual(one_word.status, "blocked")
             self.assertTrue(any("买不到" in blocker for blocker in one_word.blockers))
+
+    def test_weak_sealed_board_is_blocked_for_mainline_leader_candidate(self) -> None:
+        weak_row = OneToTwoMarketRow(
+            symbol="600008",
+            name="弱封板样本",
+            trade_date="2026-05-01",
+            board="主板",
+            is_st=False,
+            is_delisting=False,
+            listing_days=700,
+            latest_price=11.0,
+            previous_close=10.0,
+            limit_up_price=11.0,
+            first_limit_up_time="11:15",
+            sealed_amount=2000000,
+            turnover_amount=120000000,
+            turnover_rate=4.2,
+            open_pct=0.02,
+            auction_amount=3000000,
+            low_20=9.2,
+            high_60=11.1,
+            pressure_price=13.0,
+            ma_5=10.6,
+            ma_10=10.1,
+            ma_20=9.7,
+            recent_gain_pct=0.16,
+            theme="主线跟风",
+            market_temperature=74,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            candidate = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider((weak_row,)),
+            ).build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            ).candidates[0]
+
+        self.assertEqual(candidate.status, "blocked")
+        self.assertTrue(any("封板资金不足" in blocker for blocker in candidate.blockers))
 
     def test_one_to_two_market_data_failure_blocks_trading(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1942,8 +1989,12 @@ class MainChainSmokeTest(unittest.TestCase):
 
             self.assertTrue(output.exists())
             html = output.read_text(encoding="utf-8")
-            self.assertIn("FireMoney 一进二", html)
-            self.assertIn("一进二专项台", html)
+            self.assertIn("FireMoney 主线首板", html)
+            self.assertIn("主线首板专项台", html)
+            self.assertIn("候选池与封板纪律", html)
+            self.assertIn("封板", html)
+            self.assertIn("龙头", html)
+            self.assertIn("主线首板候选", html)
             self.assertIn("低位平台突破", html)
             self.assertIn("模拟盘与风险", html)
             self.assertIn("飞书通知", html)
@@ -1967,7 +2018,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("Beta 预检", html)
             self.assertIn("beta-check", html)
             self.assertIn("beta-start", html)
-            self.assertIn("一进二策略配置", html)
+            self.assertIn("主线首板策略配置", html)
             self.assertIn("行情源", html)
             self.assertIn("飞书通知", html)
             self.assertIn("本地调度", html)

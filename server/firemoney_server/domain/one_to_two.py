@@ -49,6 +49,10 @@ class OneToTwoSettings(Protocol):
     high_deviation_block_pct: float
     recent_gain_block_pct: float
     near_pressure_pct: float
+    min_sealed_amount_ratio: float
+    min_leader_score: float
+    min_mainline_score: float
+    board_strategy_enabled: bool
     exclude_st: bool
     exclude_delisting: bool
     exclude_new_stock_days: int
@@ -76,12 +80,19 @@ class OneToTwoPolicy:
         position_profile = self._position_profile(row)
         theme_score = self._theme_score(row)
         liquidity_score = self._liquidity_score(row)
+        mainline_score = self._mainline_score(row, position_profile)
+        sealing_score = self._sealing_score(row)
+        leader_score = self._leader_score(row, position_profile)
         score = round(
-            first_board_score
-            + auction_score
-            + self._position_score(position_profile)
-            + theme_score
-            + liquidity_score,
+            min(
+                100.0,
+                sealing_score
+                + mainline_score
+                + leader_score
+                + min(auction_score, 15.0)
+                + min(self._position_score(position_profile), 20.0)
+                + min(liquidity_score, 10.0),
+            ),
             2,
         )
         status = (
@@ -119,6 +130,18 @@ class OneToTwoPolicy:
             warnings=warnings,
             rationale=self._rationale(row, position_profile, blockers),
             next_action=self._next_action(status),
+            mainline_score=round(mainline_score, 2),
+            sealing_score=round(sealing_score, 2),
+            leader_score=round(leader_score, 2),
+            leader_label=self._leader_label(leader_score, sealing_score, mainline_score),
+            strategy_tags=self._strategy_tags(
+                row,
+                position_profile,
+                leader_score,
+                sealing_score,
+                mainline_score,
+            ),
+            discipline_summary=self._discipline_summary(row),
         )
 
     def _blockers(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
@@ -133,6 +156,10 @@ class OneToTwoPolicy:
             blockers.append("新股前 5 个交易日不参与")
         if row.turnover_amount < self._settings.min_turnover_amount:
             blockers.append("成交额低于流动性门槛")
+        if self._settings.board_strategy_enabled and row.turnover_amount > 0:
+            sealed_ratio = row.sealed_amount / row.turnover_amount
+            if sealed_ratio < self._settings.min_sealed_amount_ratio:
+                blockers.append("封板资金不足，不能作为主线首板龙头候选")
         if row.open_pct >= 0.095 and row.auction_amount < row.turnover_amount * 0.01:
             blockers.append("一字板买不到，只观察不买入")
         if row.market_temperature < self._settings.market_temperature_floor:
@@ -147,6 +174,11 @@ class OneToTwoPolicy:
             pressure_distance = (row.pressure_price - row.latest_price) / row.latest_price
             if 0 <= pressure_distance <= self._settings.near_pressure_pct:
                 blockers.append("上方压力位过近")
+        position_profile = self._position_profile(row)
+        if self._mainline_score(row, position_profile) < self._settings.min_mainline_score:
+            blockers.append("主线首板强度不足，先不进入模拟盘")
+        if self._leader_score(row, position_profile) < self._settings.min_leader_score:
+            blockers.append("龙头候选辨识度不足，避免普通跟风票")
         return tuple(blockers)
 
     def _warnings(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
@@ -157,6 +189,10 @@ class OneToTwoPolicy:
             warnings.append("换手偏低，可能买不到或承接不足")
         if row.auction_amount < row.turnover_amount * 0.02:
             warnings.append("竞价成交占比偏低，强度仍需开盘确认")
+        if row.sealed_amount and row.turnover_amount:
+            sealed_ratio = row.sealed_amount / row.turnover_amount
+            if sealed_ratio < self._settings.min_sealed_amount_ratio * 1.5:
+                warnings.append("封板资金刚过线，盘中炸板风险需要重点盯")
         return tuple(warnings)
 
     def _first_board_score(self, row: OneToTwoMarketRow) -> float:
@@ -241,6 +277,110 @@ class OneToTwoPolicy:
             return 10.0
         return 0.0
 
+    def _sealing_score(self, row: OneToTwoMarketRow) -> float:
+        score = 4.0
+        if row.first_limit_up_time and row.first_limit_up_time <= "10:00":
+            score += 5.0
+        elif row.first_limit_up_time and row.first_limit_up_time <= "10:30":
+            score += 4.0
+        sealed_ratio = row.sealed_amount / row.turnover_amount if row.turnover_amount else 0.0
+        if sealed_ratio >= 0.15:
+            score += 6.0
+        elif sealed_ratio >= self._settings.min_sealed_amount_ratio:
+            score += 4.0
+        if 3 <= row.turnover_rate <= 15:
+            score += 4.0
+        elif row.turnover_rate > 0:
+            score += 2.0
+        if row.open_pct < 0.095:
+            score += 3.0
+        return min(score, 20.0)
+
+    def _mainline_score(
+        self,
+        row: OneToTwoMarketRow,
+        profile: OneToTwoPositionProfile,
+    ) -> float:
+        score = 4.0
+        if row.market_temperature >= 70:
+            score += 5.0
+        elif row.market_temperature >= self._settings.market_temperature_floor:
+            score += 3.0
+        if row.theme:
+            score += 4.0
+        if profile.breakout_score >= 7:
+            score += 3.0
+        if profile.low_position_score >= 8:
+            score += 2.0
+        if 0.08 <= row.recent_gain_pct <= 0.35:
+            score += 2.0
+        return min(score, 20.0)
+
+    def _leader_score(
+        self,
+        row: OneToTwoMarketRow,
+        profile: OneToTwoPositionProfile,
+    ) -> float:
+        score = 3.0
+        sealed_ratio = row.sealed_amount / row.turnover_amount if row.turnover_amount else 0.0
+        if row.first_limit_up_time and row.first_limit_up_time <= "10:30":
+            score += 4.0
+        if sealed_ratio >= 0.12:
+            score += 4.0
+        elif sealed_ratio >= self._settings.min_sealed_amount_ratio:
+            score += 2.0
+        if row.turnover_rate >= 5:
+            score += 3.0
+        elif row.turnover_rate >= 3:
+            score += 2.0
+        if 0.10 <= row.recent_gain_pct <= 0.30:
+            score += 3.0
+        if profile.breakout_score >= 7:
+            score += 2.0
+        if row.market_temperature >= 70 and row.theme:
+            score += 2.0
+        return min(score, 20.0)
+
+    def _leader_label(
+        self,
+        leader_score: float,
+        sealing_score: float,
+        mainline_score: float,
+    ) -> str:
+        if leader_score >= 18 and sealing_score >= 18 and mainline_score >= 18:
+            return "主线龙头候选"
+        if leader_score >= self._settings.min_leader_score:
+            return "龙头候选"
+        return "普通首板观察"
+
+    def _strategy_tags(
+        self,
+        row: OneToTwoMarketRow,
+        profile: OneToTwoPositionProfile,
+        leader_score: float,
+        sealing_score: float,
+        mainline_score: float,
+    ) -> tuple[str, ...]:
+        tags: list[str] = [
+            self._leader_label(leader_score, sealing_score, mainline_score)
+        ]
+        if sealing_score >= 18:
+            tags.append("封板纪律达标")
+        if mainline_score >= 18:
+            tags.append("主线强度高")
+        if profile.low_position_score >= 8 and profile.breakout_score >= 7:
+            tags.append("低位突破")
+        if row.open_pct >= 0.07:
+            tags.append("高开谨慎")
+        return tuple(tags)
+
+    def _discipline_summary(self, row: OneToTwoMarketRow) -> str:
+        sealed_ratio = row.sealed_amount / row.turnover_amount if row.turnover_amount else 0.0
+        return (
+            f"封板资金占比 {sealed_ratio:.1%}；只做非一字、封板确认后的主线首板候选，"
+            "次日一进二只作为确认点，模拟盘严格 T+1。"
+        )
+
     def _rationale(
         self,
         row: OneToTwoMarketRow,
@@ -250,12 +390,12 @@ class OneToTwoPolicy:
         if blockers:
             return f"{row.name} 被拦截：{blockers[0]}"
         return (
-            f"{row.name} 属于{profile.label}，首板质量、竞价强度和流动性进入一进二观察。"
+            f"{row.name} 属于{profile.label}，封板纪律、主线强度和龙头候选辨识度进入观察。"
         )
 
     def _next_action(self, status: str) -> str:
         if status == "blocked":
             return "不生成模拟买入，只保留风险记录。"
         if status == "ready":
-            return "等待竞价确认后进入事件驱动模拟盘。"
+            return "等待封板纪律和竞价确认后进入事件驱动模拟盘。"
         return "仅观察，不触发模拟买入。"

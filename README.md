@@ -1,5 +1,7 @@
 # FireMoney
 
+2026-05-02 核心线更新：当前产品线已经收敛为 `主线首板龙头预判 -> 封板纪律确认 -> 次日一进二确认 -> 模拟盘验证 -> 尾盘复盘 -> 稳定性观察`。一进二不再作为孤立战法入口，而是作为首板候选次日强弱确认和 T+1 风险处理点。完整产品边界见 [docs/project/product/MAINLINE_FIRST_BOARD_STRATEGY.md](docs/project/product/MAINLINE_FIRST_BOARD_STRATEGY.md)。
+
 FireMoney 当前只保留一条产品主线：主板 10cm “一进二”战法验证。
 
 第一版目标不是自动实盘交易，而是验证战法稳定性：用 AkShare 边界接行情，筛昨日首板，判断低位/突破/压力，事件驱动模拟盘执行纪律，通过飞书通知早盘、盘中和尾盘结果，并沉淀稳定性样本。

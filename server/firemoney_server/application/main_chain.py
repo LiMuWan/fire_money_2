@@ -104,13 +104,13 @@ class MainChainService:
         ready_count = sum(1 for item in candidates if item.status == "ready")
         status = "ready" if ready_count else "blocked"
         summary = (
-            "一进二早盘：行情数据不可用，禁止生成模拟买入。"
+            "主线首板早盘：行情数据不可用，禁止生成模拟买入。"
             if data_unavailable
-            else f"一进二早盘：{len(candidates)} 个昨日首板样本，{ready_count} 个进入模拟盘观察。"
+            else f"主线首板早盘：{len(candidates)} 个首板龙头候选样本，{ready_count} 个进入模拟盘观察。"
         )
         notification = self._notify_or_prepare(
             notify=notify,
-            title="FireMoney 一进二早盘",
+            title="FireMoney 主线首板早盘",
             message=self._morning_notification_message(
                 report_date=report_date,
                 market_temperature=rows[0].market_temperature if rows else 0,
@@ -132,7 +132,7 @@ class MainChainService:
             account=account,
             notification=notification,
             next_action=(
-                "等待竞价确认和事件驱动模拟盘。"
+                "等待封板纪律、竞价和一进二确认。"
                 if ready_count
                 else "今日不触发模拟买入。"
             ),
@@ -171,12 +171,12 @@ class MainChainService:
         elif ready and phase == "scan":
             account = self._paper_store.record_candidate_event(
                 ready[0],
-                "候选入池，等待竞价确认。",
+                "主线首板候选入池，等待封板纪律和竞价确认。",
             )
         elif ready and phase == "auction":
             account = self._paper_store.record_candidate_event(
                 ready[0],
-                "竞价确认，一进二候选进入开盘触发观察。",
+                "竞价确认，主线首板候选进入一进二确认观察。",
                 event_type=OneToTwoEventType.AUCTION_CONFIRMED,
             )
         elif ready and phase == "open":
@@ -185,7 +185,7 @@ class MainChainService:
         latest_event = account.events[0].message if account.events else "暂无模拟盘事件"
         notification = self._notify_or_prepare(
             notify=notify,
-            title="FireMoney 一进二盘中",
+            title="FireMoney 主线首板盘中",
             message=self._watch_notification_message(
                 phase=phase,
                 report=report,
@@ -205,7 +205,7 @@ class MainChainService:
             candidates=report.candidates,
             account=account,
             notification=notification,
-            next_action="继续盯住止损位和 T+1 纪律。",
+            next_action="继续盯住封板质量、止损位和 T+1 纪律。",
         )
 
     def _exit_if_discipline_requires(
@@ -229,7 +229,7 @@ class MainChainService:
         return self._paper_store.exit_position(
             candidate,
             exit_reason="discipline_weak_after_2_days",
-            message="持仓超过 2 个交易日未继续走强，按一进二纪律退出。",
+            message="持仓超过 2 个交易日未继续走强，按主线首板纪律退出。",
             holding_trade_days=holding_trade_days,
         )
 
@@ -279,12 +279,12 @@ class MainChainService:
         max_drawdown = min(realized_curve, default=0.0)
         stability_report = self._stability_from_account(account)
         summary = (
-            f"一进二尾盘：完成样本 {len(closed_trades)} 笔，"
+            f"主线首板尾盘：完成样本 {len(closed_trades)} 笔，"
             f"成功 {success_count} 笔，已实现盈亏 {realized_pnl:.2f}。"
         )
         notification = self._notify_or_prepare(
             notify=notify,
-            title="FireMoney 一进二尾盘",
+            title="FireMoney 主线首板尾盘",
             message=self._end_of_day_notification_message(
                 report_date=report_date,
                 account=account,
@@ -314,7 +314,7 @@ class MainChainService:
             ),
             account=account,
             notification=notification,
-            next_action="收盘后归档样本，明早继续扫描昨日首板池。",
+            next_action="收盘后归档样本，明早继续扫描主线首板候选池。",
         )
 
     def build_one_to_two_stability_report(self) -> OneToTwoStabilityReport:
@@ -343,7 +343,7 @@ class MainChainService:
         )
         result = self._notify_or_prepare(
             notify=notify,
-            title="FireMoney 一进二飞书测试",
+            title="FireMoney 主线首板飞书测试",
             message=message,
         )
         self._record_notification("feishu:test", trade_context.trade_date, result)
@@ -383,7 +383,7 @@ class MainChainService:
             if should_send_feishu
             else FeishuNotificationResult(
                 status=NotificationStatus.PREPARED,
-                title="FireMoney 一进二飞书测试",
+                title="FireMoney 主线首板飞书测试",
                 message="Beta 预检未发送飞书测试，不触发模拟买入或卖出。",
                 webhook_configured=self._has_feishu_delivery_config(),
                 error=self._beta_readiness_skip_reason(
@@ -399,7 +399,7 @@ class MainChainService:
         )
         status = "ready" if doctor_report.status == "ready" else "blocked"
         summary = (
-            "模拟盘 Beta 预检通过，可以启动一进二值守。"
+            "模拟盘 Beta 预检通过，可以启动主线首板值守。"
             if status == "ready"
             else "模拟盘 Beta 预检未通过，先修复阻断项再启动值守。"
         )
@@ -456,12 +456,12 @@ class MainChainService:
         has_warning = any(check.status == "warning" for check in checks)
         status = "blocked" if has_blocked else ("warning" if has_warning else "ready")
         summary = (
-            "一进二运行体检未通过，先修复阻断项再启动模拟盘。"
+                "主线首板运行体检未通过，先修复阻断项再启动模拟盘。"
             if status == "blocked"
             else (
-                "一进二运行体检有可选项未就绪，核心模拟盘可以继续。"
+                "主线首板运行体检有可选项未就绪，核心模拟盘可以继续。"
                 if status == "warning"
-                else "一进二运行体检通过，可以按早盘、盘中、尾盘主线运行。"
+                else "主线首板运行体检通过，可以按早盘、盘中、尾盘主线运行。"
             )
         )
         return OneToTwoDoctorReport(
@@ -473,7 +473,7 @@ class MainChainService:
             next_action=(
                 "修复 blocked 检查项后再运行 morning/watch/schedule。"
                 if status == "blocked"
-                else "继续按 morning -> watch -> eod -> stability 验证一进二。"
+                else "继续按 morning -> watch -> eod -> stability 验证主线首板。"
             ),
         )
 
@@ -553,7 +553,7 @@ class MainChainService:
                         paper_store.exit_position(
                             matched,
                             exit_reason="backtest_discipline",
-                            message="历史回放纪律退出，完成一笔一进二样本。",
+                            message="历史回放纪律退出，完成一笔主线首板样本。",
                             holding_trade_days=1,
                         )
                 if not paper_store.load().positions:
@@ -661,7 +661,7 @@ class MainChainService:
             ),
             strategy_boundary_suggestion=strategy_boundary_suggestion,
             next_action=(
-                f"继续积累至 {next_milestone} 笔一进二样本。"
+                f"继续积累至 {next_milestone} 笔主线首板样本。"
                 if next_milestone
                 else "进入 100 笔以上复盘，固定可执行边界并继续滚动验证。"
             ),
@@ -715,7 +715,7 @@ class MainChainService:
         )
         return OneToTwoDoctorCheck(
             check_id="strategy_config",
-            label="一进二策略配置",
+            label="主线首板策略配置",
             status="ready" if valid else "blocked",
             detail=(
                 f"min_score={settings.min_score:g}, "
@@ -724,7 +724,7 @@ class MainChainService:
                 f"max_daily_trades={settings.max_daily_trades}"
             ),
             next_action=(
-                "配置有效，继续保持单一一进二主线。"
+                "配置有效，继续保持单一主线首板主线。"
                 if valid
                 else "修复 one_to_two_strategy JSON 后再运行策略。"
             ),
@@ -741,7 +741,7 @@ class MainChainService:
                 label="交易日",
                 status="ready",
                 detail=f"{trade_context.requested_date} 是 A 股交易日。",
-                next_action="可以按当日一进二主线运行。",
+                next_action="可以按当日主线首板主线运行。",
             )
         return OneToTwoDoctorCheck(
             check_id="trading_day",
@@ -777,7 +777,7 @@ class MainChainService:
                 check_id="market_data",
                 label="行情源",
                 status="blocked",
-                detail=f"无法读取 {trade_date} 一进二行情：{exc}",
+                detail=f"无法读取 {trade_date} 主线首板行情：{exc}",
                 next_action="检查 AkShare 网络、接口可用性，或改用 --sample-data 预览。",
             )
         return OneToTwoDoctorCheck(
@@ -1078,18 +1078,20 @@ class MainChainService:
         lines = [
             f"交易日：{report_date}",
             f"市场温度：{market_temperature}",
-            f"昨日首板样本：{len(candidates)}，可执行候选：{len(ready)}，硬拦截：{blocked_count}",
+            f"主线首板候选：{len(candidates)}，可执行候选：{len(ready)}，硬拦截：{blocked_count}",
             f"模拟盘：权益 {account.equity:.2f}，当日已交易 {account.daily_trade_count}/{account.max_daily_trades}",
         ]
         if data_unavailable:
             lines.append("行情数据不可用：今日禁止生成模拟买入。")
             return "\n".join(lines)
         if ready:
-            lines.append("候选入池：")
+            lines.append("主线首板候选入池：")
             for candidate in ready[:3]:
                 lines.append(
                     f"- {candidate.name}({candidate.symbol}) 分数 {candidate.score}，"
-                    f"{candidate.position_profile.label}，买入参考 {candidate.entry_price}，"
+                    f"{candidate.leader_label or candidate.position_profile.label}，"
+                    f"封板 {candidate.sealing_score}/20，主线 {candidate.mainline_score}/20，"
+                    f"龙头 {candidate.leader_score}/20，买入参考 {candidate.entry_price}，"
                     f"止损 {candidate.stop_loss}，仓位上限 {candidate.position_limit_pct:.0%}"
                 )
         else:
@@ -1099,7 +1101,7 @@ class MainChainService:
             lines.append("主要拦截：")
             for candidate in blockers[:2]:
                 lines.append(f"- {candidate.name}({candidate.symbol})：{candidate.blockers[0]}")
-        lines.append("纪律：只做主板 10cm 一进二；当天跌破止损只预警，T+1 再处理。")
+        lines.append("纪律：只做主板 10cm 主线首板龙头候选；一进二只是确认点，当天跌破止损只预警，T+1 再处理。")
         return "\n".join(lines)
 
     def _watch_notification_message(
@@ -1161,7 +1163,7 @@ class MainChainService:
             lines.extend(
                 [
                     f"观察候选：{candidate.name}({candidate.symbol}) 分数 {candidate.score}",
-                    f"位置：{candidate.position_profile.label}；买入参考 {candidate.entry_price}；止损 {candidate.stop_loss}",
+                    f"标签：{candidate.leader_label or candidate.position_profile.label}；封板 {candidate.sealing_score}/20；买入参考 {candidate.entry_price}；止损 {candidate.stop_loss}",
                     f"仓位上限：{candidate.position_limit_pct:.0%}；状态：{candidate.status}",
                 ]
             )
@@ -1199,7 +1201,7 @@ class MainChainService:
                 f"退出 {sample.exit_reason}，位置 {sample.position_label}"
             )
         else:
-            lines.append("最新样本：暂无完成样本，继续按一进二闭环观察。")
+            lines.append("最新样本：暂无完成样本，继续按主线首板闭环观察。")
         if account.positions:
             position = account.positions[0]
             lines.append(
@@ -1207,7 +1209,7 @@ class MainChainService:
                 f"{'次日可卖' if position.can_sell_today else '仍受 T+1 约束'}"
             )
         else:
-            lines.append("当前无持仓，等待下一交易日重新扫描昨日首板池。")
+            lines.append("当前无持仓，等待下一交易日重新扫描主线首板候选池。")
         lines.append("复盘纪律：尾盘只归档和评估边界，不改变当日交易。")
         return "\n".join(lines)
 

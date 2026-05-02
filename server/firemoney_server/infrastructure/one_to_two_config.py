@@ -32,6 +32,10 @@ class OneToTwoStrategySettings:
     max_holding_trade_days: int
     discipline_exit_min_gain_pct: float
     minimum_sample_for_stability: int
+    min_sealed_amount_ratio: float
+    min_leader_score: float
+    min_mainline_score: float
+    board_strategy_enabled: bool
     excluded_boards: tuple[str, ...]
     exclude_st: bool
     exclude_delisting: bool
@@ -68,6 +72,10 @@ def load_one_to_two_settings(
         max_holding_trade_days=int(parameters["max_holding_trade_days"]),
         discipline_exit_min_gain_pct=float(parameters["discipline_exit_min_gain_pct"]),
         minimum_sample_for_stability=int(parameters["minimum_sample_for_stability"]),
+        min_sealed_amount_ratio=float(parameters.get("min_sealed_amount_ratio", 0.08)),
+        min_leader_score=float(parameters.get("min_leader_score", 16)),
+        min_mainline_score=float(parameters.get("min_mainline_score", 14)),
+        board_strategy_enabled=bool(parameters.get("board_strategy_enabled", True)),
         excluded_boards=tuple(str(item) for item in exclude["boards"]),
         exclude_st=bool(exclude["st"]),
         exclude_delisting=bool(exclude["delisting"]),

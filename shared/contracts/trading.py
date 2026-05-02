@@ -87,6 +87,12 @@ class OneToTwoCandidate:
     warnings: tuple[str, ...]
     rationale: str
     next_action: str
+    mainline_score: float = 0.0
+    sealing_score: float = 0.0
+    leader_score: float = 0.0
+    leader_label: str = ""
+    strategy_tags: tuple[str, ...] = ()
+    discipline_summary: str = ""
 
 
 @dataclass(frozen=True)

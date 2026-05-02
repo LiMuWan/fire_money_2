@@ -30,6 +30,40 @@ def _text(value: object) -> str:
     return escape(str(value), quote=True)
 
 
+def _render_mainline_candidates(report: OneToTwoMorningReport) -> str:
+    if not report.candidates:
+        return '<p class="empty-note">行情不可用或今日没有符合条件的主线首板龙头候选。</p>'
+    return "\n".join(
+        f"""
+        <article class="one-to-two-card" data-status="{_text(candidate.status)}">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">{_text(candidate.name)}</div>
+              <div class="candidate-code">{_text(candidate.symbol)} / {_text(candidate.leader_label or candidate.position_profile.label)}</div>
+            </div>
+            <div class="candidate-score">{_text(candidate.score)}</div>
+          </div>
+          <div class="tags">
+            <span class="tag">{_text(candidate.status)}</span>
+            <span class="tag">{_text(candidate.position_profile.summary)}</span>
+            {"".join(f'<span class="tag">{_text(item)}</span>' for item in candidate.strategy_tags[:3])}
+            <span class="tag is-risk">止损 {_text(candidate.stop_loss)}</span>
+          </div>
+          <p>{_text(candidate.rationale)}</p>
+          <ul class="detail-list compact">
+            <li>封板 {candidate.sealing_score}/20，主线 {candidate.mainline_score}/20，龙头 {candidate.leader_score}/20，竞价 {candidate.auction_score}/20</li>
+            <li>位置 {candidate.position_score}/25，流动性 {candidate.liquidity_score}/15，首板质量 {candidate.first_board_score}/25</li>
+            <li>{_text(candidate.discipline_summary)}</li>
+            <li>买入价 {_text(candidate.entry_price)}，仓位上限 {candidate.position_limit_pct:.0%}，严格 T+1；2 个交易日不走强则纪律退出</li>
+            {"".join(f"<li>{_text(item)}</li>" for item in candidate.blockers[:3])}
+            {"".join(f"<li>{_text(item)}</li>" for item in candidate.warnings[:2])}
+          </ul>
+        </article>
+        """
+        for candidate in report.candidates
+    )
+
+
 def _render_one_to_two_candidates(report: OneToTwoMorningReport) -> str:
     if not report.candidates:
         return '<p class="empty-note">行情不可用或今日没有符合条件的一进二候选。</p>'
@@ -242,7 +276,7 @@ def render_one_to_two_workflow_html(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FireMoney 一进二</title>
+  <title>FireMoney 主线首板</title>
   <style>
 {css}
   </style>
@@ -252,20 +286,20 @@ def render_one_to_two_workflow_html(
     <header class="topbar">
       <div class="brand">
         <div class="brand-row">
-          <h1 class="app-name">FireMoney 一进二</h1>
-          <span class="subtitle">主板 10cm 模拟盘验证</span>
+          <h1 class="app-name">FireMoney 主线首板</h1>
+          <span class="subtitle">龙头预判 + 封板纪律验证</span>
         </div>
-        <div class="core-path">早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察</div>
+        <div class="core-path">主线首板预选 -> 封板纪律确认 -> 一进二确认 -> 稳定性观察</div>
       </div>
       <nav class="nav" aria-label="一进二产品阶段">
-        <button class="nav-item is-active" type="button">一进二专项台</button>
+        <button class="nav-item is-active" type="button">主线首板专项台</button>
       </nav>
     </header>
     <div class="one-to-two-dashboard">
       <section class="one-to-two-hero">
         <div>
           <div class="mode-label">今日策略边界</div>
-          <h2>只做主板 10cm 一进二</h2>
+          <h2>只做主板 10cm 主线首板龙头候选</h2>
           <p>{_text(report.summary)}</p>
         </div>
         <div class="one-to-two-kpis">
@@ -278,9 +312,9 @@ def render_one_to_two_workflow_html(
       </section>
       <div class="one-to-two-main-grid">
         <section class="panel one-to-two-panel">
-          <h2>候选池与位置评分</h2>
+          <h2>候选池与封板纪律</h2>
           <div class="one-to-two-candidate-grid">
-            {_render_one_to_two_candidates(report)}
+            {_render_mainline_candidates(report)}
           </div>
         </section>
         <aside class="side-panel">
