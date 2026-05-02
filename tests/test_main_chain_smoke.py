@@ -412,6 +412,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("持仓", open_trigger.notification.message)
             self.assertIn("模拟盘不是实盘", open_trigger.notification.message)
             self.assertIn("样本少于 30 笔", eod.notification.message)
+            self.assertIn("最新样本：暂无完成样本", eod.notification.message)
 
     def test_notification_records_are_persisted_for_review(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -836,6 +837,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("少于 30", review.strategy_boundary_suggestion)
             self.assertIn("稳定性阶段", review.notification.message)
             self.assertIn("边界建议", review.notification.message)
+            self.assertIn("最新样本", review.notification.message)
+            self.assertIn("stop_loss_t1", review.notification.message)
+            self.assertIn("收益 -", review.notification.message)
 
     def test_backtest_replays_closed_samples_without_mutating_live_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

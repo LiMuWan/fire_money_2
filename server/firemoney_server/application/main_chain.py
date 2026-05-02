@@ -845,6 +845,14 @@ class MainChainService:
             f"稳定性阶段：{stability_report.sample_stage}，下一门槛：{next_milestone}",
             f"边界建议：{stability_report.strategy_boundary_suggestion}",
         ]
+        if stability_report.recent_samples:
+            sample = stability_report.recent_samples[0]
+            lines.append(
+                f"最新样本：{sample.name}({sample.symbol})，收益 {sample.realized_pnl_pct:.2%}，"
+                f"退出 {sample.exit_reason}，位置 {sample.position_label}"
+            )
+        else:
+            lines.append("最新样本：暂无完成样本，继续按一进二闭环观察。")
         if account.positions:
             position = account.positions[0]
             lines.append(
