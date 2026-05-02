@@ -303,6 +303,21 @@ class OneToTwoBetaRehearsalReport:
 
 
 @dataclass(frozen=True)
+class OneToTwoBetaLaunchPlan:
+    report_id: str
+    requested_date: str
+    trade_date: str
+    next_trade_date: str
+    status: str
+    summary: str
+    rehearsal: OneToTwoBetaRehearsalReport
+    doctor_report: OneToTwoDoctorReport
+    launch_commands: tuple[str, ...]
+    blockers: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
 class OneToTwoScheduleTask:
     task_id: str
     mode: str

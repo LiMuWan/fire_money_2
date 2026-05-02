@@ -13,6 +13,7 @@ from client.desktop.firemoney_client import LocalMainChainAdapter
 from client.desktop.firemoney_client.preview import build_preview
 from server.firemoney_server import MainChainService
 from server.firemoney_server.application.beta_rehearsal import (
+    build_one_to_two_beta_launch_plan,
     run_one_to_two_beta_rehearsal,
 )
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
@@ -1785,6 +1786,80 @@ class MainChainSmokeTest(unittest.TestCase):
         )
         self.assertEqual(payload["stability_report"]["status"], "observation")
 
+    def test_beta_launch_plan_lists_next_trade_day_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test-token",
+                },
+                clear=True,
+            ):
+                report = build_one_to_two_beta_launch_plan(
+                    trade_date="2026-05-03",
+                    service=service,
+                    trading_calendar=WeekdayTradingCalendar(),
+                )
+            payload = contract_to_dict(report)
+
+            self.assertEqual(payload["status"], "ready")
+            self.assertEqual(payload["requested_date"], "2026-05-03")
+            self.assertEqual(payload["trade_date"], "2026-04-30")
+            self.assertEqual(payload["next_trade_date"], "2026-05-06")
+            self.assertEqual(payload["blockers"], [])
+            self.assertIn("beta-plan-2026-05-03", payload["report_id"])
+            self.assertIn("beta-check --trade-date 2026-05-06", payload["launch_commands"][1])
+            self.assertIn("beta-start --trade-date 2026-05-06", payload["launch_commands"][2])
+
+    def test_beta_plan_cli_is_read_only_and_returns_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_path = root / "paper_trades.json"
+            scheduler_path = root / "scheduler_state.json"
+            scheduler_run_path = root / "scheduler_runs.json"
+            notifications_path = root / "notifications.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "beta-plan",
+                    "--sample-data",
+                    "--trade-date",
+                    "2026-05-03",
+                    "--paper-store",
+                    str(paper_path),
+                    "--scheduler-state",
+                    str(scheduler_path),
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
+                    "--notification-store",
+                    str(notifications_path),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["status"], "ready")
+            self.assertEqual(payload["next_trade_date"], "2026-05-06")
+            self.assertIn("beta-check --trade-date 2026-05-06", payload["launch_commands"][1])
+            self.assertFalse(paper_path.exists())
+            self.assertFalse(scheduler_path.exists())
+            self.assertFalse(scheduler_run_path.exists())
+            self.assertFalse(notifications_path.exists())
+
     def test_beta_rehearsal_cli_does_not_touch_live_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -2085,6 +2160,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("watch:risk", html)
             self.assertIn("prepared", html)
             self.assertIn("Beta 预检", html)
+            self.assertIn("beta-plan", html)
             self.assertIn("beta-rehearsal", html)
             self.assertIn("beta-check", html)
             self.assertIn("beta-start", html)

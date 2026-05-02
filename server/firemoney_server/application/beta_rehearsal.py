@@ -26,7 +26,7 @@ from server.firemoney_server.infrastructure.trading_calendar import (
     TradingCalendar,
     WeekdayTradingCalendar,
 )
-from shared.contracts import OneToTwoBetaRehearsalReport
+from shared.contracts import OneToTwoBetaLaunchPlan, OneToTwoBetaRehearsalReport
 
 
 REHEARSAL_TIMES: tuple[str, ...] = (
@@ -139,3 +139,69 @@ def run_one_to_two_beta_rehearsal(
                 else "修复彩排阻断项后重新运行 beta-rehearsal。"
             ),
         )
+
+
+def build_one_to_two_beta_launch_plan(
+    trade_date: str | None = None,
+    service: MainChainService | None = None,
+    trading_calendar: TradingCalendar | None = None,
+) -> OneToTwoBetaLaunchPlan:
+    """Build a read-only launch checklist for the next Beta watch window."""
+
+    live_service = service or MainChainService()
+    requested_context = live_service.resolve_trading_day(trade_date)
+    calendar = trading_calendar or WeekdayTradingCalendar()
+    rehearsal = run_one_to_two_beta_rehearsal(
+        trade_date=requested_context.trade_date,
+        trading_calendar=calendar,
+    )
+    doctor_report = live_service.build_one_to_two_doctor_report(
+        trade_date=requested_context.trade_date,
+        beta=False,
+    )
+    beta_doctor_report = live_service.build_one_to_two_doctor_report(
+        trade_date=requested_context.next_trade_date,
+        beta=True,
+    )
+    blockers = tuple(
+        f"{check.label}: {check.detail}"
+        for check in beta_doctor_report.checks
+        if check.status == "blocked" and "feishu-test sent" not in check.detail
+    )
+    rehearsal_blockers = (
+        (f"Beta 彩排: {rehearsal.summary}",)
+        if rehearsal.status != "ready"
+        else ()
+    )
+    all_blockers = rehearsal_blockers + blockers
+    status = "ready" if not all_blockers else "blocked"
+    launch_date = requested_context.next_trade_date
+    launch_commands = (
+        f"python -m client.desktop.firemoney_client.one_to_two_cli beta-rehearsal --trade-date {requested_context.trade_date}",
+        f"python -m client.desktop.firemoney_client.one_to_two_cli beta-check --trade-date {launch_date}",
+        f"python -m client.desktop.firemoney_client.one_to_two_cli beta-start --trade-date {launch_date} --loop --interval-seconds 60",
+        "python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 20",
+        "python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 20",
+    )
+    summary = (
+        f"Beta 上线计划可执行：下一交易日 {launch_date} 先验飞书，再启动值守。"
+        if status == "ready"
+        else f"Beta 上线计划仍有 {len(all_blockers)} 个阻断项，先修复再启动。"
+    )
+    return OneToTwoBetaLaunchPlan(
+        report_id=f"one-to-two-beta-plan-{requested_context.requested_date}",
+        requested_date=requested_context.requested_date,
+        trade_date=requested_context.trade_date,
+        next_trade_date=launch_date,
+        status=status,
+        summary=summary,
+        rehearsal=rehearsal,
+        doctor_report=doctor_report,
+        launch_commands=launch_commands,
+        blockers=all_blockers,
+        next_action=(
+            f"{launch_date} 盘前运行 beta-check，确认飞书 sent 后启动 beta-start。"
+            if status == "ready"
+            else "按 blockers 修复后重新运行 beta-plan。"
+        ),
+    )
