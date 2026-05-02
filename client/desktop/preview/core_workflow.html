@@ -557,7 +557,7 @@ button {
           <div class="metric"><span class="metric-label">市场温度</span><span class="metric-value">74</span></div>
           <div class="metric"><span class="metric-label">交易日</span><span class="metric-value">2026-04-30</span></div>
           <div class="metric"><span class="metric-label">候选数</span><span class="metric-value">3</span></div>
-          <div class="metric"><span class="metric-label">模拟权益</span><span class="metric-value">100000.00</span></div>
+          <div class="metric"><span class="metric-label">模拟权益</span><span class="metric-value">99496.00</span></div>
           <div class="metric"><span class="metric-label">持仓数</span><span class="metric-value">1</span></div>
         </div>
       </section>
@@ -658,7 +658,7 @@ button {
               <li class="doctor-item" data-status="ready">
                 <span class="doctor-label">模拟盘账本</span>
                 <span class="doctor-status">可运行</span>
-                <span class="doctor-detail">equity=100000.00, positions=1, closed_samples=1</span>
+                <span class="doctor-detail">equity=99496.00, positions=1, closed_samples=1</span>
               </li>
 
               <li class="doctor-item" data-status="warning">
@@ -754,12 +754,12 @@ button {
         <div class="candidate-head">
           <div>
             <div class="candidate-name">低位突破样例</div>
-            <div class="candidate-code">600001 / holding</div>
+            <div class="candidate-code">600001 / warning</div>
           </div>
-          <div class="candidate-score">0.00%</div>
+          <div class="candidate-score">-6.84%</div>
         </div>
-        <p>持仓 700 股，现价 10.52，止损 10.0。</p>
-        <p>严格 T+1：当天跌破止损只预警，不模拟卖出。</p>
+        <p>持仓 700 股，现价 9.8，止损 10.0。</p>
+        <p>跌破止损但受 T+1 约束，次日仍弱再模拟卖出。</p>
       </article>
 
           </section>
@@ -768,7 +768,7 @@ button {
             <ul class="detail-list compact">
               <li>请求日期：2026-04-30 / requested date is an A-share trading day</li>
               <li>状态：prepared / Webhook 未配置</li>
-              <li>最新事件：模拟买入，一进二事件驱动账本已记录。</li>
+              <li>最新事件：跌破止损，已发出 T+1 风险预警。</li>
             </ul>
             <div class="notification-stack">
 
@@ -783,7 +783,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">盘中事件</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>阶段：open</li><li>最新事件：模拟买入，一进二事件驱动账本已记录。</li><li>持仓：低位突破样例(600001) 700 股</li><li>成本 10.52，现价 10.52，止损 10.0</li><li>浮动盈亏：0.00 (0.00%)</li><li>纪律状态：T+1 未到，只预警不卖出</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
+          <li>交易日：2026-04-30</li><li>阶段：risk</li><li>最新事件：跌破止损，已发出 T+1 风险预警。</li><li>止损预警：低位突破样例(600001)</li><li>当前价 9.8，止损价 10.0</li><li>浮动盈亏：-504.00 (-6.84%)</li><li>位置：低位平台突破</li><li>T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
         </ul>
       </article>
 
@@ -791,7 +791,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">15:10 尾盘测评</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>权益：100000.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：3，止损预警：0，T+1 卖出：1</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：低位突破样例(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
+          <li>交易日：2026-04-30</li><li>权益：99496.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：4，止损预警：1，T+1 卖出：1</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：低位突破样例(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
         </ul>
       </article>
 
@@ -801,6 +801,13 @@ button {
 
         <li class="notification-record" data-status="prepared">
           <span>eod</span>
+          <span>prepared</span>
+          <span>20260430093100</span>
+        </li>
+
+
+        <li class="notification-record" data-status="prepared">
+          <span>watch:risk</span>
           <span>prepared</span>
           <span>20260430093100</span>
         </li>
@@ -841,7 +848,7 @@ button {
             <ul class="detail-list compact">
               <li>完成样本：1，成功样本：1</li>
               <li>已实现盈亏：266.00，最大回撤：0.00</li>
-              <li>风险预警：0</li>
+              <li>风险预警：1</li>
               <li>稳定性阶段：观察期，下一门槛：30</li>
               <li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li>
               <li>尾盘只归档和评估完成样本，不改变当日交易。</li><li>继续区分低位突破与高位接力样本。</li>

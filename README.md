@@ -118,6 +118,8 @@ python -m client.desktop.firemoney_client.one_to_two_cli notifications --workflo
 python -m client.desktop.firemoney_client.preview
 ```
 
+预览页使用隔离的临时模拟盘，会展示一进二候选、开盘模拟买入、盘中止损预警、T+1 处理纪律、尾盘测评和稳定性样本，不会改写真实 `.firemoney/paper_trades.json`。
+
 运行测试：
 
 ```powershell

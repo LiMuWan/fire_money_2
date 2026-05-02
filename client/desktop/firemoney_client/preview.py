@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -14,11 +15,34 @@ from server.firemoney_server.infrastructure.market_data import SampleMarketDataP
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
+from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
 from shared.contracts import PaperAccount, PaperTradeRecord
 
 
 PREVIEW_TRADE_DATE = "2026-04-30"
 PREVIEW_CREATED_AT = "20260430093100"
+
+
+class _PreviewRiskBreakMarketDataProvider:
+    """Preview-only snapshot that shows the same-day stop-warning state."""
+
+    def __init__(self, base_provider: SampleMarketDataProvider) -> None:
+        self._base_provider = base_provider
+
+    def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        rows = self._base_provider.load_one_to_two_rows(trade_date)
+        if not rows:
+            return rows
+        warning_row = replace(
+            rows[0],
+            latest_price=9.8,
+            open_pct=0.03,
+            ma_5=9.3,
+            ma_10=9.2,
+            ma_20=9.1,
+            recent_gain_pct=0.12,
+        )
+        return (warning_row, *rows[1:])
 
 
 def _seed_preview_closed_sample(paper_store: PaperTradeStore) -> None:
@@ -73,11 +97,13 @@ def build_preview(output_path: str | Path) -> Path:
             preview_root / "notifications.json",
             created_at_provider=lambda: PREVIEW_CREATED_AT,
         )
+        trading_calendar = WeekdayTradingCalendar()
+        sample_provider = SampleMarketDataProvider()
         service = MainChainService(
             paper_store=paper_store,
-            market_data_provider=SampleMarketDataProvider(),
+            market_data_provider=sample_provider,
             notification_store=notification_store,
-            trading_calendar=WeekdayTradingCalendar(),
+            trading_calendar=trading_calendar,
         )
         adapter = LocalMainChainAdapter(service)
         one_to_two_report = adapter.build_one_to_two_morning_report(
@@ -94,22 +120,34 @@ def build_preview(output_path: str | Path) -> Path:
             phase="auction",
             notify=False,
         )
-        one_to_two_watch_report = adapter.run_one_to_two_watch(
+        adapter.run_one_to_two_watch(
             trade_date=PREVIEW_TRADE_DATE,
             phase="open",
             notify=False,
         )
-        one_to_two_eod_review = adapter.build_one_to_two_end_of_day_review(
+        risk_service = MainChainService(
+            paper_store=paper_store,
+            market_data_provider=_PreviewRiskBreakMarketDataProvider(sample_provider),
+            notification_store=notification_store,
+            trading_calendar=trading_calendar,
+        )
+        risk_adapter = LocalMainChainAdapter(risk_service)
+        one_to_two_watch_report = risk_adapter.run_one_to_two_watch(
+            trade_date=PREVIEW_TRADE_DATE,
+            phase="risk",
+            notify=False,
+        )
+        one_to_two_eod_review = risk_adapter.build_one_to_two_end_of_day_review(
             trade_date=PREVIEW_TRADE_DATE,
             notify=False,
         )
-        one_to_two_stability_report = adapter.build_one_to_two_stability_report()
-        doctor_report = adapter.build_one_to_two_doctor_report(
+        one_to_two_stability_report = risk_adapter.build_one_to_two_stability_report()
+        doctor_report = risk_adapter.build_one_to_two_doctor_report(
             trade_date=PREVIEW_TRADE_DATE,
         )
         notification_records = adapter.load_notification_records()
         schedule_run = OneToTwoScheduler(
-            service=service,
+            service=risk_service,
             state_store=SchedulerStateStore(preview_root / "scheduler_state.json"),
         ).run_due(
             trade_date=PREVIEW_TRADE_DATE,
