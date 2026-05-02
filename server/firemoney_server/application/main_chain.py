@@ -253,9 +253,14 @@ class MainChainService:
         warning_count = sum(
             1 for event in account.events if event.event_type.value == "stop_warning"
         )
+        t1_sell_count = sum(
+            1
+            for event in account.events
+            if event.event_type == OneToTwoEventType.T1_SELL
+            and event.trade_date == report_date
+        )
         closed_trades = account.closed_trades
         success_count = sum(1 for record in closed_trades if record.success)
-        sell_count = len(closed_trades)
         realized_pnl = round(sum(record.realized_pnl for record in closed_trades), 2)
         realized_curve = []
         current = 0.0
@@ -275,7 +280,7 @@ class MainChainService:
                 report_date=report_date,
                 account=account,
                 warning_count=warning_count,
-                sell_count=sell_count,
+                t1_sell_count=t1_sell_count,
                 realized_pnl=realized_pnl,
                 stability_report=stability_report,
             ),
@@ -858,7 +863,7 @@ class MainChainService:
         report_date: str,
         account: PaperAccount,
         warning_count: int,
-        sell_count: int,
+        t1_sell_count: int,
         realized_pnl: float,
         stability_report: OneToTwoStabilityReport,
     ) -> str:
@@ -870,7 +875,7 @@ class MainChainService:
         lines = [
             f"交易日：{report_date}",
             f"权益：{account.equity:.2f}，现金：{account.cash:.2f}，观察盈亏：{realized_pnl:.2f}",
-            f"事件数：{len(account.events)}，止损预警：{warning_count}，T+1 卖出：{sell_count}",
+            f"事件数：{len(account.events)}，止损预警：{warning_count}，当日 T+1 卖出：{t1_sell_count}",
             f"已归档样本：{len(account.closed_trades)}",
             f"稳定性阶段：{stability_report.sample_stage}，下一门槛：{next_milestone}",
             f"边界建议：{stability_report.strategy_boundary_suggestion}",
