@@ -28,6 +28,7 @@ from shared.contracts import (
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
     OneToTwoStabilityReport,
+    TradingDayContext,
 )
 
 
@@ -52,6 +53,13 @@ class MainChainService:
         )
         self._feishu_notifier = feishu_notifier or FeishuNotifier()
         self._trading_calendar = trading_calendar or AkshareTradingCalendar()
+
+    def resolve_trading_day(self, trade_date: str | None = None) -> TradingDayContext:
+        """Resolve a requested date with the same calendar used by workflows."""
+
+        return self._trading_calendar.resolve(
+            trade_date or self._default_trade_date()
+        ).to_contract()
 
     def build_one_to_two_morning_report(
         self,

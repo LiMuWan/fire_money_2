@@ -76,6 +76,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli watch --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli backtest --start-date 2026-04-01 --end-date 2026-04-30 --max-trade-days 20
+python -m client.desktop.firemoney_client.one_to_two_cli schedule --no-notify
 ```
 
 盘中 watch 可按阶段手动推进：
@@ -85,6 +86,13 @@ python -m client.desktop.firemoney_client.one_to_two_cli watch --phase scan --no
 python -m client.desktop.firemoney_client.one_to_two_cli watch --phase auction --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli watch --phase open --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no-notify
+```
+
+本地调度器只推进一进二主线，会按日内时间触发早盘、`scan`、`auction`、`open`、盘中 `risk` 和尾盘，并用 `.firemoney/scheduler_state.json` 防止同一交易日同一任务重复执行。本地试跑可以固定时间：
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli schedule --trade-date 2026-04-30 --at 09:31 --sample-data --no-notify --paper-store .firemoney/tmp-paper.json --scheduler-state .firemoney/tmp-scheduler.json
+python -m client.desktop.firemoney_client.one_to_two_cli schedule --loop --interval-seconds 60
 ```
 
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。

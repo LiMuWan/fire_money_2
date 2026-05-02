@@ -105,6 +105,17 @@ Describes the 15:10 one-to-two review: trading-day context, closed sample count,
 
 Describes the strategy stability observation. Fewer than 30 samples must remain `observation` and must not automatically produce strategy-boundary conclusions.
 
+### `OneToTwoScheduleRun`, `OneToTwoScheduleTask`
+
+Describe one local scheduler tick for the one-to-two loop.
+
+Rules represented by the contracts:
+
+- scheduler output is still part of the one-to-two product line, not a generic job dashboard
+- due tasks are visible with `completed`, `skipped`, `pending`, `failed`, or `closed` status
+- repeated loop ticks can show skipped work without re-triggering paper-trading events
+- non-trading requested dates are `closed` and do not generate market scans or simulated trades
+
 ## 3. State Enums
 
 - `OneToTwoEventType`: one-to-two morning scan, candidate selected, auction confirmed, paper buy, stop warning, T+1 sell, end-of-day review, and blocked events.

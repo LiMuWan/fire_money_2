@@ -76,6 +76,8 @@ class PaperTradeStore:
                     closed_trades=account.closed_trades,
                 )
             )
+        if trade_date < account.last_trade_date:
+            return account
         if account.last_trade_date == trade_date:
             return account
         positions = tuple(

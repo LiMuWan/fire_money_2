@@ -212,6 +212,30 @@ class OneToTwoStabilityReport:
     next_action: str
 
 
+@dataclass(frozen=True)
+class OneToTwoScheduleTask:
+    task_id: str
+    mode: str
+    phase: str | None
+    scheduled_time: str
+    status: str
+    message: str
+    notification_status: NotificationStatus
+
+
+@dataclass(frozen=True)
+class OneToTwoScheduleRun:
+    run_id: str
+    trade_date: str
+    trade_context: TradingDayContext
+    requested_time: str
+    due_count: int
+    executed_count: int
+    skipped_count: int
+    tasks: tuple[OneToTwoScheduleTask, ...]
+    next_action: str
+
+
 def contract_to_dict(value: Any) -> Any:
     """Convert a shared contract into a JSON-friendly value."""
 

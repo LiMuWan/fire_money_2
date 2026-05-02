@@ -7,16 +7,19 @@ from pathlib import Path
 from client.desktop.firemoney_client import LocalMainChainAdapter
 from client.desktop.firemoney_client.preview import build_preview
 from server.firemoney_server import MainChainService
+from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
 from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
 from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
 from server.firemoney_server.infrastructure.one_to_two_config import load_one_to_two_settings
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
+from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
     FeishuNotificationResult,
     NotificationStatus,
     OneToTwoMorningReport,
+    OneToTwoScheduleRun,
     PaperTradeStatus,
     contract_to_dict,
 )
@@ -316,6 +319,16 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(len(sold.account.closed_trades), 1)
             self.assertLess(sold.account.closed_trades[0].realized_pnl, 0)
 
+    def test_paper_store_does_not_roll_account_backward(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = PaperTradeStore(Path(temp_dir) / "paper_trades.json")
+
+            current = store.prepare_for_trade_date("2026-05-06")
+            older = store.prepare_for_trade_date("2026-04-30")
+
+            self.assertEqual(current.last_trade_date, "2026-05-06")
+            self.assertEqual(older.last_trade_date, "2026-05-06")
+
     def test_stability_report_uses_closed_trade_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -372,6 +385,61 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertGreaterEqual(report.sample_count, 1)
             self.assertEqual(paper_store.load().closed_trades, ())
             self.assertEqual(paper_store.load().positions, ())
+
+    def test_scheduler_runs_due_jobs_once_per_trading_day(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            scheduler = OneToTwoScheduler(
+                service=service,
+                state_store=SchedulerStateStore(root / "scheduler_state.json"),
+            )
+
+            first = scheduler.run_due(
+                trade_date="2026-04-30",
+                at_time="09:31",
+                notify=False,
+            )
+            second = scheduler.run_due(
+                trade_date="2026-04-30",
+                at_time="09:31",
+                notify=False,
+            )
+
+            self.assertIsInstance(first, OneToTwoScheduleRun)
+            self.assertEqual(first.due_count, 4)
+            self.assertEqual(first.executed_count, 4)
+            self.assertEqual(second.executed_count, 0)
+            self.assertEqual(second.skipped_count, 4)
+            account = PaperTradeStore(root / "paper_trades.json").load()
+            self.assertEqual(len(account.positions), 1)
+            self.assertEqual(account.events[0].event_type.value, "paper_buy")
+
+    def test_scheduler_skips_non_trading_requested_dates(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            scheduler = OneToTwoScheduler(
+                service=service,
+                state_store=SchedulerStateStore(root / "scheduler_state.json"),
+            )
+
+            result = scheduler.run_due(
+                trade_date="2026-05-02",
+                at_time="15:30",
+                notify=False,
+            )
+
+            self.assertEqual(result.due_count, 0)
+            self.assertEqual(result.executed_count, 0)
+            self.assertEqual({task.status for task in result.tasks}, {"closed"})
+            self.assertEqual(PaperTradeStore(root / "paper_trades.json").load().events, ())
 
     def test_feishu_notifier_is_safe_without_webhook(self) -> None:
         old_enabled = os.environ.get("FEISHU_ENABLED")

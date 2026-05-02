@@ -10,6 +10,7 @@ The server/business layer owns deterministic one-to-two policy, state transition
 server/firemoney_server/
   application/
     main_chain.py          one-to-two workflow orchestration
+    one_to_two_scheduler.py local due-job scheduler for the one-to-two loop
   domain/
     one_to_two.py          mainboard 10cm one-to-two scoring and blocker policy
   infrastructure/
@@ -17,6 +18,7 @@ server/firemoney_server/
     market_data.py         MarketDataProvider boundary and AkShare adapter
     one_to_two_config.py   one-to-two strategy config loader
     paper_store.py         local event-driven paper-trading account
+    scheduler_state.py     completed local scheduler task state
     trading_calendar.py    trading-day context and T+1 date resolution
     config/
       one_to_two_strategy.zh_CN.json
@@ -35,6 +37,7 @@ server/firemoney_server/
 MarketDataProvider/AkShare
 -> one-to-two candidate scoring
 -> trading-day resolution
+-> local due-job scheduler
 -> event-driven paper account
 -> closed trade records
 -> Feishu notification result
@@ -57,4 +60,5 @@ MarketDataProvider/AkShare
 - `run_one_to_two_backtest()` replays historical dates into an isolated temporary paper ledger, then returns a stability report without mutating the live `.firemoney/paper_trades.json`.
 - Feishu reads only `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`.
 - Notification failures return structured results and do not stop strategy execution.
-- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, and `backtest`.
+- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, and `schedule`.
+- `schedule` runs only the one-to-two jobs that are due for the requested clock time, skips non-trading requested dates, and records completed task keys in `.firemoney/scheduler_state.json` so loop mode does not duplicate same-day notifications or paper-trading events.
