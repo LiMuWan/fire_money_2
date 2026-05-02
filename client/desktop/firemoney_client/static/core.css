@@ -222,10 +222,19 @@ button {
   background: var(--danger-soft);
 }
 
+.one-to-two-card[data-status="warning"] {
+  border-color: rgba(166, 106, 24, 0.45);
+  background: var(--warning-soft);
+}
+
 .one-to-two-card p {
   margin: 8px 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.position-card .candidate-score {
+  color: var(--danger);
 }
 
 .candidate-head {
@@ -268,6 +277,34 @@ button {
 .tag.is-risk {
   background: var(--warning-soft);
   color: var(--warning);
+}
+
+.risk-steps {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.risk-steps li {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding-top: 8px;
+  border-top: 1px solid rgba(166, 106, 24, 0.18);
+}
+
+.risk-steps span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.risk-steps strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .detail-list {

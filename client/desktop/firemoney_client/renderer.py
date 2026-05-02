@@ -13,6 +13,7 @@ from shared.contracts import (
     OneToTwoRecentSample,
     OneToTwoScheduleRun,
     OneToTwoStabilityReport,
+    PaperTradeStatus,
 )
 
 
@@ -65,17 +66,37 @@ def _render_one_to_two_position(report: OneToTwoMorningReport) -> str:
     if not account.positions:
         return '<p class="empty-note">当前没有模拟持仓，等待候选达到触发条件。</p>'
     position = account.positions[0]
+    status_label = {
+        PaperTradeStatus.HOLDING: "持仓观察",
+        PaperTradeStatus.WARNING: "止损预警",
+        PaperTradeStatus.CLOSED: "已归档",
+        PaperTradeStatus.EMPTY: "空仓",
+    }.get(position.status, position.status.value)
+    action = (
+        "当日只预警不卖出；下一交易日仍低于止损再模拟卖出。"
+        if position.status == PaperTradeStatus.WARNING
+        else "继续盯住止损位、承接强度和 T+1 纪律。"
+    )
     return f"""
-      <article class="one-to-two-card">
+      <article class="one-to-two-card position-card" data-status="{_text(position.status.value)}">
         <div class="candidate-head">
           <div>
             <div class="candidate-name">{_text(position.name)}</div>
-            <div class="candidate-code">{_text(position.symbol)} / {_text(position.status.value)}</div>
+            <div class="candidate-code">{_text(position.symbol)} / {_text(position.position_label)}</div>
           </div>
           <div class="candidate-score">{position.unrealized_pnl_pct:.2%}</div>
         </div>
-        <p>持仓 {position.quantity} 股，现价 {_text(position.latest_price)}，止损 {_text(position.stop_loss)}。</p>
-        <p>{_text(position.risk_note)}</p>
+        <div class="tags">
+          <span class="tag is-risk">{_text(status_label)}</span>
+          <span class="tag">持仓 {position.quantity} 股</span>
+          <span class="tag">现价 {_text(position.latest_price)}</span>
+          <span class="tag is-risk">止损 {_text(position.stop_loss)}</span>
+        </div>
+        <ul class="risk-steps">
+          <li><span>浮动盈亏</span><strong>{position.unrealized_pnl:.2f} / {position.unrealized_pnl_pct:.2%}</strong></li>
+          <li><span>当前纪律</span><strong>{_text(position.risk_note)}</strong></li>
+          <li><span>下一步</span><strong>{_text(action)}</strong></li>
+        </ul>
       </article>
     """
 

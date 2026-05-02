@@ -229,10 +229,19 @@ button {
   background: var(--danger-soft);
 }
 
+.one-to-two-card[data-status="warning"] {
+  border-color: rgba(166, 106, 24, 0.45);
+  background: var(--warning-soft);
+}
+
 .one-to-two-card p {
   margin: 8px 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.position-card .candidate-score {
+  color: var(--danger);
 }
 
 .candidate-head {
@@ -275,6 +284,34 @@ button {
 .tag.is-risk {
   background: var(--warning-soft);
   color: var(--warning);
+}
+
+.risk-steps {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.risk-steps li {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding-top: 8px;
+  border-top: 1px solid rgba(166, 106, 24, 0.18);
+}
+
+.risk-steps span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.risk-steps strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .detail-list {
@@ -750,16 +787,25 @@ button {
           <section class="panel one-to-two-panel">
             <h2>模拟盘与风险</h2>
 
-      <article class="one-to-two-card">
+      <article class="one-to-two-card position-card" data-status="warning">
         <div class="candidate-head">
           <div>
             <div class="candidate-name">低位突破样例</div>
-            <div class="candidate-code">600001 / warning</div>
+            <div class="candidate-code">600001 / 低位平台突破</div>
           </div>
           <div class="candidate-score">-6.84%</div>
         </div>
-        <p>持仓 700 股，现价 9.8，止损 10.0。</p>
-        <p>跌破止损但受 T+1 约束，次日仍弱再模拟卖出。</p>
+        <div class="tags">
+          <span class="tag is-risk">止损预警</span>
+          <span class="tag">持仓 700 股</span>
+          <span class="tag">现价 9.8</span>
+          <span class="tag is-risk">止损 10.0</span>
+        </div>
+        <ul class="risk-steps">
+          <li><span>浮动盈亏</span><strong>-504.00 / -6.84%</strong></li>
+          <li><span>当前纪律</span><strong>跌破止损但受 T+1 约束，次日仍弱再模拟卖出。</strong></li>
+          <li><span>下一步</span><strong>当日只预警不卖出；下一交易日仍低于止损再模拟卖出。</strong></li>
+        </ul>
       </article>
 
           </section>
