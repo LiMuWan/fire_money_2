@@ -260,6 +260,43 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(watch.account.positions, ())
             self.assertEqual(watch.account.events, ())
 
+    def test_doctor_report_checks_runtime_readiness_without_trading(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            report = service.build_one_to_two_doctor_report(trade_date="2026-05-01")
+            payload = contract_to_dict(report)
+
+            self.assertEqual(report.report_id, "one-to-two-doctor-2026-04-30")
+            self.assertEqual(report.status, "warning")
+            checks = {check.check_id: check for check in report.checks}
+            self.assertEqual(checks["strategy_config"].status, "ready")
+            self.assertEqual(checks["market_data"].status, "ready")
+            self.assertEqual(checks["paper_store"].status, "ready")
+            self.assertEqual(checks["feishu"].status, "warning")
+            self.assertEqual(checks["scheduler"].status, "ready")
+            self.assertEqual(service._paper_store.load().positions, ())
+            self.assertEqual(service._paper_store.load().events, ())
+            self.assertEqual(payload["checks"][0]["check_id"], "strategy_config")
+
+    def test_doctor_report_blocks_when_market_data_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=FailingOneToTwoProvider(),
+            )
+
+            report = service.build_one_to_two_doctor_report(trade_date="2026-05-01")
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["market_data"].status, "blocked")
+            self.assertEqual(service._paper_store.load().positions, ())
+            self.assertEqual(service._paper_store.load().events, ())
+
     def test_one_to_two_paper_buy_respects_position_and_daily_limits(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = _build_service(
@@ -862,6 +899,10 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("通知记录", html)
             self.assertIn("watch:open", html)
             self.assertIn("prepared", html)
+            self.assertIn("运行体检", html)
+            self.assertIn("一进二策略配置", html)
+            self.assertIn("行情源", html)
+            self.assertIn("飞书通知", html)
             self.assertIn("本地调度", html)
             self.assertIn("09:31", html)
             self.assertIn("watch / open", html)

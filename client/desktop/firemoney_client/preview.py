@@ -63,6 +63,9 @@ def build_preview(output_path: str | Path) -> Path:
             notify=False,
         )
         one_to_two_stability_report = adapter.build_one_to_two_stability_report()
+        doctor_report = adapter.build_one_to_two_doctor_report(
+            trade_date=PREVIEW_TRADE_DATE,
+        )
         notification_records = adapter.load_notification_records()
         schedule_run = OneToTwoScheduler(
             service=service,
@@ -78,6 +81,7 @@ def build_preview(output_path: str | Path) -> Path:
                 watch_report=one_to_two_watch_report,
                 eod_review=one_to_two_eod_review,
                 stability_report=one_to_two_stability_report,
+                doctor_report=doctor_report,
                 schedule_run=schedule_run,
                 notification_records=notification_records,
             ),

@@ -228,6 +228,25 @@ class OneToTwoStabilityReport:
 
 
 @dataclass(frozen=True)
+class OneToTwoDoctorCheck:
+    check_id: str
+    label: str
+    status: str
+    detail: str
+    next_action: str
+
+
+@dataclass(frozen=True)
+class OneToTwoDoctorReport:
+    report_id: str
+    trade_date: str
+    status: str
+    summary: str
+    checks: tuple[OneToTwoDoctorCheck, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
 class OneToTwoScheduleTask:
     task_id: str
     mode: str

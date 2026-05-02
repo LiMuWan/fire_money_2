@@ -7,6 +7,7 @@ from pathlib import Path
 
 from shared.contracts import (
     NotificationRecord,
+    OneToTwoDoctorReport,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
     OneToTwoScheduleRun,
@@ -116,6 +117,34 @@ def _render_schedule_panel(schedule_run: OneToTwoScheduleRun | None) -> str:
     """
 
 
+def _render_doctor_panel(doctor_report: OneToTwoDoctorReport | None) -> str:
+    if doctor_report is None:
+        return ""
+    labels = {
+        "ready": "可运行",
+        "warning": "需留意",
+        "blocked": "先处理",
+    }
+    return f"""
+      <section class="panel one-to-two-panel">
+        <h2>运行体检</h2>
+        <p class="next-action">{_text(doctor_report.summary)}</p>
+        <ul class="doctor-list">
+          {"".join(
+              f'''
+              <li class="doctor-item" data-status="{_text(check.status)}">
+                <span class="doctor-label">{_text(check.label)}</span>
+                <span class="doctor-status">{_text(labels.get(check.status, check.status))}</span>
+                <span class="doctor-detail">{_text(check.detail)}</span>
+              </li>
+              '''
+              for check in doctor_report.checks
+          )}
+        </ul>
+      </section>
+    """
+
+
 def _render_notification_message(title: str, message: str) -> str:
     lines = [line for line in message.splitlines() if line.strip()]
     return f"""
@@ -154,6 +183,7 @@ def render_one_to_two_workflow_html(
     watch_report: OneToTwoMorningReport,
     eod_review: OneToTwoEndOfDayReview,
     stability_report: OneToTwoStabilityReport,
+    doctor_report: OneToTwoDoctorReport | None = None,
     schedule_run: OneToTwoScheduleRun | None = None,
     notification_records: tuple[NotificationRecord, ...] = (),
 ) -> str:
@@ -212,6 +242,7 @@ def render_one_to_two_workflow_html(
           </div>
         </section>
         <aside class="side-panel">
+          {_render_doctor_panel(doctor_report)}
           {_render_schedule_panel(schedule_run)}
           <section class="panel one-to-two-panel">
             <h2>模拟盘与风险</h2>

@@ -336,6 +336,53 @@ button {
   overflow-wrap: anywhere;
 }
 
+.doctor-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doctor-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfb;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.doctor-item[data-status="ready"] {
+  border-color: rgba(31, 122, 90, 0.38);
+  background: var(--accent-soft);
+}
+
+.doctor-item[data-status="warning"] {
+  border-color: rgba(166, 106, 24, 0.36);
+  background: var(--warning-soft);
+}
+
+.doctor-item[data-status="blocked"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
+}
+
+.doctor-label,
+.doctor-status {
+  color: var(--text);
+  font-weight: 720;
+}
+
+.doctor-detail {
+  grid-column: 1 / -1;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .notification-stack {
   display: grid;
   gap: 10px;

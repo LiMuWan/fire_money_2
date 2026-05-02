@@ -30,6 +30,7 @@ def main() -> None:
             "eod",
             "backtest",
             "stability",
+            "doctor",
             "schedule",
             "notifications",
         ),
@@ -121,6 +122,8 @@ def main() -> None:
         )
     elif args.mode == "stability":
         result = adapter.build_one_to_two_stability_report()
+    elif args.mode == "doctor":
+        result = adapter.build_one_to_two_doctor_report(trade_date=args.trade_date)
     elif args.mode == "notifications":
         records = adapter.load_notification_records(
             workflow=args.workflow,

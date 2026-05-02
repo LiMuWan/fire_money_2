@@ -6,6 +6,7 @@ from server.firemoney_server import MainChainService
 from shared.contracts import (
     NotificationRecord,
     NotificationStatus,
+    OneToTwoDoctorReport,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
     OneToTwoStabilityReport,
@@ -52,6 +53,12 @@ class LocalMainChainAdapter:
 
     def build_one_to_two_stability_report(self) -> OneToTwoStabilityReport:
         return self._service.build_one_to_two_stability_report()
+
+    def build_one_to_two_doctor_report(
+        self,
+        trade_date: str | None = None,
+    ) -> OneToTwoDoctorReport:
+        return self._service.build_one_to_two_doctor_report(trade_date=trade_date)
 
     def load_notification_records(
         self,

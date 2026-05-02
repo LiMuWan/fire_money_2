@@ -128,6 +128,17 @@ Describes the strategy stability observation. Fewer than 30 samples must remain 
 
 Key fields include sample count, success rate, average return, max drawdown, stop-warning rate, low-breakout success rate, position-label distribution, and exit-reason distribution.
 
+### `OneToTwoDoctorReport`, `OneToTwoDoctorCheck`
+
+Describe runtime readiness for the one-to-two loop before the user starts morning, watch, schedule, or backtest work.
+
+Rules represented by the contracts:
+
+- doctor checks do not send notifications, create paper trades, or mutate scheduler state
+- market-data failure is `blocked` because simulated buys must not be generated without trusted rows
+- disabled or missing Feishu setup is `warning`, not `blocked`, because notification delivery must not stop strategy observation
+- each check includes a human-readable `detail` and `next_action`
+
 ### `OneToTwoScheduleRun`, `OneToTwoScheduleTask`
 
 Describe one local scheduler tick for the one-to-two loop.
@@ -154,5 +165,6 @@ Rules represented by the contracts:
 - One-to-two candidates, risk notes, stop loss, paper-trading state, Feishu notification results, and notification records are shared contracts; clients must not recompute them from raw AkShare fields.
 - Stability reports must use closed `PaperTradeRecord` samples. Samples below 30 remain observation-only.
 - Backtest output reuses `OneToTwoStabilityReport`; it does not introduce a separate product surface or write live paper-account state.
+- Doctor output reuses shared one-to-two runtime checks; clients display it but must not use it to infer hidden infrastructure details.
 - AkShare and Feishu details stay behind infrastructure adapters. Shared contracts use project-owned field names only.
 - One-to-two paper trading is simulation only; these contracts do not represent real account orders or unattended live trading.

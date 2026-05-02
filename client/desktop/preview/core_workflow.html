@@ -343,6 +343,53 @@ button {
   overflow-wrap: anywhere;
 }
 
+.doctor-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doctor-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfb;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.doctor-item[data-status="ready"] {
+  border-color: rgba(31, 122, 90, 0.38);
+  background: var(--accent-soft);
+}
+
+.doctor-item[data-status="warning"] {
+  border-color: rgba(166, 106, 24, 0.36);
+  background: var(--warning-soft);
+}
+
+.doctor-item[data-status="blocked"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
+}
+
+.doctor-label,
+.doctor-status {
+  color: var(--text);
+  font-weight: 720;
+}
+
+.doctor-detail {
+  grid-column: 1 / -1;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .notification-stack {
   display: grid;
   gap: 10px;
@@ -546,6 +593,45 @@ button {
           </div>
         </section>
         <aside class="side-panel">
+
+      <section class="panel one-to-two-panel">
+        <h2>运行体检</h2>
+        <p class="next-action">一进二运行体检有可选项未就绪，核心模拟盘可以继续。</p>
+        <ul class="doctor-list">
+
+              <li class="doctor-item" data-status="ready">
+                <span class="doctor-label">一进二策略配置</span>
+                <span class="doctor-status">可运行</span>
+                <span class="doctor-detail">min_score=70, initial_cash=100000.00, max_position_pct=8%, max_daily_trades=1</span>
+              </li>
+
+              <li class="doctor-item" data-status="ready">
+                <span class="doctor-label">行情源</span>
+                <span class="doctor-status">可运行</span>
+                <span class="doctor-detail">2026-04-30 已读取 3 条候选原始行。</span>
+              </li>
+
+              <li class="doctor-item" data-status="ready">
+                <span class="doctor-label">模拟盘账本</span>
+                <span class="doctor-status">可运行</span>
+                <span class="doctor-detail">equity=100000.00, positions=1, closed_samples=0</span>
+              </li>
+
+              <li class="doctor-item" data-status="warning">
+                <span class="doctor-label">飞书通知</span>
+                <span class="doctor-status">需留意</span>
+                <span class="doctor-detail">飞书通知未启用，策略仍会生成 prepared 通知结果。</span>
+              </li>
+
+              <li class="doctor-item" data-status="ready">
+                <span class="doctor-label">本地调度</span>
+                <span class="doctor-status">可运行</span>
+                <span class="doctor-detail">早盘 08:50, 盘中 scan/auction/open/risk, 尾盘 15:10</span>
+              </li>
+
+        </ul>
+      </section>
+
 
       <section class="panel one-to-two-panel">
         <h2>本地调度</h2>

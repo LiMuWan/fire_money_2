@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date, timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -27,6 +28,8 @@ from shared.contracts import (
     NotificationStatus,
     NotificationRecord,
     OneToTwoCandidate,
+    OneToTwoDoctorCheck,
+    OneToTwoDoctorReport,
     OneToTwoEventType,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
@@ -300,6 +303,47 @@ class MainChainService:
         account = self._paper_store.load()
         return self._stability_from_account(account)
 
+    def build_one_to_two_doctor_report(
+        self,
+        trade_date: str | None = None,
+    ) -> OneToTwoDoctorReport:
+        """Check whether the one-to-two loop is ready to run locally."""
+
+        trade_context = self._trading_calendar.resolve(
+            trade_date or self._default_trade_date()
+        )
+        checks = (
+            self._doctor_strategy_check(),
+            self._doctor_market_data_check(trade_context.trade_date),
+            self._doctor_paper_store_check(),
+            self._doctor_feishu_check(),
+            self._doctor_scheduler_check(),
+        )
+        has_blocked = any(check.status == "blocked" for check in checks)
+        has_warning = any(check.status == "warning" for check in checks)
+        status = "blocked" if has_blocked else ("warning" if has_warning else "ready")
+        summary = (
+            "一进二运行体检未通过，先修复阻断项再启动模拟盘。"
+            if status == "blocked"
+            else (
+                "一进二运行体检有可选项未就绪，核心模拟盘可以继续。"
+                if status == "warning"
+                else "一进二运行体检通过，可以按早盘、盘中、尾盘主线运行。"
+            )
+        )
+        return OneToTwoDoctorReport(
+            report_id=f"one-to-two-doctor-{trade_context.trade_date}",
+            trade_date=trade_context.trade_date,
+            status=status,
+            summary=summary,
+            checks=checks,
+            next_action=(
+                "修复 blocked 检查项后再运行 morning/watch/schedule。"
+                if status == "blocked"
+                else "继续按 morning -> watch -> eod -> stability 验证一进二。"
+            ),
+        )
+
     def load_notification_records(
         self,
         workflow: str | None = None,
@@ -454,6 +498,113 @@ class MainChainService:
             key = str(value or "未标记")
             counts[key] = counts.get(key, 0) + 1
         return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+    def _doctor_strategy_check(self) -> OneToTwoDoctorCheck:
+        settings = self._one_to_two_settings
+        valid = (
+            settings.min_score > 0
+            and settings.initial_cash > 0
+            and 0 < settings.max_position_pct <= 1
+            and settings.max_daily_trades >= 1
+        )
+        return OneToTwoDoctorCheck(
+            check_id="strategy_config",
+            label="一进二策略配置",
+            status="ready" if valid else "blocked",
+            detail=(
+                f"min_score={settings.min_score:g}, "
+                f"initial_cash={settings.initial_cash:.2f}, "
+                f"max_position_pct={settings.max_position_pct:.0%}, "
+                f"max_daily_trades={settings.max_daily_trades}"
+            ),
+            next_action=(
+                "配置有效，继续保持单一一进二主线。"
+                if valid
+                else "修复 one_to_two_strategy JSON 后再运行策略。"
+            ),
+        )
+
+    def _doctor_market_data_check(self, trade_date: str) -> OneToTwoDoctorCheck:
+        try:
+            rows = self._market_data_provider.load_one_to_two_rows(trade_date)
+        except Exception as exc:
+            return OneToTwoDoctorCheck(
+                check_id="market_data",
+                label="行情源",
+                status="blocked",
+                detail=f"无法读取 {trade_date} 一进二行情：{exc}",
+                next_action="检查 AkShare 安装、网络或改用 --sample-data 预览。",
+            )
+        return OneToTwoDoctorCheck(
+            check_id="market_data",
+            label="行情源",
+            status="ready" if rows else "warning",
+            detail=f"{trade_date} 已读取 {len(rows)} 条候选原始行。",
+            next_action=(
+                "行情源可用。"
+                if rows
+                else "数据可读但没有候选，盘前继续观察或换交易日验证。"
+            ),
+        )
+
+    def _doctor_paper_store_check(self) -> OneToTwoDoctorCheck:
+        try:
+            account = self._paper_store.load()
+        except Exception as exc:
+            return OneToTwoDoctorCheck(
+                check_id="paper_store",
+                label="模拟盘账本",
+                status="blocked",
+                detail=f"账本读取失败：{exc}",
+                next_action="修复 .firemoney/paper_trades.json 权限或内容后再运行。",
+            )
+        return OneToTwoDoctorCheck(
+            check_id="paper_store",
+            label="模拟盘账本",
+            status="ready",
+            detail=(
+                f"equity={account.equity:.2f}, "
+                f"positions={len(account.positions)}, "
+                f"closed_samples={len(account.closed_trades)}"
+            ),
+            next_action="账本可用，继续用事件驱动模拟盘记录样本。",
+        )
+
+    def _doctor_feishu_check(self) -> OneToTwoDoctorCheck:
+        enabled = os.environ.get("FEISHU_ENABLED", "").lower() == "true"
+        webhook_configured = bool(os.environ.get("FEISHU_WEBHOOK_URL", ""))
+        if enabled and not webhook_configured:
+            status = "warning"
+            detail = "FEISHU_ENABLED=true，但 FEISHU_WEBHOOK_URL 未配置。"
+            next_action = "配置 webhook，或运行时使用 --no-notify。"
+        elif enabled:
+            status = "ready"
+            detail = "飞书通知已启用，webhook 已配置。"
+            next_action = "盘前先用 --no-notify 或测试群验证消息格式。"
+        else:
+            status = "warning"
+            detail = "飞书通知未启用，策略仍会生成 prepared 通知结果。"
+            next_action = "需要群通知时设置 FEISHU_ENABLED=true 和 FEISHU_WEBHOOK_URL。"
+        return OneToTwoDoctorCheck(
+            check_id="feishu",
+            label="飞书通知",
+            status=status,
+            detail=detail,
+            next_action=next_action,
+        )
+
+    def _doctor_scheduler_check(self) -> OneToTwoDoctorCheck:
+        return OneToTwoDoctorCheck(
+            check_id="scheduler",
+            label="本地调度",
+            status="ready",
+            detail=(
+                f"早盘 {self._one_to_two_settings.morning_time}, "
+                "盘中 scan/auction/open/risk, "
+                f"尾盘 {self._one_to_two_settings.end_of_day_time}"
+            ),
+            next_action="可以手动运行 schedule，也可以用 --loop 常驻观察。",
+        )
 
     def _candidate_for_position(self, position, trade_date: str):
         from shared.contracts import OneToTwoCandidate, OneToTwoPositionProfile
