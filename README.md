@@ -59,11 +59,14 @@ MarketDataProvider/AkShare
 
 ## 配置与本地状态
 
+- 依赖清单：`requirements.txt`
 - 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
 - 模拟盘账本：`.firemoney/paper_trades.json`
 - 飞书通知归档：`.firemoney/notifications.json`
 - AkShare 原始快照缓存：`.firemoney/market_data/`
 - 本地预览：`client/desktop/preview/core_workflow.html`
+
+模拟盘 Beta 上线前检查：`docs/project/product/BETA_LAUNCH_CHECKLIST.md`
 
 飞书群机器人只读环境变量，不写入仓库：
 
@@ -74,6 +77,13 @@ MarketDataProvider/AkShare
 飞书消息由服务端业务层统一生成：早盘包含候选、拦截、止损和仓位上限；盘中包含事件、持仓、止损、T+1 状态、止损预警的次日处理计划、模拟盘提醒和刚完成的卖出/纪律退出样本；尾盘包含事件、预警、完成样本、最新样本摘要、稳定性阶段、下一样本门槛和服务端边界建议。
 
 ## 本地运行
+
+首次准备真实行情入口：
+
+```powershell
+python -m pip install -r requirements.txt
+python -m client.desktop.firemoney_client.one_to_two_cli doctor
+```
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify

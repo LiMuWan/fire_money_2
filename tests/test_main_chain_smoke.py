@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from client.desktop.firemoney_client import LocalMainChainAdapter
 from client.desktop.firemoney_client.preview import build_preview
@@ -12,7 +13,10 @@ from server.firemoney_server import MainChainService
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
 from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
-from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
+from server.firemoney_server.infrastructure.market_data import (
+    AkshareMarketDataProvider,
+    SampleMarketDataProvider,
+)
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.one_to_two_config import load_one_to_two_settings
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
@@ -325,6 +329,25 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(checks["market_data"].status, "blocked")
             self.assertEqual(service._paper_store.load().positions, ())
             self.assertEqual(service._paper_store.load().events, ())
+
+    def test_doctor_report_explains_missing_akshare_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=AkshareMarketDataProvider(),
+            )
+
+            with patch(
+                "server.firemoney_server.application.main_chain.importlib.util.find_spec",
+                return_value=None,
+            ):
+                report = service.build_one_to_two_doctor_report(trade_date="2026-05-01")
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["market_data"].status, "blocked")
+            self.assertIn("AkShare 未安装", checks["market_data"].detail)
+            self.assertIn("requirements.txt", checks["market_data"].next_action)
 
     def test_one_to_two_paper_buy_respects_position_and_daily_limits(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

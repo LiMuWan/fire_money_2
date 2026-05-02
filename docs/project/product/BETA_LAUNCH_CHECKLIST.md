@@ -1,0 +1,72 @@
+# FireMoney 模拟盘 Beta 上线检查
+
+当前上线目标只到模拟盘 Beta：接真实行情、发飞书通知、沉淀一进二样本；不连接真实账户，不自动下单。
+
+## 必过项
+
+1. 安装依赖。
+
+   ```powershell
+   python -m pip install -r requirements.txt
+   ```
+
+2. 配置飞书群机器人环境变量。
+
+   ```powershell
+   $env:FEISHU_ENABLED="true"
+   $env:FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/..."
+   ```
+
+   如群机器人开启签名校验，再设置：
+
+   ```powershell
+   $env:FEISHU_WEBHOOK_SECRET="..."
+   ```
+
+3. 运行上线前体检。
+
+   ```powershell
+   python -m client.desktop.firemoney_client.one_to_two_cli doctor
+   ```
+
+   `strategy_config`、`market_data`、`paper_store`、`scheduler` 必须为 `ready`。飞书用于值守时也必须为 `ready`。
+
+4. 先用不发通知模式做一次真实行情空跑。
+
+   ```powershell
+   python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
+   python -m client.desktop.firemoney_client.one_to_two_cli watch --phase scan --no-notify
+   python -m client.desktop.firemoney_client.one_to_two_cli watch --phase auction --no-notify
+   python -m client.desktop.firemoney_client.one_to_two_cli watch --phase open --no-notify
+   python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no-notify
+   python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
+   ```
+
+5. 确认飞书通知格式后再进入值守。
+
+   ```powershell
+   python -m client.desktop.firemoney_client.one_to_two_cli morning
+   python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 10
+   ```
+
+## Beta 值守命令
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli schedule --loop --interval-seconds 60
+```
+
+本地调度器会按 08:50 早盘、盘中 `scan/auction/open/risk`、15:10 尾盘推进同一条一进二主线，并用 `.firemoney/scheduler_state.json` 防止同日重复触发。
+
+## 不上线条件
+
+- `doctor` 有任何 `blocked`。
+- AkShare 无法读取真实行情。
+- 飞书未启用或 webhook 未配置。
+- `.firemoney/paper_trades.json` 不能读写。
+- 没有先用 `--no-notify` 完成一次真实行情空跑。
+
+## 观察期规则
+
+- 少于 30 笔闭环样本只显示观察期，不给策略边界结论。
+- 达到 30/50/100 笔后再按稳定性报告调整一进二边界。
+- 任何时候都只做模拟盘验证，不连接真实账户，不自动下单。

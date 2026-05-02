@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from datetime import date, timedelta
 from tempfile import TemporaryDirectory
@@ -609,6 +610,17 @@ class MainChainService:
         )
 
     def _doctor_market_data_check(self, trade_date: str) -> OneToTwoDoctorCheck:
+        if importlib.util.find_spec("akshare") is None and isinstance(
+            self._market_data_provider,
+            AkshareMarketDataProvider,
+        ):
+            return OneToTwoDoctorCheck(
+                check_id="market_data",
+                label="行情源",
+                status="blocked",
+                detail="AkShare 未安装，真实行情入口不可用。",
+                next_action="运行 python -m pip install -r requirements.txt 后重新执行 doctor。",
+            )
         try:
             rows = self._market_data_provider.load_one_to_two_rows(trade_date)
         except Exception as exc:
@@ -617,7 +629,7 @@ class MainChainService:
                 label="行情源",
                 status="blocked",
                 detail=f"无法读取 {trade_date} 一进二行情：{exc}",
-                next_action="检查 AkShare 安装、网络或改用 --sample-data 预览。",
+                next_action="检查 AkShare 网络、接口可用性，或改用 --sample-data 预览。",
             )
         return OneToTwoDoctorCheck(
             check_id="market_data",
@@ -668,7 +680,7 @@ class MainChainService:
         else:
             status = "warning"
             detail = "飞书通知未启用，策略仍会生成 prepared 通知结果。"
-            next_action = "需要群通知时设置 FEISHU_ENABLED=true 和 FEISHU_WEBHOOK_URL。"
+            next_action = "模拟盘 Beta 必须设置 FEISHU_ENABLED=true 和 FEISHU_WEBHOOK_URL 后再值守。"
         return OneToTwoDoctorCheck(
             check_id="feishu",
             label="飞书通知",
