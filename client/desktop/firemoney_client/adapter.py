@@ -6,6 +6,7 @@ from server.firemoney_server import MainChainService
 from shared.contracts import (
     NotificationRecord,
     NotificationStatus,
+    OneToTwoBetaReadinessReport,
     OneToTwoDoctorReport,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
@@ -72,6 +73,14 @@ class LocalMainChainAdapter:
         return self._service.send_one_to_two_feishu_test(
             trade_date=trade_date,
             notify=notify,
+        )
+
+    def build_one_to_two_beta_readiness_report(
+        self,
+        trade_date: str | None = None,
+    ) -> OneToTwoBetaReadinessReport:
+        return self._service.build_one_to_two_beta_readiness_report(
+            trade_date=trade_date,
         )
 
     def load_notification_records(

@@ -270,6 +270,17 @@ class OneToTwoDoctorReport:
 
 
 @dataclass(frozen=True)
+class OneToTwoBetaReadinessReport:
+    report_id: str
+    trade_date: str
+    status: str
+    summary: str
+    feishu_test: FeishuNotificationResult
+    doctor_report: OneToTwoDoctorReport
+    next_action: str
+
+
+@dataclass(frozen=True)
 class OneToTwoScheduleTask:
     task_id: str
     mode: str

@@ -25,17 +25,18 @@
    $env:FEISHU_WEBHOOK_SECRET="..."
    ```
 
-3. 先验证飞书真实送达。
+3. 运行一键 Beta 预检。
+
+   ```powershell
+   python -m client.desktop.firemoney_client.one_to_two_cli beta-check
+   ```
+
+   `beta-check` 会先验证飞书真实送达，再运行严格体检；不触发模拟买入或卖出。返回 `ready` 才能进入值守。HTTP 200 但飞书业务返回码失败也按 `failed` 处理。
+
+4. 如需拆开排查，可手动运行飞书测试和上线前体检。
 
    ```powershell
    python -m client.desktop.firemoney_client.one_to_two_cli feishu-test
-   ```
-
-   `feishu-test` 只用于验证群机器人联通，不会触发模拟买入或卖出；必须返回 `sent`，HTTP 200 但飞书业务返回码失败也按 `failed` 处理。
-
-4. 运行上线前体检。
-
-   ```powershell
    python -m client.desktop.firemoney_client.one_to_two_cli doctor --beta
    ```
 
@@ -74,7 +75,7 @@ Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到
 - `doctor` 有任何 `blocked`。
 - 当前不是 A 股交易日。
 - AkShare 无法读取真实行情。
-- 飞书未启用、webhook 未配置，或当前交易日没有 `feishu-test` 的 `sent` 记录。
+- `beta-check` 不是 `ready`，或飞书未启用、webhook 未配置、当前交易日没有 `feishu-test` 的 `sent` 记录。
 - `.firemoney/paper_trades.json` 不能读写。
 - `.firemoney/notifications.json`、`.firemoney/scheduler_state.json` 或 `.firemoney/scheduler_runs.json` 不能读写。
 - 没有先用 `--no-notify` 完成一次真实行情空跑。

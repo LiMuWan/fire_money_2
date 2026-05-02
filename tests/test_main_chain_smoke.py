@@ -824,6 +824,97 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(records[0].workflow, "feishu:test")
             self.assertEqual(PaperTradeStore(paper_path).load().events, ())
 
+    def test_beta_check_cli_runs_feishu_test_before_doctor(self) -> None:
+        class SendingFeishuNotifier:
+            def notify(self, title: str, message: str) -> FeishuNotificationResult:
+                return FeishuNotificationResult(
+                    status=NotificationStatus.SENT,
+                    title=title,
+                    message=message,
+                    webhook_configured=True,
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=NotificationRecordStore(root / "notifications.json"),
+            )
+            service._feishu_notifier = SendingFeishuNotifier()
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test-token",
+                },
+                clear=True,
+            ):
+                report = service.build_one_to_two_beta_readiness_report(
+                    trade_date="2026-04-30",
+                )
+
+            self.assertEqual(report.status, "ready")
+            self.assertEqual(report.feishu_test.status, NotificationStatus.SENT)
+            self.assertEqual(report.doctor_report.status, "ready")
+            self.assertIn("schedule --beta", report.next_action)
+
+    def test_beta_check_skips_feishu_test_on_non_trading_day(self) -> None:
+        class RaisingFeishuNotifier:
+            def notify(self, title: str, message: str) -> FeishuNotificationResult:
+                raise AssertionError("non-trading beta-check must not send Feishu")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=NotificationRecordStore(root / "notifications.json"),
+            )
+            service._feishu_notifier = RaisingFeishuNotifier()
+
+            report = service.build_one_to_two_beta_readiness_report(
+                trade_date="2026-05-02",
+            )
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(report.feishu_test.error, "non-trading day")
+            checks = {check.check_id: check for check in report.doctor_report.checks}
+            self.assertEqual(checks["trading_day"].status, "blocked")
+
+    def test_beta_check_cli_rejects_no_notify(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "beta-check",
+                    "--sample-data",
+                    "--no-notify",
+                    "--trade-date",
+                    "2026-04-30",
+                    "--paper-store",
+                    str(root / "paper_trades.json"),
+                    "--notification-store",
+                    str(root / "notifications.json"),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["mode"], "beta-check")
+            self.assertEqual(payload["status"], "blocked")
+            self.assertIn("--no-notify", payload["summary"])
+
     def test_scheduler_runs_are_persisted_and_read_by_cli(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1553,7 +1644,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("通知记录", html)
             self.assertIn("watch:risk", html)
             self.assertIn("prepared", html)
-            self.assertIn("运行体检", html)
+            self.assertIn("Beta 预检", html)
+            self.assertIn("beta-check", html)
+            self.assertIn("schedule --beta", html)
             self.assertIn("一进二策略配置", html)
             self.assertIn("行情源", html)
             self.assertIn("飞书通知", html)

@@ -149,8 +149,12 @@ def _render_doctor_panel(doctor_report: OneToTwoDoctorReport | None) -> str:
     }
     return f"""
       <section class="panel one-to-two-panel">
-        <h2>运行体检</h2>
+        <h2>Beta 预检</h2>
         <p class="next-action">{_text(doctor_report.summary)}</p>
+        <ul class="detail-list compact">
+          <li>上线测试入口：先运行 beta-check，返回 ready 后再启动 schedule --beta。</li>
+          <li>beta-check 会发送飞书测试并执行严格体检，不触发模拟买入或卖出。</li>
+        </ul>
         <ul class="doctor-list">
           {"".join(
               f'''

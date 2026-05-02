@@ -32,6 +32,7 @@ def main() -> None:
             "backtest",
             "stability",
             "doctor",
+            "beta-check",
             "feishu-test",
             "schedule",
             "scheduler-runs",
@@ -161,6 +162,18 @@ def main() -> None:
             trade_date=args.trade_date,
             beta=args.beta,
         )
+    elif args.mode == "beta-check":
+        if args.no_notify:
+            result = {
+                "mode": "beta-check",
+                "status": "blocked",
+                "summary": "beta-check 必须真实发送飞书测试，不能使用 --no-notify。",
+                "next_action": "移除 --no-notify，并确认 FEISHU_ENABLED 与 FEISHU_WEBHOOK_URL 已配置。",
+            }
+        else:
+            result = adapter.build_one_to_two_beta_readiness_report(
+                trade_date=args.trade_date,
+            )
     elif args.mode == "feishu-test":
         result = adapter.send_one_to_two_feishu_test(
             trade_date=args.trade_date,

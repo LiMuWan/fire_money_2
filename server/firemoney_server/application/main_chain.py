@@ -31,6 +31,7 @@ from shared.contracts import (
     FeishuNotificationResult,
     NotificationStatus,
     NotificationRecord,
+    OneToTwoBetaReadinessReport,
     OneToTwoCandidate,
     OneToTwoDoctorCheck,
     OneToTwoDoctorReport,
@@ -347,6 +348,54 @@ class MainChainService:
         )
         self._record_notification("feishu:test", trade_context.trade_date, result)
         return result
+
+    def build_one_to_two_beta_readiness_report(
+        self,
+        trade_date: str | None = None,
+    ) -> OneToTwoBetaReadinessReport:
+        """Run the non-trading Beta readiness gate for the one-to-two loop."""
+
+        requested_date = trade_date or self._default_trade_date()
+        trade_context = self._trading_calendar.resolve(
+            requested_date
+        )
+        feishu_test = (
+            FeishuNotificationResult(
+                status=NotificationStatus.PREPARED,
+                title="FireMoney 一进二飞书测试",
+                message="非交易日不发送飞书测试，不触发模拟买入或卖出。",
+                webhook_configured=bool(os.environ.get("FEISHU_WEBHOOK_URL", "")),
+                error="non-trading day",
+            )
+            if not trade_context.is_trading_day
+            else self.send_one_to_two_feishu_test(
+                trade_date=trade_context.trade_date,
+                notify=True,
+            )
+        )
+        doctor_report = self.build_one_to_two_doctor_report(
+            trade_date=requested_date,
+            beta=True,
+        )
+        status = "ready" if doctor_report.status == "ready" else "blocked"
+        summary = (
+            "模拟盘 Beta 预检通过，可以启动一进二值守。"
+            if status == "ready"
+            else "模拟盘 Beta 预检未通过，先修复阻断项再启动值守。"
+        )
+        return OneToTwoBetaReadinessReport(
+            report_id=f"one-to-two-beta-readiness-{trade_context.trade_date}",
+            trade_date=trade_context.trade_date,
+            status=status,
+            summary=summary,
+            feishu_test=feishu_test,
+            doctor_report=doctor_report,
+            next_action=(
+                "运行 schedule --beta --loop --interval-seconds 60。"
+                if status == "ready"
+                else "按 doctor_report.checks 修复 blocked 项后重新运行 beta-check。"
+            ),
+        )
 
     def build_one_to_two_doctor_report(
         self,
