@@ -135,11 +135,15 @@ class AkshareMarketDataProvider:
             previous_pool = ak.stock_zt_pool_previous_em(
                 date=trade_date.replace("-", "")
             )
-            spot = ak.stock_zh_a_spot_em()
             self._cache_payload(trade_date, "stock_zt_pool_previous_em", previous_pool)
-            self._cache_payload(trade_date, "stock_zh_a_spot_em", spot)
         except Exception:
             return self._fallback_rows(trade_date)
+
+        try:
+            spot = ak.stock_zh_a_spot_em()
+            self._cache_payload(trade_date, "stock_zh_a_spot_em", spot)
+        except Exception:
+            spot = ()
         rows = self._rows_from_previous_pool(
             previous_pool,
             spot,

@@ -473,6 +473,67 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("AkShare 未安装", checks["market_data"].detail)
             self.assertIn("requirements.txt", checks["market_data"].next_action)
 
+    def test_akshare_provider_uses_previous_pool_when_spot_snapshot_fails(self) -> None:
+        class FakeFrame:
+            def __init__(self, records: list[dict[str, object]]) -> None:
+                self._records = records
+
+            def to_dict(self, orient: str) -> list[dict[str, object]]:
+                if orient != "records":
+                    raise AssertionError(f"unexpected orient: {orient}")
+                return self._records
+
+        class FakeAk:
+            def stock_zt_pool_previous_em(self, date: str) -> FakeFrame:
+                if date != "20260430":
+                    raise AssertionError(f"unexpected date: {date}")
+                return FakeFrame(
+                    [
+                        {
+                            "代码": "600123",
+                            "名称": "低位测试",
+                            "最新价": 11.0,
+                            "涨停价": 11.0,
+                            "成交额": 200000000,
+                            "换手率": 6.0,
+                            "昨日封板时间": "100500",
+                            "昨日连板数": 1,
+                            "竞价金额": 12000000,
+                            "开盘涨幅": 4.0,
+                            "所属行业": "测试题材",
+                        }
+                    ]
+                )
+
+            def stock_zh_a_spot_em(self) -> FakeFrame:
+                raise RuntimeError("spot snapshot unavailable")
+
+            def stock_zh_a_hist(self, **_kwargs: object) -> FakeFrame:
+                return FakeFrame(
+                    [
+                        {"收盘": 9.0, "最低": 8.8, "最高": 9.4},
+                        {"收盘": 9.4, "最低": 9.0, "最高": 9.8},
+                        {"收盘": 10.0, "最低": 9.6, "最高": 10.8},
+                    ]
+                )
+
+        real_import = __import__
+
+        def fake_import(name: str, *args: object, **kwargs: object):
+            if name == "akshare":
+                return FakeAk()
+            return real_import(name, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            provider = AkshareMarketDataProvider(cache_dir=Path(temp_dir))
+            with patch("builtins.__import__", side_effect=fake_import):
+                rows = provider.load_one_to_two_rows("2026-04-30")
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].symbol, "600123")
+        self.assertEqual(rows[0].board, "主板")
+        self.assertEqual(rows[0].theme, "测试题材")
+
     def test_one_to_two_paper_buy_respects_position_and_daily_limits(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = _build_service(
