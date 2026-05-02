@@ -147,6 +147,7 @@ Rules represented by the contracts:
 - doctor checks do not send notifications, create paper trades, or mutate scheduler state
 - market-data failure is `blocked` because simulated buys must not be generated without trusted rows
 - disabled or missing Feishu setup is `warning`, not `blocked`, because notification delivery must not stop strategy observation
+- Beta readiness includes scheduler audit storage so watch coverage can be reviewed after the run
 - each check includes a human-readable `detail` and `next_action`
 
 ### `OneToTwoScheduleRun`, `OneToTwoScheduleTask`
@@ -160,6 +161,7 @@ Rules represented by the contracts:
 - expired tasks are missed execution windows and must not be backfilled into simulated buys or stale risk checks
 - repeated loop ticks can show skipped work without re-triggering paper-trading events
 - non-trading requested dates are `closed` and do not generate market scans or simulated trades
+- scheduler audit records persist the JSON-friendly schedule run payload for local review
 
 ## 3. State Enums
 

@@ -20,6 +20,7 @@ from server.firemoney_server.infrastructure.one_to_two_config import (
 )
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
+from server.firemoney_server.infrastructure.scheduler_run_store import SchedulerRunStore
 from server.firemoney_server.infrastructure.trading_calendar import (
     AkshareTradingCalendar,
     TradingCalendar,
@@ -51,6 +52,7 @@ class MainChainService:
         paper_store: PaperTradeStore | None = None,
         feishu_notifier: FeishuNotifier | None = None,
         notification_store: NotificationRecordStore | None = None,
+        scheduler_run_store: SchedulerRunStore | None = None,
         trading_calendar: TradingCalendar | None = None,
     ) -> None:
         self._one_to_two_settings = one_to_two_settings or load_one_to_two_settings()
@@ -63,6 +65,7 @@ class MainChainService:
         )
         self._feishu_notifier = feishu_notifier or FeishuNotifier()
         self._notification_store = notification_store or NotificationRecordStore()
+        self._scheduler_run_store = scheduler_run_store or SchedulerRunStore()
         self._trading_calendar = trading_calendar or AkshareTradingCalendar()
 
     def resolve_trading_day(self, trade_date: str | None = None) -> TradingDayContext:
@@ -331,6 +334,7 @@ class MainChainService:
             self._doctor_paper_store_check(),
             self._doctor_feishu_check(beta=beta),
             self._doctor_scheduler_check(),
+            self._doctor_scheduler_run_store_check(),
         )
         has_blocked = any(check.status == "blocked" for check in checks)
         has_warning = any(check.status == "warning" for check in checks)
@@ -709,6 +713,26 @@ class MainChainService:
                 f"尾盘 {self._one_to_two_settings.end_of_day_time}"
             ),
             next_action="可以手动运行 schedule，也可以用 --loop 常驻观察。",
+        )
+
+    def _doctor_scheduler_run_store_check(self) -> OneToTwoDoctorCheck:
+        try:
+            records = self._scheduler_run_store.load(limit=1)
+            self._scheduler_run_store.path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            return OneToTwoDoctorCheck(
+                check_id="scheduler_runs",
+                label="调度审计",
+                status="blocked",
+                detail=f"无法读取或准备 {self._scheduler_run_store.path}：{exc}",
+                next_action="修复 .firemoney 目录权限后再启动 Beta 值守。",
+            )
+        return OneToTwoDoctorCheck(
+            check_id="scheduler_runs",
+            label="调度审计",
+            status="ready",
+            detail=f"审计记录可读写，recent_records={len(records)}。",
+            next_action="值守后用 scheduler-runs 查看每次调度覆盖情况。",
         )
 
     def _candidate_for_position(self, position, trade_date: str):

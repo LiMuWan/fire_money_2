@@ -19,6 +19,7 @@ server/firemoney_server/
     notification_store.py  local notification result records
     one_to_two_config.py   one-to-two strategy config loader
     paper_store.py         local event-driven paper-trading account
+    scheduler_run_store.py local scheduler run audit records
     scheduler_state.py     completed local scheduler task state
     trading_calendar.py    trading-day context and T+1 date resolution
     config/
@@ -62,15 +63,16 @@ MarketDataProvider/AkShare
 - Stability review also reports position-label distribution, exit-reason distribution, and capped recent closed samples so strategy quality can be judged by sample composition, not only headline win rate.
 - Stability review exposes 30/50/100 sample stages and service-owned boundary suggestions; below 30 samples remain observation-only.
 - End-of-day review uses closed trade records for sample count, success count, realized P/L, drawdown, stability stage, next sample milestone, and boundary suggestion; a T+1 sell event is not counted as success unless the closed sample is profitable.
-- `build_one_to_two_doctor_report()` checks strategy config, market data, paper ledger, Feishu environment, and scheduler readiness without sending notifications or creating paper trades.
+- `build_one_to_two_doctor_report()` checks strategy config, market data, paper ledger, Feishu environment, scheduler readiness, and scheduler audit storage without sending notifications or creating paper trades.
 - `run_one_to_two_backtest()` replays historical dates into an isolated temporary paper ledger, then returns a stability report without mutating the live `.firemoney/paper_trades.json`.
 - Feishu reads only `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`.
 - Application workflows format one-to-two notification content before calling Feishu: morning messages include candidates, blockers, stop loss, and position cap; watch messages include event, position, stop loss, T+1 status, the next-day handling plan for same-day stop warnings, completed sell/discipline-exit sample summaries, and simulation-only warning; end-of-day messages include events, warnings, closed samples, latest sample summary, stability stage, next sample milestone, and service-owned boundary suggestion.
 - Notification results are appended to `.firemoney/notifications.json` for review. Internal workflow reuse must not duplicate records, so `watch` suppresses its internal morning-report record.
 - Notification failures return structured results and do not stop strategy execution.
-- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `stability`, `doctor`, `schedule`, and `notifications`.
+- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `stability`, `doctor`, `schedule`, `notifications`, and `scheduler-runs`.
 - `stability` reads the current `.firemoney/paper_trades.json` closed samples and returns `OneToTwoStabilityReport` without mutating live state.
 - `doctor` returns one-to-two runtime readiness checks and treats missing market data as `blocked`; disabled Feishu is only a `warning` because notifications must not block simulation.
 - `notifications` reads recent `.firemoney/notifications.json` records with optional workflow/status/limit filters, so Feishu delivery can be audited without opening the preview page.
 - `schedule` runs only one-to-two jobs that are due and still inside their execution window. Missed windows are marked `expired` and are not backfilled, so a late afternoon scheduler start cannot create stale open-phase paper buys.
 - Completed, skipped, and expired task keys are recorded in `.firemoney/scheduler_state.json` so loop mode does not duplicate same-day notifications or paper-trading events.
+- Each scheduler tick is appended to `.firemoney/scheduler_runs.json`; `scheduler-runs` reads recent run records so Beta watch coverage can be audited separately from Feishu delivery.

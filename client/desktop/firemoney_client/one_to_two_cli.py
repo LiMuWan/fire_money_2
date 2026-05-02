@@ -113,17 +113,18 @@ def main() -> None:
         if args.notification_store
         else None
     )
-    service = MainChainService(
-        market_data_provider=provider,
-        paper_store=paper_store,
-        notification_store=notification_store,
-    )
-    adapter = LocalMainChainAdapter(service)
     scheduler_run_store = (
         SchedulerRunStore(args.scheduler_runs)
         if args.scheduler_runs
         else SchedulerRunStore()
     )
+    service = MainChainService(
+        market_data_provider=provider,
+        paper_store=paper_store,
+        notification_store=notification_store,
+        scheduler_run_store=scheduler_run_store,
+    )
+    adapter = LocalMainChainAdapter(service)
     if args.mode == "morning":
         result = adapter.build_one_to_two_morning_report(
             trade_date=args.trade_date,

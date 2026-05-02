@@ -41,6 +41,7 @@ def _build_service(
     market_data_provider=None,
     paper_store: PaperTradeStore | None = None,
     notification_store: NotificationRecordStore | None = None,
+    scheduler_run_store: SchedulerRunStore | None = None,
     trading_calendar=None,
 ) -> MainChainService:
     return MainChainService(
@@ -48,6 +49,8 @@ def _build_service(
         paper_store=paper_store or PaperTradeStore(root / "paper_trades.json"),
         notification_store=notification_store
         or NotificationRecordStore(root / "notifications.json"),
+        scheduler_run_store=scheduler_run_store
+        or SchedulerRunStore(root / "scheduler_runs.json"),
         trading_calendar=trading_calendar or WeekdayTradingCalendar(),
     )
 
@@ -312,6 +315,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(checks["paper_store"].status, "ready")
             self.assertEqual(checks["feishu"].status, "warning")
             self.assertEqual(checks["scheduler"].status, "ready")
+            self.assertEqual(checks["scheduler_runs"].status, "ready")
             self.assertEqual(service._paper_store.load().positions, ())
             self.assertEqual(service._paper_store.load().events, ())
             self.assertEqual(payload["checks"][0]["check_id"], "strategy_config")
@@ -1106,6 +1110,8 @@ class MainChainSmokeTest(unittest.TestCase):
             paper_path = root / "paper_trades.json"
             scheduler_path = root / "scheduler_state.json"
             scheduler_run_path = root / "scheduler_runs.json"
+            scheduler_run_path.parent.mkdir(parents=True, exist_ok=True)
+            scheduler_run_path.write_text("{}", encoding="utf-8")
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -1136,7 +1142,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["status"], "blocked")
             self.assertEqual(payload["report_id"], "one-to-two-doctor-2026-04-30")
             self.assertFalse(scheduler_path.exists())
-            self.assertFalse(scheduler_run_path.exists())
+            self.assertEqual(scheduler_run_path.read_text(encoding="utf-8"), "{}")
             self.assertEqual(PaperTradeStore(paper_path).load().events, ())
 
     def test_beta_schedule_cli_rejects_no_notify(self) -> None:
