@@ -400,6 +400,12 @@ class MainChainService:
         sell_count = sum(1 for record in account.closed_trades if record.success)
         warning_count = sum(record.warning_count for record in account.closed_trades)
         total_return = sum(record.realized_pnl_pct for record in account.closed_trades)
+        position_label_distribution = self._count_by(
+            record.position_label for record in account.closed_trades
+        )
+        exit_reason_distribution = self._count_by(
+            record.exit_reason for record in account.closed_trades
+        )
         low_breakout_records = tuple(
             record
             for record in account.closed_trades
@@ -431,6 +437,8 @@ class MainChainService:
                 if low_breakout_records
                 else 0.0
             ),
+            position_label_distribution=position_label_distribution,
+            exit_reason_distribution=exit_reason_distribution,
             status=status,
             summary=(
                 "样本处于观察期，暂不自动给出策略边界结论。"
@@ -439,6 +447,13 @@ class MainChainService:
             ),
             next_action="继续积累至少 30 笔一进二样本。",
         )
+
+    def _count_by(self, values) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for value in values:
+            key = str(value or "未标记")
+            counts[key] = counts.get(key, 0) + 1
+        return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
     def _candidate_for_position(self, position, trade_date: str):
         from shared.contracts import OneToTwoCandidate, OneToTwoPositionProfile

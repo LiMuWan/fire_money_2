@@ -566,6 +566,8 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(stability.sample_count, 1)
             self.assertEqual(stability.stop_warning_rate, 1.0)
             self.assertLess(stability.average_return_pct, 0)
+            self.assertEqual(stability.position_label_distribution["低位平台突破"], 1)
+            self.assertEqual(stability.exit_reason_distribution["stop_loss_t1"], 1)
             self.assertEqual(stability.status, "observation")
 
     def test_end_of_day_review_uses_closed_trade_outcomes(self) -> None:
@@ -808,6 +810,8 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("已执行", html)
             self.assertIn("尾盘测评", html)
             self.assertIn("稳定性观察", html)
+            self.assertIn("位置分布", html)
+            self.assertIn("退出原因", html)
             self.assertIn("2 个交易日不走强则纪律退出", html)
             self.assertIn("持仓 700 股", html)
             self.assertNotIn("示例龙头", html)

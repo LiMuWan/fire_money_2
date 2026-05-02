@@ -59,6 +59,7 @@ MarketDataProvider/AkShare
 - Trading dates are resolved before market data and paper trading. Closed dates use the previous A-share trading day so weekends and holidays do not generate false scans.
 - `watch` supports `scan`, `auction`, `open`, and `risk` phases. Only the `open` phase can create a paper buy; `risk` handles stop-warning and T+1 sell events.
 - Completed exits create `PaperTradeRecord` samples. Stability metrics use these closed trade records, not raw event counts.
+- Stability review also reports position-label and exit-reason distributions so strategy quality can be judged by sample composition, not only headline win rate.
 - End-of-day review uses closed trade records for sample count, success count, realized P/L, and drawdown; a T+1 sell event is not counted as success unless the closed sample is profitable.
 - `run_one_to_two_backtest()` replays historical dates into an isolated temporary paper ledger, then returns a stability report without mutating the live `.firemoney/paper_trades.json`.
 - Feishu reads only `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`.

@@ -126,6 +126,8 @@ Rules represented by the contract:
 
 Describes the strategy stability observation. Fewer than 30 samples must remain `observation` and must not automatically produce strategy-boundary conclusions.
 
+Key fields include sample count, success rate, average return, max drawdown, stop-warning rate, low-breakout success rate, position-label distribution, and exit-reason distribution.
+
 ### `OneToTwoScheduleRun`, `OneToTwoScheduleTask`
 
 Describe one local scheduler tick for the one-to-two loop.

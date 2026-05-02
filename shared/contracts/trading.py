@@ -220,6 +220,8 @@ class OneToTwoStabilityReport:
     max_drawdown: float
     stop_warning_rate: float
     low_breakout_success_rate: float
+    position_label_distribution: dict[str, int]
+    exit_reason_distribution: dict[str, int]
     status: str
     summary: str
     next_action: str

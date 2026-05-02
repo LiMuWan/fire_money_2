@@ -143,6 +143,12 @@ def _render_notification_records(records: tuple[NotificationRecord, ...]) -> str
     )
 
 
+def _render_distribution(values: dict[str, int]) -> str:
+    if not values:
+        return "暂无样本"
+    return "，".join(f"{_text(label)} {count}" for label, count in list(values.items())[:4])
+
+
 def render_one_to_two_workflow_html(
     report: OneToTwoMorningReport,
     watch_report: OneToTwoMorningReport,
@@ -246,6 +252,8 @@ def render_one_to_two_workflow_html(
               <li>成功率：{stability_report.success_rate:.2%}</li>
               <li>平均收益：{stability_report.average_return_pct:.2%}</li>
               <li>止损预警率：{stability_report.stop_warning_rate:.2%}</li>
+              <li>位置分布：{_render_distribution(stability_report.position_label_distribution)}</li>
+              <li>退出原因：{_render_distribution(stability_report.exit_reason_distribution)}</li>
               <li>{_text(stability_report.next_action)}</li>
             </ul>
           </section>
