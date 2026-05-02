@@ -32,6 +32,7 @@ def main() -> None:
             "backtest",
             "stability",
             "doctor",
+            "feishu-test",
             "schedule",
             "scheduler-runs",
             "notifications",
@@ -159,6 +160,11 @@ def main() -> None:
         result = adapter.build_one_to_two_doctor_report(
             trade_date=args.trade_date,
             beta=args.beta,
+        )
+    elif args.mode == "feishu-test":
+        result = adapter.send_one_to_two_feishu_test(
+            trade_date=args.trade_date,
+            notify=not args.no_notify,
         )
     elif args.mode == "notifications":
         records = adapter.load_notification_records(

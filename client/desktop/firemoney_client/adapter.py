@@ -64,6 +64,16 @@ class LocalMainChainAdapter:
             beta=beta,
         )
 
+    def send_one_to_two_feishu_test(
+        self,
+        trade_date: str | None = None,
+        notify: bool = True,
+    ):
+        return self._service.send_one_to_two_feishu_test(
+            trade_date=trade_date,
+            notify=notify,
+        )
+
     def load_notification_records(
         self,
         workflow: str | None = None,

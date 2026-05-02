@@ -47,10 +47,13 @@
 5. 确认飞书通知格式后再进入值守。
 
    ```powershell
+   python -m client.desktop.firemoney_client.one_to_two_cli feishu-test
    python -m client.desktop.firemoney_client.one_to_two_cli morning
    python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 10
    python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 10
    ```
+
+   `feishu-test` 只用于验证群机器人联通，不会触发模拟买入或卖出。
 
 ## Beta 值守命令
 

@@ -664,6 +664,42 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["records"][0]["workflow"], "watch:open")
             self.assertEqual(payload["records"][0]["status"], "prepared")
 
+    def test_feishu_test_cli_records_connectivity_check_without_trading(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            notification_path = root / "notifications.json"
+            paper_path = root / "paper_trades.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "feishu-test",
+                    "--sample-data",
+                    "--no-notify",
+                    "--trade-date",
+                    "2026-04-30",
+                    "--paper-store",
+                    str(paper_path),
+                    "--notification-store",
+                    str(notification_path),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+            records = NotificationRecordStore(notification_path).load()
+
+            self.assertEqual(payload["status"], "prepared")
+            self.assertIn("不是交易信号", payload["message"])
+            self.assertEqual(records[0].workflow, "feishu:test")
+            self.assertEqual(PaperTradeStore(paper_path).load().events, ())
+
     def test_scheduler_runs_are_persisted_and_read_by_cli(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

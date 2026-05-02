@@ -94,6 +94,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli backtest --start-date 2026-04-01 --end-date 2026-04-30 --max-trade-days 20
 python -m client.desktop.firemoney_client.one_to_two_cli stability
 python -m client.desktop.firemoney_client.one_to_two_cli doctor
+python -m client.desktop.firemoney_client.one_to_two_cli feishu-test --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 20
 python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 20
@@ -117,7 +118,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli schedule --beta --loop 
 
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
 
-`doctor` 是运行前体检，只检查策略配置、行情源、本地状态文件、飞书和调度，不发送通知、不产生交易。`backtest` 使用隔离临时账本做历史回放，不会改写 `.firemoney/paper_trades.json`。`stability` 读取当前模拟盘已闭环样本，用来查看真实观察期累计质量。两类输出都遵守样本门槛：少于 30 笔只显示观察期。
+`doctor` 是运行前体检，只检查策略配置、行情源、本地状态文件、飞书和调度，不发送通知、不产生交易。`feishu-test` 只验证飞书群机器人联通并归档结果，不触发模拟买卖。`backtest` 使用隔离临时账本做历史回放，不会改写 `.firemoney/paper_trades.json`。`stability` 读取当前模拟盘已闭环样本，用来查看真实观察期累计质量。两类输出都遵守样本门槛：少于 30 笔只显示观察期。
 
 查看飞书触达记录：
 

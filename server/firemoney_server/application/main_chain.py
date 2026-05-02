@@ -322,6 +322,32 @@ class MainChainService:
         account = self._paper_store.load()
         return self._stability_from_account(account)
 
+    def send_one_to_two_feishu_test(
+        self,
+        trade_date: str | None = None,
+        notify: bool = True,
+    ) -> FeishuNotificationResult:
+        """Send or prepare a Feishu connectivity test for the one-to-two loop."""
+
+        trade_context = self._trading_calendar.resolve(
+            trade_date or self._default_trade_date()
+        )
+        message = "\n".join(
+            (
+                f"交易日：{trade_context.trade_date}",
+                "用途：模拟盘 Beta 飞书联通测试",
+                "说明：这不是交易信号，不触发模拟买入或卖出。",
+                "后续：收到后再运行 doctor --beta 和 schedule --beta。",
+            )
+        )
+        result = self._notify_or_prepare(
+            notify=notify,
+            title="FireMoney 一进二飞书测试",
+            message=message,
+        )
+        self._record_notification("feishu:test", trade_context.trade_date, result)
+        return result
+
     def build_one_to_two_doctor_report(
         self,
         trade_date: str | None = None,
