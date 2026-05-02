@@ -315,6 +315,49 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(service._paper_store.load().events, ())
             self.assertEqual(payload["checks"][0]["check_id"], "strategy_config")
 
+    def test_beta_doctor_blocks_when_feishu_is_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            with patch.dict(os.environ, {}, clear=True):
+                report = service.build_one_to_two_doctor_report(
+                    trade_date="2026-05-01",
+                    beta=True,
+                )
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["market_data"].status, "ready")
+            self.assertEqual(checks["feishu"].status, "blocked")
+            self.assertIn("FEISHU_ENABLED=true", checks["feishu"].next_action)
+
+    def test_beta_doctor_accepts_feishu_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://example.com/hook",
+                },
+                clear=True,
+            ):
+                report = service.build_one_to_two_doctor_report(
+                    trade_date="2026-05-01",
+                    beta=True,
+                )
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "ready")
+            self.assertEqual(checks["feishu"].status, "ready")
+
     def test_doctor_report_blocks_when_market_data_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = _build_service(

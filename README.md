@@ -82,7 +82,7 @@ MarketDataProvider/AkShare
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m client.desktop.firemoney_client.one_to_two_cli doctor
+python -m client.desktop.firemoney_client.one_to_two_cli doctor --beta
 ```
 
 ```powershell

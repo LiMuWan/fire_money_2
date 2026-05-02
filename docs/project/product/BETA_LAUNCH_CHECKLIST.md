@@ -26,10 +26,10 @@
 3. 运行上线前体检。
 
    ```powershell
-   python -m client.desktop.firemoney_client.one_to_two_cli doctor
+   python -m client.desktop.firemoney_client.one_to_two_cli doctor --beta
    ```
 
-   `strategy_config`、`market_data`、`paper_store`、`scheduler` 必须为 `ready`。飞书用于值守时也必须为 `ready`。
+   `strategy_config`、`market_data`、`paper_store`、`feishu`、`scheduler` 必须全部为 `ready`。
 
 4. 先用不发通知模式做一次真实行情空跑。
 

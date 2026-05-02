@@ -318,6 +318,7 @@ class MainChainService:
     def build_one_to_two_doctor_report(
         self,
         trade_date: str | None = None,
+        beta: bool = False,
     ) -> OneToTwoDoctorReport:
         """Check whether the one-to-two loop is ready to run locally."""
 
@@ -328,7 +329,7 @@ class MainChainService:
             self._doctor_strategy_check(),
             self._doctor_market_data_check(trade_context.trade_date),
             self._doctor_paper_store_check(),
-            self._doctor_feishu_check(),
+            self._doctor_feishu_check(beta=beta),
             self._doctor_scheduler_check(),
         )
         has_blocked = any(check.status == "blocked" for check in checks)
@@ -666,17 +667,25 @@ class MainChainService:
             next_action="账本可用，继续用事件驱动模拟盘记录样本。",
         )
 
-    def _doctor_feishu_check(self) -> OneToTwoDoctorCheck:
+    def _doctor_feishu_check(self, beta: bool = False) -> OneToTwoDoctorCheck:
         enabled = os.environ.get("FEISHU_ENABLED", "").lower() == "true"
         webhook_configured = bool(os.environ.get("FEISHU_WEBHOOK_URL", ""))
         if enabled and not webhook_configured:
-            status = "warning"
+            status = "blocked" if beta else "warning"
             detail = "FEISHU_ENABLED=true，但 FEISHU_WEBHOOK_URL 未配置。"
-            next_action = "配置 webhook，或运行时使用 --no-notify。"
+            next_action = (
+                "模拟盘 Beta 必须配置 webhook；否则无法值守盘中事件。"
+                if beta
+                else "配置 webhook，或运行时使用 --no-notify。"
+            )
         elif enabled:
             status = "ready"
             detail = "飞书通知已启用，webhook 已配置。"
             next_action = "盘前先用 --no-notify 或测试群验证消息格式。"
+        elif beta:
+            status = "blocked"
+            detail = "模拟盘 Beta 需要飞书值守，但 FEISHU_ENABLED 未开启。"
+            next_action = "设置 FEISHU_ENABLED=true 和 FEISHU_WEBHOOK_URL 后重新执行 doctor --beta。"
         else:
             status = "warning"
             detail = "飞书通知未启用，策略仍会生成 prepared 通知结果。"

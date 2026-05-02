@@ -83,6 +83,11 @@ def main() -> None:
         action="store_true",
         help="Use deterministic sample rows instead of AkShare.",
     )
+    parser.add_argument(
+        "--beta",
+        action="store_true",
+        help="Use stricter readiness checks for simulated Beta watch mode.",
+    )
     args = parser.parse_args()
 
     provider = SampleMarketDataProvider() if args.sample_data else AkshareMarketDataProvider()
@@ -123,7 +128,10 @@ def main() -> None:
     elif args.mode == "stability":
         result = adapter.build_one_to_two_stability_report()
     elif args.mode == "doctor":
-        result = adapter.build_one_to_two_doctor_report(trade_date=args.trade_date)
+        result = adapter.build_one_to_two_doctor_report(
+            trade_date=args.trade_date,
+            beta=args.beta,
+        )
     elif args.mode == "notifications":
         records = adapter.load_notification_records(
             workflow=args.workflow,

@@ -57,8 +57,12 @@ class LocalMainChainAdapter:
     def build_one_to_two_doctor_report(
         self,
         trade_date: str | None = None,
+        beta: bool = False,
     ) -> OneToTwoDoctorReport:
-        return self._service.build_one_to_two_doctor_report(trade_date=trade_date)
+        return self._service.build_one_to_two_doctor_report(
+            trade_date=trade_date,
+            beta=beta,
+        )
 
     def load_notification_records(
         self,
