@@ -10,7 +10,7 @@
    python -m pip install -r requirements.txt
    ```
 
-2. 配置飞书群机器人环境变量。
+2. 配置飞书通知环境变量。
 
    ```powershell
    $env:FEISHU_ENABLED="true"
@@ -24,6 +24,18 @@
    ```powershell
    $env:FEISHU_WEBHOOK_SECRET="..."
    ```
+
+   如果使用飞书应用机器人，则改为配置：
+
+   ```powershell
+   $env:FEISHU_ENABLED="true"
+   $env:FEISHU_APP_ID="..."
+   $env:FEISHU_APP_SECRET="..."
+   $env:FEISHU_RECEIVE_ID="oc_..."
+   $env:FEISHU_RECEIVE_ID_TYPE="chat_id"
+   ```
+
+   本机也可以把这些值放到被忽略的 `.firemoney/feishu.env`，CLI 启动时会自动读取，避免把密钥写入仓库。
 
 3. 运行一键 Beta 预检。
 
@@ -75,7 +87,7 @@ Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到
 - `doctor` 有任何 `blocked`。
 - 当前不是 A 股交易日。
 - AkShare 无法读取真实行情。
-- `beta-check` 不是 `ready`，或飞书未启用、webhook 未配置、当前交易日没有 `feishu-test` 的 `sent` 记录。
+- `beta-check` 不是 `ready`，或飞书未启用、通知凭据未配置、当前交易日没有 `feishu-test` 的 `sent` 记录。
 - `.firemoney/paper_trades.json` 不能读写。
 - `.firemoney/notifications.json`、`.firemoney/scheduler_state.json` 或 `.firemoney/scheduler_runs.json` 不能读写。
 - 没有先用 `--no-notify` 完成一次真实行情空跑。

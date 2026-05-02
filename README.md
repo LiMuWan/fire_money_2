@@ -70,11 +70,21 @@ MarketDataProvider/AkShare
 
 模拟盘 Beta 上线前检查：`docs/project/product/BETA_LAUNCH_CHECKLIST.md`
 
-飞书群机器人只读环境变量，不写入仓库：
+飞书通知只读环境变量，不写入仓库。可以用群机器人 Webhook：
 
 - `FEISHU_ENABLED=true/false`
 - `FEISHU_WEBHOOK_URL`
 - `FEISHU_WEBHOOK_SECRET` 可选
+
+也可以用飞书应用机器人：
+
+- `FEISHU_ENABLED=true`
+- `FEISHU_APP_ID`
+- `FEISHU_APP_SECRET`
+- `FEISHU_RECEIVE_ID`
+- `FEISHU_RECEIVE_ID_TYPE=chat_id`
+
+本机可把这些值写在被忽略的 `.firemoney/feishu.env`，CLI 启动时会自动读取，进程环境变量优先级更高。
 
 飞书消息由服务端业务层统一生成：早盘包含候选、拦截、止损和仓位上限；盘中包含事件、持仓、止损、T+1 状态、止损预警的次日处理计划、模拟盘提醒和刚完成的卖出/纪律退出样本；尾盘包含事件、预警、完成样本、最新样本摘要、稳定性阶段、下一样本门槛和服务端边界建议。
 
@@ -88,6 +98,16 @@ $env:FEISHU_ENABLED="true"
 $env:FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/..."
 python -m client.desktop.firemoney_client.one_to_two_cli beta-check
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --beta --loop --interval-seconds 60
+```
+
+应用机器人模式也可以放入 `.firemoney/feishu.env`：
+
+```text
+FEISHU_ENABLED=true
+FEISHU_APP_ID=...
+FEISHU_APP_SECRET=...
+FEISHU_RECEIVE_ID=oc_...
+FEISHU_RECEIVE_ID_TYPE=chat_id
 ```
 
 ```powershell

@@ -15,6 +15,7 @@ from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
     SampleMarketDataProvider,
 )
+from server.firemoney_server.infrastructure.local_env import load_local_feishu_env
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.scheduler_run_store import SchedulerRunStore
@@ -98,6 +99,7 @@ def main() -> None:
         help="Use stricter readiness checks for simulated Beta watch mode.",
     )
     args = parser.parse_args()
+    load_local_feishu_env()
     if args.beta and args.mode == "schedule" and args.no_notify:
         result = {
             "mode": "schedule",

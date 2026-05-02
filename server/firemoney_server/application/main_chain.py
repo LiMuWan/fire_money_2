@@ -385,7 +385,7 @@ class MainChainService:
                 status=NotificationStatus.PREPARED,
                 title="FireMoney 一进二飞书测试",
                 message="Beta 预检未发送飞书测试，不触发模拟买入或卖出。",
-                webhook_configured=bool(os.environ.get("FEISHU_WEBHOOK_URL", "")),
+                webhook_configured=self._has_feishu_delivery_config(),
                 error=self._beta_readiness_skip_reason(
                     trade_context.is_trading_day,
                     not_ready_preflight_checks,
@@ -862,19 +862,22 @@ class MainChainService:
         beta: bool = False,
     ) -> OneToTwoDoctorCheck:
         enabled = os.environ.get("FEISHU_ENABLED", "").lower() == "true"
-        webhook_configured = bool(os.environ.get("FEISHU_WEBHOOK_URL", ""))
-        if enabled and not webhook_configured:
+        webhook = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
+        webhook_configured = bool(webhook)
+        app_configured = self._has_feishu_app_config()
+        app_partial = self._has_feishu_app_partial_config()
+        if enabled and not webhook_configured and not app_configured:
             status = "blocked" if beta else "warning"
-            detail = "FEISHU_ENABLED=true，但 FEISHU_WEBHOOK_URL 未配置。"
+            detail = "FEISHU_ENABLED=true，但飞书 webhook 或应用机器人配置不完整。"
             next_action = (
-                "模拟盘 Beta 必须配置 webhook；否则无法值守盘中事件。"
+                "模拟盘 Beta 必须配置 FEISHU_WEBHOOK_URL，或者 FEISHU_APP_ID/FEISHU_APP_SECRET/FEISHU_RECEIVE_ID。"
                 if beta
-                else "配置 webhook，或运行时使用 --no-notify。"
+                else "配置飞书 webhook 或应用机器人，或运行时使用 --no-notify。"
             )
-        elif enabled:
-            valid_webhook = self._is_feishu_webhook(
-                os.environ.get("FEISHU_WEBHOOK_URL", "")
-            )
+            if app_partial:
+                detail = "飞书应用机器人环境变量已部分配置，但缺少必需项。"
+        elif enabled and webhook_configured:
+            valid_webhook = self._is_feishu_webhook(webhook)
             if not valid_webhook:
                 status = "blocked" if beta else "warning"
                 detail = "FEISHU_WEBHOOK_URL 不是有效的飞书群机器人 webhook。"
@@ -891,14 +894,27 @@ class MainChainService:
                     if beta
                     else "盘前先用 feishu-test 验证消息能到群。"
                 )
+        elif enabled and app_configured:
+            if beta and not self._has_sent_feishu_test(trade_date):
+                status = "blocked"
+                detail = "飞书应用机器人已配置，但当前交易日还没有 feishu-test sent 记录。"
+                next_action = "先运行 feishu-test 并确认返回 sent，再重新执行 doctor --beta。"
+            else:
+                status = "ready"
+                detail = "飞书应用机器人已配置，receive_id 已配置。"
+                next_action = (
+                    "飞书联通已验证，可以进入 Beta 值守。"
+                    if beta
+                    else "盘前先用 feishu-test 验证消息能到群。"
+                )
         elif beta:
             status = "blocked"
             detail = "模拟盘 Beta 需要飞书值守，但 FEISHU_ENABLED 未开启。"
-            next_action = "设置 FEISHU_ENABLED=true 和 FEISHU_WEBHOOK_URL 后重新执行 doctor --beta。"
+            next_action = "设置 FEISHU_ENABLED=true 和飞书 webhook 或应用机器人后重新执行 doctor --beta。"
         else:
             status = "warning"
             detail = "飞书通知未启用，策略仍会生成 prepared 通知结果。"
-            next_action = "模拟盘 Beta 必须设置 FEISHU_ENABLED=true 和 FEISHU_WEBHOOK_URL 后再值守。"
+            next_action = "模拟盘 Beta 必须设置 FEISHU_ENABLED=true 和飞书通知凭据后再值守。"
         return OneToTwoDoctorCheck(
             check_id="feishu",
             label="飞书通知",
@@ -922,6 +938,30 @@ class MainChainService:
             and parsed.netloc in {"open.feishu.cn", "open.larksuite.com"}
             and parsed.path.startswith("/open-apis/bot/v2/hook/")
             and len(parsed.path.rsplit("/", 1)[-1]) > 0
+        )
+
+    def _has_feishu_delivery_config(self) -> bool:
+        return bool(os.environ.get("FEISHU_WEBHOOK_URL", "").strip()) or self._has_feishu_app_config()
+
+    def _has_feishu_app_config(self) -> bool:
+        return bool(
+            os.environ.get("FEISHU_APP_ID", "").strip()
+            and os.environ.get("FEISHU_APP_SECRET", "").strip()
+            and (
+                os.environ.get("FEISHU_RECEIVE_ID", "").strip()
+                or os.environ.get("FEISHU_OPEN_CHAT_ID", "").strip()
+            )
+        )
+
+    def _has_feishu_app_partial_config(self) -> bool:
+        return any(
+            os.environ.get(key, "").strip()
+            for key in (
+                "FEISHU_APP_ID",
+                "FEISHU_APP_SECRET",
+                "FEISHU_RECEIVE_ID",
+                "FEISHU_OPEN_CHAT_ID",
+            )
         )
 
     def _doctor_scheduler_check(self) -> OneToTwoDoctorCheck:

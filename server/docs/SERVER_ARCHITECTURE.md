@@ -14,7 +14,8 @@ server/firemoney_server/
   domain/
     one_to_two.py          mainboard 10cm one-to-two scoring and blocker policy
   infrastructure/
-    feishu_notifier.py     Feishu group robot webhook adapter
+    feishu_notifier.py     Feishu webhook/app robot adapter
+    local_env.py           ignored local Feishu secret loader
     market_data.py         MarketDataProvider boundary and AkShare adapter
     notification_store.py  local notification result records
     one_to_two_config.py   one-to-two strategy config loader
@@ -65,7 +66,8 @@ MarketDataProvider/AkShare
 - End-of-day review uses closed trade records for sample count, success count, realized P/L, drawdown, stability stage, next sample milestone, and boundary suggestion; a T+1 sell event is not counted as success unless the closed sample is profitable.
 - `build_one_to_two_doctor_report()` checks strategy config, trading-day readiness, market data, local state storage, Feishu environment, scheduler readiness, and scheduler audit storage without sending notifications or creating paper trades.
 - `run_one_to_two_backtest()` replays historical dates into an isolated temporary paper ledger, then returns a stability report without mutating the live `.firemoney/paper_trades.json`.
-- Feishu reads only `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`.
+- Feishu reads only notification environment variables. Webhook mode uses `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`; app robot mode uses `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_RECEIVE_ID`, and `FEISHU_RECEIVE_ID_TYPE`.
+- `.firemoney/feishu.env` is an ignored local secret file and is loaded by the CLI without overriding process environment variables.
 - Application workflows format one-to-two notification content before calling Feishu: morning messages include candidates, blockers, stop loss, and position cap; watch messages include event, position, stop loss, T+1 status, the next-day handling plan for same-day stop warnings, completed sell/discipline-exit sample summaries, and simulation-only warning; end-of-day messages include events, warnings, closed samples, latest sample summary, stability stage, next sample milestone, and service-owned boundary suggestion.
 - Notification results are appended to `.firemoney/notifications.json` for review. Internal workflow reuse must not duplicate records, so `watch` suppresses its internal morning-report record.
 - Notification failures return structured results and do not stop strategy execution.

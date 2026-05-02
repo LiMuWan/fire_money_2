@@ -13,6 +13,7 @@ from server.firemoney_server import MainChainService
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
 from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
+from server.firemoney_server.infrastructure.local_env import load_local_feishu_env
 from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
     SampleMarketDataProvider,
@@ -455,6 +456,47 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(report.status, "ready")
             self.assertEqual(checks["trading_day"].status, "ready")
             self.assertEqual(checks["feishu"].status, "ready")
+
+    def test_beta_doctor_accepts_verified_feishu_app_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = NotificationRecordStore(root / "notifications.json")
+            store.append(
+                workflow="feishu:test",
+                trade_date="2026-04-30",
+                result=FeishuNotificationResult(
+                    status=NotificationStatus.SENT,
+                    title="FireMoney 一进二飞书测试",
+                    message="sent",
+                    webhook_configured=True,
+                ),
+            )
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=store,
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_APP_ID": "cli_test",
+                    "FEISHU_APP_SECRET": "secret_test",
+                    "FEISHU_RECEIVE_ID": "oc_test",
+                    "FEISHU_RECEIVE_ID_TYPE": "chat_id",
+                },
+                clear=True,
+            ):
+                report = service.build_one_to_two_doctor_report(
+                    trade_date="2026-04-30",
+                    beta=True,
+                )
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "ready")
+            self.assertEqual(checks["feishu"].status, "ready")
+            self.assertIn("应用机器人", checks["feishu"].detail)
 
     def test_beta_doctor_blocks_invalid_feishu_webhook_url(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1612,6 +1654,92 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(failed.status, NotificationStatus.FAILED)
         self.assertIn("9499", failed.error or "")
         self.assertIn("sign invalid", failed.error or "")
+
+    def test_feishu_notifier_sends_with_app_credentials(self) -> None:
+        class FakeFeishuResponse:
+            status = 200
+
+            def __init__(self, body: bytes) -> None:
+                self._body = body
+
+            def __enter__(self) -> "FakeFeishuResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return self._body
+
+        env = {
+            "FEISHU_ENABLED": "true",
+            "FEISHU_APP_ID": "cli_test",
+            "FEISHU_APP_SECRET": "secret_test",
+            "FEISHU_RECEIVE_ID": "oc_test",
+            "FEISHU_RECEIVE_ID_TYPE": "chat_id",
+        }
+        captured = []
+
+        def fake_urlopen(req, timeout=8):
+            captured.append(req)
+            if len(captured) == 1:
+                return FakeFeishuResponse(
+                    b'{"code":0,"tenant_access_token":"tenant_token"}'
+                )
+            return FakeFeishuResponse(b'{"code":0,"data":{"message_id":"om_test"}}')
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch(
+                "server.firemoney_server.infrastructure.feishu_notifier.request.urlopen",
+                side_effect=fake_urlopen,
+            ):
+                sent = FeishuNotifier().notify("title", "message")
+
+        self.assertEqual(sent.status, NotificationStatus.SENT)
+        self.assertTrue(sent.webhook_configured)
+        self.assertEqual(len(captured), 2)
+        self.assertIn("/open-apis/auth/v3/tenant_access_token/internal", captured[0].full_url)
+        self.assertIn(
+            "/open-apis/im/v1/messages?receive_id_type=chat_id",
+            captured[1].full_url,
+        )
+        self.assertEqual(captured[1].get_header("Authorization"), "Bearer tenant_token")
+        send_payload = json.loads(captured[1].data.decode("utf-8"))
+        self.assertEqual(send_payload["receive_id"], "oc_test")
+        self.assertEqual(send_payload["msg_type"], "text")
+        content = json.loads(send_payload["content"])
+        self.assertIn("title", content["text"])
+        self.assertIn("message", content["text"])
+
+    def test_local_feishu_env_loads_only_allowed_missing_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / "feishu.env"
+            env_path.write_text(
+                "\n".join(
+                    (
+                        "FEISHU_ENABLED=true",
+                        "FEISHU_APP_ID=cli_test",
+                        "FEISHU_APP_SECRET=secret_test",
+                        "FEISHU_RECEIVE_ID=oc_test",
+                        "IGNORED_KEY=ignored",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"FEISHU_APP_ID": "already_set"}, clear=True):
+                loaded = load_local_feishu_env(env_path)
+
+                self.assertEqual(
+                    loaded,
+                    (
+                        "FEISHU_ENABLED",
+                        "FEISHU_APP_SECRET",
+                        "FEISHU_RECEIVE_ID",
+                    ),
+                )
+                self.assertEqual(os.environ["FEISHU_APP_ID"], "already_set")
+                self.assertEqual(os.environ["FEISHU_RECEIVE_ID"], "oc_test")
+                self.assertNotIn("IGNORED_KEY", os.environ)
 
     def test_client_adapter_exposes_only_one_to_two_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
