@@ -149,6 +149,14 @@ def main() -> None:
             ),
         }
     else:
+        if args.beta:
+            readiness = adapter.build_one_to_two_doctor_report(
+                trade_date=args.trade_date,
+                beta=True,
+            )
+            if readiness.status != "ready":
+                print(json.dumps(contract_to_dict(readiness), ensure_ascii=False, indent=2))
+                return
         scheduler = OneToTwoScheduler(
             service=service,
             state_store=(

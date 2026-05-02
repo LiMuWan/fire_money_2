@@ -109,7 +109,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --trade-date 2026-04-30 --at 09:31 --sample-data --no-notify --paper-store .firemoney/tmp-paper.json --scheduler-state .firemoney/tmp-scheduler.json
-python -m client.desktop.firemoney_client.one_to_two_cli schedule --loop --interval-seconds 60
+python -m client.desktop.firemoney_client.one_to_two_cli schedule --beta --loop --interval-seconds 60
 ```
 
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
