@@ -75,6 +75,36 @@ def _risk_break_row(trade_date: str) -> OneToTwoMarketRow:
     )
 
 
+def _weak_after_two_days_row(trade_date: str) -> OneToTwoMarketRow:
+    return OneToTwoMarketRow(
+        symbol="600001",
+        name="低位突破样例",
+        trade_date=trade_date,
+        board="主板",
+        is_st=False,
+        is_delisting=False,
+        listing_days=1200,
+        latest_price=10.6,
+        previous_close=10.52,
+        limit_up_price=11.57,
+        first_limit_up_time="10:05",
+        sealed_amount=32000000,
+        turnover_amount=180000000,
+        turnover_rate=6.2,
+        open_pct=0.01,
+        auction_amount=12000000,
+        low_20=8.8,
+        high_60=10.6,
+        pressure_price=11.8,
+        ma_5=10.1,
+        ma_10=9.8,
+        ma_20=9.3,
+        recent_gain_pct=0.18,
+        theme="低位平台突破",
+        market_temperature=74,
+    )
+
+
 class StaticOneToTwoProvider:
     def __init__(self, rows: tuple[OneToTwoMarketRow, ...]) -> None:
         self._rows = rows
@@ -458,6 +488,39 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(len(sold.account.closed_trades), 1)
             self.assertLess(sold.account.closed_trades[0].realized_pnl, 0)
 
+    def test_weak_position_exits_after_two_trading_days(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            buy_service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+            buy_service.run_one_to_two_watch(
+                trade_date="2026-04-30",
+                phase="open",
+                notify=False,
+            )
+            weak_service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider(
+                    (_weak_after_two_days_row("2026-05-07"),)
+                ),
+                paper_store=paper_store,
+            )
+
+            weak = weak_service.run_one_to_two_watch(
+                trade_date="2026-05-07",
+                phase="risk",
+                notify=False,
+            )
+
+            self.assertEqual(weak.account.positions, ())
+            self.assertEqual(weak.account.events[0].event_type.value, "discipline_exit")
+            self.assertEqual(weak.account.closed_trades[0].exit_reason, "discipline_weak_after_2_days")
+            self.assertEqual(weak.account.closed_trades[0].holding_trade_days, 2)
+
     def test_paper_store_does_not_roll_account_backward(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = PaperTradeStore(Path(temp_dir) / "paper_trades.json")
@@ -714,6 +777,8 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(payload["strategy_id"], settings.strategy_id)
         self.assertEqual(settings.max_position_pct, 0.08)
         self.assertEqual(settings.max_daily_trades, 1)
+        self.assertEqual(settings.max_holding_trade_days, 2)
+        self.assertEqual(settings.discipline_exit_min_gain_pct, 0.03)
         self.assertIn("创业板", settings.excluded_boards)
 
     def test_preview_file_can_be_generated_without_legacy_surface(self) -> None:
@@ -743,6 +808,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("已执行", html)
             self.assertIn("尾盘测评", html)
             self.assertIn("稳定性观察", html)
+            self.assertIn("2 个交易日不走强则纪律退出", html)
             self.assertIn("持仓 700 股", html)
             self.assertNotIn("示例龙头", html)
             self.assertNotIn("csv_export", html)

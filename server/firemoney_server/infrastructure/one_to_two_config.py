@@ -29,6 +29,8 @@ class OneToTwoStrategySettings:
     high_deviation_block_pct: float
     recent_gain_block_pct: float
     near_pressure_pct: float
+    max_holding_trade_days: int
+    discipline_exit_min_gain_pct: float
     minimum_sample_for_stability: int
     excluded_boards: tuple[str, ...]
     exclude_st: bool
@@ -63,6 +65,8 @@ def load_one_to_two_settings(
         high_deviation_block_pct=float(parameters["high_deviation_block_pct"]),
         recent_gain_block_pct=float(parameters["recent_gain_block_pct"]),
         near_pressure_pct=float(parameters["near_pressure_pct"]),
+        max_holding_trade_days=int(parameters["max_holding_trade_days"]),
+        discipline_exit_min_gain_pct=float(parameters["discipline_exit_min_gain_pct"]),
         minimum_sample_for_stability=int(parameters["minimum_sample_for_stability"]),
         excluded_boards=tuple(str(item) for item in exclude["boards"]),
         exclude_st=bool(exclude["st"]),

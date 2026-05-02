@@ -153,6 +153,8 @@ class MainChainService:
             )
             if matched and phase in {"open", "risk"}:
                 account = self._paper_store.update_risk(matched)
+                if account.positions and phase == "risk":
+                    account = self._exit_if_discipline_requires(matched)
         elif ready and phase == "scan":
             account = self._paper_store.record_candidate_event(
                 ready[0],
@@ -192,6 +194,45 @@ class MainChainService:
             notification=notification,
             next_action="继续盯住止损位和 T+1 纪律。",
         )
+
+    def _exit_if_discipline_requires(
+        self,
+        candidate: OneToTwoCandidate,
+    ) -> PaperAccount:
+        account = self._paper_store.load()
+        if not account.positions:
+            return account
+        position = account.positions[0]
+        if not position.can_sell_today:
+            return account
+        holding_trade_days = self._holding_trade_days(
+            opened_at=position.opened_at,
+            trade_date=candidate.trade_date,
+        )
+        if holding_trade_days < self._one_to_two_settings.max_holding_trade_days:
+            return account
+        if position.unrealized_pnl_pct >= self._one_to_two_settings.discipline_exit_min_gain_pct:
+            return account
+        return self._paper_store.exit_position(
+            candidate,
+            exit_reason="discipline_weak_after_2_days",
+            message="持仓超过 2 个交易日未继续走强，按一进二纪律退出。",
+            holding_trade_days=holding_trade_days,
+        )
+
+    def _holding_trade_days(self, opened_at: str, trade_date: str) -> int:
+        if opened_at >= trade_date:
+            return 0
+        current = opened_at
+        count = 0
+        while current < trade_date:
+            next_context = self._trading_calendar.resolve(current)
+            next_date = next_context.next_trade_date
+            if next_date <= current:
+                break
+            current = next_date
+            count += 1
+        return count
 
     def build_one_to_two_end_of_day_review(
         self,

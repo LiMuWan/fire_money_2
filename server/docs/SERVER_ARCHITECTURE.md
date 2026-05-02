@@ -55,6 +55,7 @@ MarketDataProvider/AkShare
 - If market data is unavailable, the service returns a blocked morning report and no paper buy can be generated.
 - Hard blockers include ST, delisting, new stock, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, and one-word unreachable boards.
 - Same-day stop loss breaches create warning events only; T+1 sell events are allowed only after the position rolls to the next day.
+- Positions that have lasted at least `max_holding_trade_days` and still have not reached `discipline_exit_min_gain_pct` are closed through a discipline exit during `risk`.
 - Trading dates are resolved before market data and paper trading. Closed dates use the previous A-share trading day so weekends and holidays do not generate false scans.
 - `watch` supports `scan`, `auction`, `open`, and `risk` phases. Only the `open` phase can create a paper buy; `risk` handles stop-warning and T+1 sell events.
 - Completed exits create `PaperTradeRecord` samples. Stability metrics use these closed trade records, not raw event counts.

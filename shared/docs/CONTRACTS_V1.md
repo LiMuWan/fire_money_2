@@ -79,6 +79,7 @@ Rules represented by the contracts:
 - same-day positions carry `can_sell_today=False`
 - same-day stop loss breaches are warning events, not sell events
 - T+1 exits are represented by `OneToTwoEventType.T1_SELL`
+- weak positions that exceed the configured holding window are represented by `OneToTwoEventType.DISCIPLINE_EXIT`
 - completed exits are stored as `PaperTradeRecord` samples with entry, exit, P/L, holding days, exit reason, position label, and warning count
 
 ### `FeishuNotificationResult`

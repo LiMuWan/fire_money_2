@@ -48,7 +48,7 @@ def _render_one_to_two_candidates(report: OneToTwoMorningReport) -> str:
           <p>{_text(candidate.rationale)}</p>
           <ul class="detail-list compact">
             <li>首板 {candidate.first_board_score}/25，竞价 {candidate.auction_score}/20，位置 {candidate.position_score}/25，流动性 {candidate.liquidity_score}/15</li>
-            <li>买入价 {_text(candidate.entry_price)}，仓位上限 {candidate.position_limit_pct:.0%}，严格 T+1</li>
+            <li>买入价 {_text(candidate.entry_price)}，仓位上限 {candidate.position_limit_pct:.0%}，严格 T+1，2 个交易日不走强则纪律退出</li>
             {"".join(f"<li>{_text(item)}</li>" for item in candidate.blockers[:3])}
             {"".join(f"<li>{_text(item)}</li>" for item in candidate.warnings[:2])}
           </ul>
