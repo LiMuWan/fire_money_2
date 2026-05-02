@@ -55,7 +55,6 @@
 6. 确认通知和审计记录后再进入值守。
 
    ```powershell
-   python -m client.desktop.firemoney_client.one_to_two_cli morning
    python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 10
    python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 10
    ```
