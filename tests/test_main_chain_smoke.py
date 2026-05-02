@@ -24,6 +24,8 @@ from shared.contracts import (
     NotificationStatus,
     OneToTwoMorningReport,
     OneToTwoScheduleRun,
+    PaperAccount,
+    PaperTradeRecord,
     PaperTradeStatus,
     contract_to_dict,
 )
@@ -145,6 +147,33 @@ class StaticOneToTwoProvider:
 class FailingOneToTwoProvider:
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         raise RuntimeError("market data unavailable")
+
+
+def _closed_trade_record(index: int, realized_pnl_pct: float = 0.02) -> PaperTradeRecord:
+    entry_price = 10.0
+    exit_price = round(entry_price * (1 + realized_pnl_pct), 2)
+    quantity = 100
+    entry_amount = entry_price * quantity
+    exit_amount = exit_price * quantity
+    return PaperTradeRecord(
+        trade_id=f"sample-{index}",
+        symbol=f"600{index % 1000:03d}",
+        name=f"样本{index}",
+        opened_at="2026-04-30",
+        closed_at="2026-05-06",
+        entry_price=entry_price,
+        exit_price=exit_price,
+        quantity=quantity,
+        entry_amount=entry_amount,
+        exit_amount=exit_amount,
+        realized_pnl=round(exit_amount - entry_amount, 2),
+        realized_pnl_pct=realized_pnl_pct,
+        holding_trade_days=1,
+        exit_reason="take_profit" if realized_pnl_pct > 0 else "stop_loss_t1",
+        position_label="低位平台突破",
+        success=realized_pnl_pct > 0,
+        warning_count=0 if realized_pnl_pct > 0 else 1,
+    )
 
 
 class MainChainSmokeTest(unittest.TestCase):
@@ -606,6 +635,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(stability.position_label_distribution["低位平台突破"], 1)
             self.assertEqual(stability.exit_reason_distribution["stop_loss_t1"], 1)
             self.assertEqual(stability.status, "observation")
+            self.assertEqual(stability.sample_stage, "观察期")
+            self.assertEqual(stability.next_milestone, 30)
+            self.assertIn("少于 30", stability.strategy_boundary_suggestion)
 
     def test_stability_cli_reads_current_paper_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -659,11 +691,95 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["report_id"], "one-to-two-stability")
             self.assertEqual(payload["sample_count"], 1)
             self.assertEqual(payload["status"], "observation")
+            self.assertEqual(payload["sample_stage"], "观察期")
+            self.assertEqual(payload["next_milestone"], 30)
             self.assertEqual(payload["exit_reason_distribution"]["stop_loss_t1"], 1)
             self.assertEqual(
                 payload["position_label_distribution"]["低位平台突破"],
                 1,
             )
+
+    def test_stability_report_adds_30_50_100_sample_stage_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            account = paper_store.load()
+            paper_store.save(
+                PaperAccount(
+                    account_id=account.account_id,
+                    last_trade_date="2026-05-06",
+                    cash=account.cash,
+                    initial_cash=account.initial_cash,
+                    equity=account.equity,
+                    max_position_pct=account.max_position_pct,
+                    max_daily_trades=account.max_daily_trades,
+                    daily_trade_count=account.daily_trade_count,
+                    positions=account.positions,
+                    events=account.events,
+                    closed_trades=tuple(
+                        _closed_trade_record(index)
+                        for index in range(30)
+                    ),
+                )
+            )
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+
+            stage_30 = service.build_one_to_two_stability_report()
+            self.assertEqual(stage_30.status, "reviewable")
+            self.assertEqual(stage_30.sample_stage, "30 笔初评")
+            self.assertEqual(stage_30.next_milestone, 50)
+            self.assertIn("低位平台突破", stage_30.strategy_boundary_suggestion)
+
+            account_30 = paper_store.load()
+            paper_store.save(
+                PaperAccount(
+                    account_id=account_30.account_id,
+                    last_trade_date=account_30.last_trade_date,
+                    cash=account_30.cash,
+                    initial_cash=account_30.initial_cash,
+                    equity=account_30.equity,
+                    max_position_pct=account_30.max_position_pct,
+                    max_daily_trades=account_30.max_daily_trades,
+                    daily_trade_count=account_30.daily_trade_count,
+                    positions=account_30.positions,
+                    events=account_30.events,
+                    closed_trades=tuple(
+                        _closed_trade_record(index)
+                        for index in range(50)
+                    ),
+                )
+            )
+            stage_50 = service.build_one_to_two_stability_report()
+            self.assertEqual(stage_50.sample_stage, "50 笔复评")
+            self.assertEqual(stage_50.next_milestone, 100)
+
+            account_50 = paper_store.load()
+            paper_store.save(
+                PaperAccount(
+                    account_id=account_50.account_id,
+                    last_trade_date=account_50.last_trade_date,
+                    cash=account_50.cash,
+                    initial_cash=account_50.initial_cash,
+                    equity=account_50.equity,
+                    max_position_pct=account_50.max_position_pct,
+                    max_daily_trades=account_50.max_daily_trades,
+                    daily_trade_count=account_50.daily_trade_count,
+                    positions=account_50.positions,
+                    events=account_50.events,
+                    closed_trades=tuple(
+                        _closed_trade_record(index)
+                        for index in range(100)
+                    ),
+                )
+            )
+            stage_100 = service.build_one_to_two_stability_report()
+            self.assertEqual(stage_100.sample_stage, "100 笔定边界")
+            self.assertEqual(stage_100.next_milestone, 0)
+            self.assertIn("100 笔以上复盘", stage_100.next_action)
 
     def test_end_of_day_review_uses_closed_trade_outcomes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -911,6 +1027,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("稳定性观察", html)
             self.assertIn("位置分布", html)
             self.assertIn("退出原因", html)
+            self.assertIn("阶段", html)
+            self.assertIn("下一门槛", html)
+            self.assertIn("边界建议", html)
             self.assertIn("2 个交易日不走强则纪律退出", html)
             self.assertIn("持仓 700 股", html)
             self.assertNotIn("示例龙头", html)

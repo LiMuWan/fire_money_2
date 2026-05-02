@@ -60,6 +60,7 @@ MarketDataProvider/AkShare
 - `watch` supports `scan`, `auction`, `open`, and `risk` phases. Only the `open` phase can create a paper buy; `risk` handles stop-warning and T+1 sell events.
 - Completed exits create `PaperTradeRecord` samples. Stability metrics use these closed trade records, not raw event counts.
 - Stability review also reports position-label and exit-reason distributions so strategy quality can be judged by sample composition, not only headline win rate.
+- Stability review exposes 30/50/100 sample stages and service-owned boundary suggestions; below 30 samples remain observation-only.
 - End-of-day review uses closed trade records for sample count, success count, realized P/L, and drawdown; a T+1 sell event is not counted as success unless the closed sample is profitable.
 - `build_one_to_two_doctor_report()` checks strategy config, market data, paper ledger, Feishu environment, and scheduler readiness without sending notifications or creating paper trades.
 - `run_one_to_two_backtest()` replays historical dates into an isolated temporary paper ledger, then returns a stability report without mutating the live `.firemoney/paper_trades.json`.

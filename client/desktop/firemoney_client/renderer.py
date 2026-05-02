@@ -280,11 +280,13 @@ def render_one_to_two_workflow_html(
             <p class="next-action">{_text(stability_report.summary)}</p>
             <ul class="detail-list compact">
               <li>样本数：{stability_report.sample_count}</li>
+              <li>阶段：{_text(stability_report.sample_stage)}，下一门槛：{_text(stability_report.next_milestone or "滚动复盘")}</li>
               <li>成功率：{stability_report.success_rate:.2%}</li>
               <li>平均收益：{stability_report.average_return_pct:.2%}</li>
               <li>止损预警率：{stability_report.stop_warning_rate:.2%}</li>
               <li>位置分布：{_render_distribution(stability_report.position_label_distribution)}</li>
               <li>退出原因：{_render_distribution(stability_report.exit_reason_distribution)}</li>
+              <li>边界建议：{_text(stability_report.strategy_boundary_suggestion)}</li>
               <li>{_text(stability_report.next_action)}</li>
             </ul>
           </section>

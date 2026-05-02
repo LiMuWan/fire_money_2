@@ -467,9 +467,28 @@ class MainChainService:
             if sample_count < self._one_to_two_settings.minimum_sample_for_stability
             else "reviewable"
         )
+        sample_stage = self._stability_sample_stage(sample_count)
+        next_milestone = self._stability_next_milestone(sample_count)
+        strategy_boundary_suggestion = self._strategy_boundary_suggestion(
+            sample_count=sample_count,
+            success_rate=round(sell_count / sample_count, 4) if sample_count else 0.0,
+            average_return_pct=round(total_return / sample_count, 4)
+            if sample_count
+            else 0.0,
+            low_breakout_success_rate=(
+                round(low_breakout_success / len(low_breakout_records), 4)
+                if low_breakout_records
+                else 0.0
+            ),
+            stop_warning_rate=(
+                round(warning_count / sample_count, 4) if sample_count else 0.0
+            ),
+        )
         return OneToTwoStabilityReport(
             report_id="one-to-two-stability",
             sample_count=sample_count,
+            sample_stage=sample_stage,
+            next_milestone=next_milestone,
             success_rate=round(sell_count / sample_count, 4) if sample_count else 0.0,
             average_return_pct=round(total_return / sample_count, 4) if sample_count else 0.0,
             max_drawdown=min(0.0, max_drawdown),
@@ -489,7 +508,12 @@ class MainChainService:
                 if status == "observation"
                 else "样本达到复查门槛，可以进入策略边界评估。"
             ),
-            next_action="继续积累至少 30 笔一进二样本。",
+            strategy_boundary_suggestion=strategy_boundary_suggestion,
+            next_action=(
+                f"继续积累至 {next_milestone} 笔一进二样本。"
+                if next_milestone
+                else "进入 100 笔以上复盘，固定可执行边界并继续滚动验证。"
+            ),
         )
 
     def _count_by(self, values) -> dict[str, int]:
@@ -498,6 +522,37 @@ class MainChainService:
             key = str(value or "未标记")
             counts[key] = counts.get(key, 0) + 1
         return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+    def _stability_sample_stage(self, sample_count: int) -> str:
+        if sample_count < self._one_to_two_settings.minimum_sample_for_stability:
+            return "观察期"
+        if sample_count < 50:
+            return "30 笔初评"
+        if sample_count < 100:
+            return "50 笔复评"
+        return "100 笔定边界"
+
+    def _stability_next_milestone(self, sample_count: int) -> int:
+        for milestone in (30, 50, 100):
+            if sample_count < milestone:
+                return milestone
+        return 0
+
+    def _strategy_boundary_suggestion(
+        self,
+        sample_count: int,
+        success_rate: float,
+        average_return_pct: float,
+        low_breakout_success_rate: float,
+        stop_warning_rate: float,
+    ) -> str:
+        if sample_count < self._one_to_two_settings.minimum_sample_for_stability:
+            return "样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。"
+        if success_rate >= 0.55 and average_return_pct > 0 and low_breakout_success_rate >= 0.55:
+            return "优先保留低位平台突破样本，继续排除高位接力和左侧压力过近样本。"
+        if stop_warning_rate >= 0.4 or average_return_pct < 0:
+            return "先收紧入池条件：降低高位样本权重，提高压力位距离和承接确认要求。"
+        return "维持现有边界，继续积累到下一阶段后再决定是否调整仓位或评分阈值。"
 
     def _doctor_strategy_check(self) -> OneToTwoDoctorCheck:
         settings = self._one_to_two_settings

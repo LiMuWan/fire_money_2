@@ -215,6 +215,8 @@ class OneToTwoEndOfDayReview:
 class OneToTwoStabilityReport:
     report_id: str
     sample_count: int
+    sample_stage: str
+    next_milestone: int
     success_rate: float
     average_return_pct: float
     max_drawdown: float
@@ -224,6 +226,7 @@ class OneToTwoStabilityReport:
     exit_reason_distribution: dict[str, int]
     status: str
     summary: str
+    strategy_boundary_suggestion: str
     next_action: str
 
 
