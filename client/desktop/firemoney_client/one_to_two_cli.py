@@ -118,10 +118,16 @@ def main() -> None:
         if args.scheduler_runs
         else SchedulerRunStore()
     )
+    scheduler_state_store = (
+        SchedulerStateStore(args.scheduler_state)
+        if args.scheduler_state
+        else SchedulerStateStore()
+    )
     service = MainChainService(
         market_data_provider=provider,
         paper_store=paper_store,
         notification_store=notification_store,
+        scheduler_state_store=scheduler_state_store,
         scheduler_run_store=scheduler_run_store,
     )
     adapter = LocalMainChainAdapter(service)
@@ -193,11 +199,7 @@ def main() -> None:
                 return
         scheduler = OneToTwoScheduler(
             service=service,
-            state_store=(
-                SchedulerStateStore(args.scheduler_state)
-                if args.scheduler_state
-                else None
-            ),
+            state_store=scheduler_state_store,
         )
         if args.loop:
             while True:

@@ -21,6 +21,7 @@ from server.firemoney_server.infrastructure.one_to_two_config import (
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.scheduler_run_store import SchedulerRunStore
+from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.trading_calendar import (
     AkshareTradingCalendar,
     TradingCalendar,
@@ -52,6 +53,7 @@ class MainChainService:
         paper_store: PaperTradeStore | None = None,
         feishu_notifier: FeishuNotifier | None = None,
         notification_store: NotificationRecordStore | None = None,
+        scheduler_state_store: SchedulerStateStore | None = None,
         scheduler_run_store: SchedulerRunStore | None = None,
         trading_calendar: TradingCalendar | None = None,
     ) -> None:
@@ -65,6 +67,7 @@ class MainChainService:
         )
         self._feishu_notifier = feishu_notifier or FeishuNotifier()
         self._notification_store = notification_store or NotificationRecordStore()
+        self._scheduler_state_store = scheduler_state_store or SchedulerStateStore()
         self._scheduler_run_store = scheduler_run_store or SchedulerRunStore()
         self._trading_calendar = trading_calendar or AkshareTradingCalendar()
 
@@ -332,6 +335,8 @@ class MainChainService:
             self._doctor_strategy_check(),
             self._doctor_market_data_check(trade_context.trade_date),
             self._doctor_paper_store_check(),
+            self._doctor_notification_store_check(),
+            self._doctor_scheduler_state_store_check(),
             self._doctor_feishu_check(beta=beta),
             self._doctor_scheduler_check(),
             self._doctor_scheduler_run_store_check(),
@@ -651,6 +656,7 @@ class MainChainService:
     def _doctor_paper_store_check(self) -> OneToTwoDoctorCheck:
         try:
             account = self._paper_store.load()
+            self._ensure_parent_directory(self._paper_store.path)
         except Exception as exc:
             return OneToTwoDoctorCheck(
                 check_id="paper_store",
@@ -669,6 +675,46 @@ class MainChainService:
                 f"closed_samples={len(account.closed_trades)}"
             ),
             next_action="账本可用，继续用事件驱动模拟盘记录样本。",
+        )
+
+    def _doctor_notification_store_check(self) -> OneToTwoDoctorCheck:
+        try:
+            records = self._notification_store.load()
+            self._ensure_parent_directory(self._notification_store.path)
+        except Exception as exc:
+            return OneToTwoDoctorCheck(
+                check_id="notification_store",
+                label="通知归档",
+                status="blocked",
+                detail=f"无法读取或准备 {self._notification_store.path}：{exc}",
+                next_action="修复 .firemoney/notifications.json 权限或路径后再启动 Beta 值守。",
+            )
+        return OneToTwoDoctorCheck(
+            check_id="notification_store",
+            label="通知归档",
+            status="ready",
+            detail=f"通知归档可读写，recent_records={len(records)}。",
+            next_action="值守后用 notifications 查看飞书触达记录。",
+        )
+
+    def _doctor_scheduler_state_store_check(self) -> OneToTwoDoctorCheck:
+        try:
+            completed = self._scheduler_state_store.load()
+            self._ensure_parent_directory(self._scheduler_state_store.path)
+        except Exception as exc:
+            return OneToTwoDoctorCheck(
+                check_id="scheduler_state",
+                label="调度状态",
+                status="blocked",
+                detail=f"无法读取或准备 {self._scheduler_state_store.path}：{exc}",
+                next_action="修复 .firemoney/scheduler_state.json 权限或路径后再启动 Beta 值守。",
+            )
+        return OneToTwoDoctorCheck(
+            check_id="scheduler_state",
+            label="调度状态",
+            status="ready",
+            detail=f"调度状态可读写，completed_tasks={len(completed)}。",
+            next_action="状态可用，schedule --loop 不会重复触发同日任务。",
         )
 
     def _doctor_feishu_check(self, beta: bool = False) -> OneToTwoDoctorCheck:
@@ -718,7 +764,7 @@ class MainChainService:
     def _doctor_scheduler_run_store_check(self) -> OneToTwoDoctorCheck:
         try:
             records = self._scheduler_run_store.load(limit=1)
-            self._scheduler_run_store.path.parent.mkdir(parents=True, exist_ok=True)
+            self._ensure_parent_directory(self._scheduler_run_store.path)
         except Exception as exc:
             return OneToTwoDoctorCheck(
                 check_id="scheduler_runs",
@@ -734,6 +780,11 @@ class MainChainService:
             detail=f"审计记录可读写，recent_records={len(records)}。",
             next_action="值守后用 scheduler-runs 查看每次调度覆盖情况。",
         )
+
+    def _ensure_parent_directory(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.parent.is_dir():
+            raise OSError(f"{path.parent} is not a directory")
 
     def _candidate_for_position(self, position, trade_date: str):
         from shared.contracts import OneToTwoCandidate, OneToTwoPositionProfile

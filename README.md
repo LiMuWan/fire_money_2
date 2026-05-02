@@ -63,6 +63,7 @@ MarketDataProvider/AkShare
 - 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
 - 模拟盘账本：`.firemoney/paper_trades.json`
 - 飞书通知归档：`.firemoney/notifications.json`
+- 调度去重状态：`.firemoney/scheduler_state.json`
 - 调度运行审计：`.firemoney/scheduler_runs.json`
 - AkShare 原始快照缓存：`.firemoney/market_data/`
 - 本地预览：`client/desktop/preview/core_workflow.html`
@@ -116,7 +117,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli schedule --beta --loop 
 
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
 
-`doctor` 是运行前体检，只检查策略配置、行情源、模拟盘账本、飞书和调度状态，不发送通知、不产生交易。`backtest` 使用隔离临时账本做历史回放，不会改写 `.firemoney/paper_trades.json`。`stability` 读取当前模拟盘已闭环样本，用来查看真实观察期累计质量。两类输出都遵守样本门槛：少于 30 笔只显示观察期。
+`doctor` 是运行前体检，只检查策略配置、行情源、本地状态文件、飞书和调度，不发送通知、不产生交易。`backtest` 使用隔离临时账本做历史回放，不会改写 `.firemoney/paper_trades.json`。`stability` 读取当前模拟盘已闭环样本，用来查看真实观察期累计质量。两类输出都遵守样本门槛：少于 30 笔只显示观察期。
 
 查看飞书触达记录：
 

@@ -41,6 +41,7 @@ def _build_service(
     market_data_provider=None,
     paper_store: PaperTradeStore | None = None,
     notification_store: NotificationRecordStore | None = None,
+    scheduler_state_store: SchedulerStateStore | None = None,
     scheduler_run_store: SchedulerRunStore | None = None,
     trading_calendar=None,
 ) -> MainChainService:
@@ -49,6 +50,8 @@ def _build_service(
         paper_store=paper_store or PaperTradeStore(root / "paper_trades.json"),
         notification_store=notification_store
         or NotificationRecordStore(root / "notifications.json"),
+        scheduler_state_store=scheduler_state_store
+        or SchedulerStateStore(root / "scheduler_state.json"),
         scheduler_run_store=scheduler_run_store
         or SchedulerRunStore(root / "scheduler_runs.json"),
         trading_calendar=trading_calendar or WeekdayTradingCalendar(),
@@ -313,12 +316,34 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(checks["strategy_config"].status, "ready")
             self.assertEqual(checks["market_data"].status, "ready")
             self.assertEqual(checks["paper_store"].status, "ready")
+            self.assertEqual(checks["notification_store"].status, "ready")
             self.assertEqual(checks["feishu"].status, "warning")
             self.assertEqual(checks["scheduler"].status, "ready")
+            self.assertEqual(checks["scheduler_state"].status, "ready")
             self.assertEqual(checks["scheduler_runs"].status, "ready")
             self.assertEqual(service._paper_store.load().positions, ())
             self.assertEqual(service._paper_store.load().events, ())
             self.assertEqual(payload["checks"][0]["check_id"], "strategy_config")
+
+    def test_doctor_blocks_when_local_state_path_is_not_writable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            not_a_directory = root / "not-a-directory"
+            not_a_directory.write_text("blocked", encoding="utf-8")
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=NotificationRecordStore(
+                    not_a_directory / "notifications.json"
+                ),
+            )
+
+            report = service.build_one_to_two_doctor_report(trade_date="2026-05-01")
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["notification_store"].status, "blocked")
+            self.assertIn("not-a-directory", checks["notification_store"].detail)
 
     def test_beta_doctor_blocks_when_feishu_is_not_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1110,6 +1135,7 @@ class MainChainSmokeTest(unittest.TestCase):
             paper_path = root / "paper_trades.json"
             scheduler_path = root / "scheduler_state.json"
             scheduler_run_path = root / "scheduler_runs.json"
+            notifications_path = root / "notifications.json"
             scheduler_run_path.parent.mkdir(parents=True, exist_ok=True)
             scheduler_run_path.write_text("{}", encoding="utf-8")
             completed = subprocess.run(
@@ -1131,6 +1157,8 @@ class MainChainSmokeTest(unittest.TestCase):
                     str(scheduler_path),
                     "--scheduler-runs",
                     str(scheduler_run_path),
+                    "--notification-store",
+                    str(notifications_path),
                 ],
                 cwd=Path(__file__).resolve().parents[1],
                 check=True,
@@ -1143,6 +1171,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["report_id"], "one-to-two-doctor-2026-04-30")
             self.assertFalse(scheduler_path.exists())
             self.assertEqual(scheduler_run_path.read_text(encoding="utf-8"), "{}")
+            self.assertFalse(notifications_path.exists())
             self.assertEqual(PaperTradeStore(paper_path).load().events, ())
 
     def test_beta_schedule_cli_rejects_no_notify(self) -> None:

@@ -29,7 +29,7 @@
    python -m client.desktop.firemoney_client.one_to_two_cli doctor --beta
    ```
 
-   `strategy_config`、`market_data`、`paper_store`、`feishu`、`scheduler` 必须全部为 `ready`。
+   `strategy_config`、`market_data`、`paper_store`、`notification_store`、`feishu`、`scheduler`、`scheduler_state`、`scheduler_runs` 必须全部为 `ready`。
 
 4. 先用不发通知模式做一次真实行情空跑。
 
@@ -66,6 +66,7 @@ Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到
 - AkShare 无法读取真实行情。
 - 飞书未启用或 webhook 未配置。
 - `.firemoney/paper_trades.json` 不能读写。
+- `.firemoney/notifications.json`、`.firemoney/scheduler_state.json` 或 `.firemoney/scheduler_runs.json` 不能读写。
 - 没有先用 `--no-notify` 完成一次真实行情空跑。
 
 ## 观察期规则

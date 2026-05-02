@@ -16,6 +16,13 @@ class SchedulerStateStore:
     def __init__(self, path: str | Path = DEFAULT_SCHEDULER_STATE_PATH) -> None:
         self._path = Path(path)
 
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def load(self) -> tuple[str, ...]:
+        return tuple(sorted(self._load()))
+
     def is_done(self, task_key: str) -> bool:
         return task_key in self._load()
 
