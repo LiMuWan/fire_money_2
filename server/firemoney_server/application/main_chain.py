@@ -208,13 +208,19 @@ class MainChainService:
         warning_count = sum(
             1 for event in account.events if event.event_type.value == "stop_warning"
         )
-        sell_count = sum(
-            1 for event in account.events if event.event_type.value == "t1_sell"
-        )
-        realized_pnl = round(account.equity - account.initial_cash, 2)
+        closed_trades = account.closed_trades
+        success_count = sum(1 for record in closed_trades if record.success)
+        sell_count = len(closed_trades)
+        realized_pnl = round(sum(record.realized_pnl for record in closed_trades), 2)
+        realized_curve = []
+        current = 0.0
+        for record in reversed(closed_trades):
+            current += record.realized_pnl
+            realized_curve.append(current)
+        max_drawdown = min(realized_curve, default=0.0)
         summary = (
-            f"一进二尾盘：权益 {account.equity:.2f}，"
-            f"事件 {len(account.events)} 个，风险预警 {warning_count} 个。"
+            f"一进二尾盘：完成样本 {len(closed_trades)} 笔，"
+            f"成功 {success_count} 笔，已实现盈亏 {realized_pnl:.2f}。"
         )
         notification = self._notify_or_prepare(
             notify=notify,
@@ -232,11 +238,11 @@ class MainChainService:
             review_id=f"one-to-two-eod-{report_date}",
             trade_date=report_date,
             trade_context=trade_context.to_contract(),
-            sample_count=len(account.closed_trades),
-            success_count=sell_count,
+            sample_count=len(closed_trades),
+            success_count=success_count,
             warning_count=warning_count,
             realized_pnl=realized_pnl,
-            max_drawdown=min(0.0, realized_pnl),
+            max_drawdown=min(0.0, max_drawdown),
             summary=summary,
             focus_points=(
                 "样本少于 30 笔时只观察，不自动调整策略边界。",

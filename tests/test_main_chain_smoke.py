@@ -505,6 +505,49 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertLess(stability.average_return_pct, 0)
             self.assertEqual(stability.status, "observation")
 
+    def test_end_of_day_review_uses_closed_trade_outcomes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            buy_service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+            buy_service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            risk_service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider((_risk_break_row("2026-05-01"),)),
+                paper_store=paper_store,
+            )
+            risk_service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="risk",
+                notify=False,
+            )
+            risk_service.run_one_to_two_watch(
+                trade_date="2026-05-06",
+                phase="risk",
+                notify=False,
+            )
+
+            review = risk_service.build_one_to_two_end_of_day_review(
+                trade_date="2026-05-06",
+                notify=False,
+            )
+
+            self.assertEqual(review.sample_count, 1)
+            self.assertEqual(review.success_count, 0)
+            self.assertEqual(review.warning_count, 1)
+            self.assertLess(review.realized_pnl, 0)
+            self.assertLess(review.max_drawdown, 0)
+            self.assertIn("完成样本 1 笔", review.summary)
+            self.assertIn("成功 0 笔", review.summary)
+
     def test_backtest_replays_closed_samples_without_mutating_live_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

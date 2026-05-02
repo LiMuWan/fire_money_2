@@ -116,6 +116,11 @@ Describes the 08:50 one-to-two report: trading-day context, market temperature, 
 
 Describes the 15:10 one-to-two review: trading-day context, closed sample count, warning count, realized P/L observation, focus points, paper-account state, notification result, and next action.
 
+Rules represented by the contract:
+
+- `sample_count`, `success_count`, `realized_pnl`, and `max_drawdown` are calculated from closed `PaperTradeRecord` samples.
+- A sell event is not automatically a success; `success_count` only counts closed samples with positive realized P/L.
+
 ### `OneToTwoStabilityReport`
 
 Describes the strategy stability observation. Fewer than 30 samples must remain `observation` and must not automatically produce strategy-boundary conclusions.

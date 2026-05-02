@@ -232,6 +232,9 @@ def render_one_to_two_workflow_html(
             <h2>尾盘测评</h2>
             <p class="next-action">{_text(eod_review.summary)}</p>
             <ul class="detail-list compact">
+              <li>完成样本：{eod_review.sample_count}，成功样本：{eod_review.success_count}</li>
+              <li>已实现盈亏：{eod_review.realized_pnl:.2f}，最大回撤：{eod_review.max_drawdown:.2f}</li>
+              <li>风险预警：{eod_review.warning_count}</li>
               {"".join(f"<li>{_text(item)}</li>" for item in eod_review.focus_points)}
             </ul>
           </section>
