@@ -550,6 +550,10 @@ class MainChainSmokeTest(unittest.TestCase):
 
             self.assertEqual(warning.account.positions[0].status, PaperTradeStatus.WARNING)
             self.assertEqual(warning.account.events[0].event_type.value, "stop_warning")
+            self.assertIn("止损预警", warning.notification.message)
+            self.assertIn("当日只预警不卖出", warning.notification.message)
+            self.assertIn("下一交易日仍低于止损再模拟卖出", warning.notification.message)
+            self.assertIn("止损价", warning.notification.message)
             self.assertEqual(sold.account.positions, ())
             self.assertEqual(sold.account.events[0].event_type.value, "t1_sell")
             self.assertEqual(len(sold.account.closed_trades), 1)

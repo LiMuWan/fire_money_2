@@ -813,6 +813,21 @@ class MainChainService:
                     f"位置：{latest_closed_sample.position_label}；止损预警 {latest_closed_sample.warning_count} 次",
                 ]
             )
+        elif (
+            phase == "risk"
+            and latest_event_type == OneToTwoEventType.STOP_WARNING
+            and account.positions
+        ):
+            position = account.positions[0]
+            lines.extend(
+                [
+                    f"止损预警：{position.name}({position.symbol})",
+                    f"当前价 {position.latest_price}，止损价 {position.stop_loss}",
+                    f"浮动盈亏：{position.unrealized_pnl:.2f} ({position.unrealized_pnl_pct:.2%})",
+                    f"位置：{position.position_label}",
+                    "T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。",
+                ]
+            )
         elif account.positions:
             position = account.positions[0]
             sell_state = "可按纪律卖出" if position.can_sell_today else "T+1 未到，只预警不卖出"
