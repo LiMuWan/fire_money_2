@@ -7,6 +7,7 @@ import os
 from datetime import date, timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
+from urllib.parse import urlparse
 
 from server.firemoney_server.domain.one_to_two import OneToTwoPolicy
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
@@ -758,9 +759,20 @@ class MainChainService:
                 else "配置 webhook，或运行时使用 --no-notify。"
             )
         elif enabled:
-            status = "ready"
-            detail = "飞书通知已启用，webhook 已配置。"
-            next_action = "盘前先用 --no-notify 或测试群验证消息格式。"
+            valid_webhook = self._is_feishu_webhook(
+                os.environ.get("FEISHU_WEBHOOK_URL", "")
+            )
+            status = "ready" if valid_webhook else ("blocked" if beta else "warning")
+            detail = (
+                "飞书通知已启用，webhook 已配置。"
+                if valid_webhook
+                else "FEISHU_WEBHOOK_URL 不是有效的飞书群机器人 webhook。"
+            )
+            next_action = (
+                "盘前先用 --no-notify 或测试群验证消息格式。"
+                if valid_webhook
+                else "使用 https://open.feishu.cn/open-apis/bot/v2/hook/... 格式的群机器人地址。"
+            )
         elif beta:
             status = "blocked"
             detail = "模拟盘 Beta 需要飞书值守，但 FEISHU_ENABLED 未开启。"
@@ -775,6 +787,15 @@ class MainChainService:
             status=status,
             detail=detail,
             next_action=next_action,
+        )
+
+    def _is_feishu_webhook(self, value: str) -> bool:
+        parsed = urlparse(value.strip())
+        return (
+            parsed.scheme == "https"
+            and parsed.netloc in {"open.feishu.cn", "open.larksuite.com"}
+            and parsed.path.startswith("/open-apis/bot/v2/hook/")
+            and len(parsed.path.rsplit("/", 1)[-1]) > 0
         )
 
     def _doctor_scheduler_check(self) -> OneToTwoDoctorCheck:

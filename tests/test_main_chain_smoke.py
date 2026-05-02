@@ -336,7 +336,7 @@ class MainChainSmokeTest(unittest.TestCase):
                 os.environ,
                 {
                     "FEISHU_ENABLED": "true",
-                    "FEISHU_WEBHOOK_URL": "https://example.com/hook",
+                    "FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test-token",
                 },
                 clear=True,
             ):
@@ -400,7 +400,7 @@ class MainChainSmokeTest(unittest.TestCase):
                 os.environ,
                 {
                     "FEISHU_ENABLED": "true",
-                    "FEISHU_WEBHOOK_URL": "https://example.com/hook",
+                    "FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test-token",
                 },
                 clear=True,
             ):
@@ -413,6 +413,31 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(report.status, "ready")
             self.assertEqual(checks["trading_day"].status, "ready")
             self.assertEqual(checks["feishu"].status, "ready")
+
+    def test_beta_doctor_blocks_invalid_feishu_webhook_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://example.com/hook",
+                },
+                clear=True,
+            ):
+                report = service.build_one_to_two_doctor_report(
+                    trade_date="2026-04-30",
+                    beta=True,
+                )
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["feishu"].status, "blocked")
+            self.assertIn("飞书群机器人 webhook", checks["feishu"].detail)
 
     def test_doctor_report_blocks_when_market_data_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

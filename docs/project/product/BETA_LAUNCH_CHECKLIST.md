@@ -17,6 +17,8 @@
    $env:FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/..."
    ```
 
+   `FEISHU_WEBHOOK_URL` 必须是飞书或 Lark 自定义机器人地址，不能用普通网页 URL 代替。
+
    如群机器人开启签名校验，再设置：
 
    ```powershell
