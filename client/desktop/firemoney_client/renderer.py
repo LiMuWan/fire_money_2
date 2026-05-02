@@ -10,6 +10,7 @@ from shared.contracts import (
     OneToTwoDoctorReport,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
+    OneToTwoBacktestAuditReport,
     OneToTwoRecentSample,
     OneToTwoScheduleRun,
     OneToTwoStabilityReport,
@@ -299,6 +300,7 @@ def render_one_to_two_workflow_html(
     doctor_report: OneToTwoDoctorReport | None = None,
     schedule_run: OneToTwoScheduleRun | None = None,
     notification_records: tuple[NotificationRecord, ...] = (),
+    backtest_audit: OneToTwoBacktestAuditReport | None = None,
 ) -> str:
     """Render the current one-to-two product surface only."""
 
@@ -413,6 +415,19 @@ def render_one_to_two_workflow_html(
               {_render_recent_samples(stability_report.recent_samples)}
             </ul>
           </section>
+          {f'''
+          <section class="panel one-to-two-panel">
+            <h2>回测准入</h2>
+            <p class="next-action">{_text(backtest_audit.summary)}</p>
+            <ul class="detail-list compact">
+              <li>区间：{_text(backtest_audit.start_date)} -> {_text(backtest_audit.end_date)}</li>
+              <li>可用交易日：{backtest_audit.usable_trade_days}/{backtest_audit.requested_trade_days}</li>
+              <li>闭环样本：{backtest_audit.stability_report.sample_count}，胜率：{backtest_audit.stability_report.success_rate:.2%}</li>
+              {"".join(f"<li>{_text(check.label)}：{_text(check.status)}，{_text(check.detail)}</li>" for check in backtest_audit.data_quality_checks)}
+              <li>{_text(backtest_audit.recommended_next_action)}</li>
+            </ul>
+          </section>
+          ''' if backtest_audit else ''}
         </aside>
       </div>
     </div>

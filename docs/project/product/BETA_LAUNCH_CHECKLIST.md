@@ -18,6 +18,14 @@ python -m client.desktop.firemoney_client.one_to_two_cli beta-rehearsal --trade-
 
 `beta-rehearsal` 会用样例行情和临时账本跑完 `doctor -> morning -> scan -> auction -> open -> risk -> eod -> stability`。返回 `ready` 只代表主线流程、调度和模拟盘闭环能跑通；真实上线测试仍然必须在交易日运行 `beta-check`，确认飞书 `sent` 后再启动 `beta-start --loop --interval-seconds 60`。
 
+再运行回测准入审计，确认数据质量、样本数量和规则版本边界：
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli backtest-audit --brief --max-trade-days 120
+```
+
+`backtest-audit` 会按“数据准备 -> 策略规则 -> 执行回测 -> 准入结论”输出结果。少于 30 笔闭环样本只允许观察；AkShare 免费数据暂不等同专业 Point-in-Time 数据，不能据此宣称长期稳定盈利。
+
 当前上线目标只到模拟盘 Beta：接真实行情、发飞书通知、沉淀一进二样本；不连接真实账户，不自动下单。
 
 ## 必过项
@@ -119,3 +127,4 @@ Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到
 - 任何时候都只做模拟盘验证，不连接真实账户，不自动下单。
 - 卖点纪律默认：结构/5% 止损，8% 第一止盈，15% 强势观察，6% 回撤保护，2 个交易日不走强退出。
 - 主线持续性默认：同主线候选、近涨停强度、AkShare 个股新闻和市场温度共同评分；低于 45 分则 T+1 优先退出。
+- 回测准入默认：先跑 `backtest-audit --brief`；数据窗口不足、无闭环样本直接 blocked，样本少于 30 笔只能观察。

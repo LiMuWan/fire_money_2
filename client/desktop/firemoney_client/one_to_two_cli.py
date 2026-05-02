@@ -35,6 +35,7 @@ def main() -> None:
             "watch",
             "eod",
             "backtest",
+            "backtest-audit",
             "stability",
             "doctor",
             "beta-check",
@@ -108,7 +109,7 @@ def main() -> None:
     parser.add_argument(
         "--brief",
         action="store_true",
-        help="Print a compact human-readable summary for beta-plan.",
+        help="Print a compact human-readable summary for beta-plan/backtest-audit.",
     )
     args = parser.parse_args()
     load_local_feishu_env()
@@ -174,6 +175,12 @@ def main() -> None:
         )
     elif args.mode == "backtest":
         result = adapter.run_one_to_two_backtest(
+            start_date=args.start_date,
+            end_date=args.end_date or args.trade_date,
+            max_trade_days=args.max_trade_days,
+        )
+    elif args.mode == "backtest-audit":
+        result = adapter.build_one_to_two_backtest_audit(
             start_date=args.start_date,
             end_date=args.end_date or args.trade_date,
             max_trade_days=args.max_trade_days,
@@ -300,6 +307,9 @@ def main() -> None:
     if args.brief and args.mode == "beta-plan":
         print(_format_beta_plan_brief(result))
         return
+    if args.brief and args.mode == "backtest-audit":
+        print(_format_backtest_audit_brief(result))
+        return
     print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
 
 
@@ -327,6 +337,27 @@ def _format_beta_plan_brief(plan: OneToTwoBetaLaunchPlan) -> str:
         for index, command in enumerate(plan.launch_commands, start=1)
     )
     lines.append(f"下一步：{plan.next_action}")
+    return "\n".join(lines)
+
+
+def _format_backtest_audit_brief(report) -> str:
+    lines = [
+        f"FireMoney 回测准入：{report.status}",
+        f"区间：{report.start_date} -> {report.end_date}",
+        f"可用交易日：{report.usable_trade_days}/{report.requested_trade_days}",
+        f"闭环样本：{report.stability_report.sample_count}",
+        f"胜率：{report.stability_report.success_rate:.2%}",
+        f"平均收益：{report.stability_report.average_return_pct:.2%}",
+        f"最大回撤：{report.stability_report.max_drawdown:.2f}",
+        "数据质量：",
+    ]
+    lines.extend(
+        f"- {check.label}：{check.status}，{check.detail}"
+        for check in report.data_quality_checks
+    )
+    lines.append("局限：")
+    lines.extend(f"- {item}" for item in report.limitations)
+    lines.append(f"下一步：{report.recommended_next_action}")
     return "\n".join(lines)
 
 

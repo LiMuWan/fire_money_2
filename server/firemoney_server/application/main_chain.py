@@ -28,12 +28,14 @@ from server.firemoney_server.infrastructure.trading_calendar import (
     TradingCalendar,
 )
 from shared.contracts import (
+    BacktestDataQualityCheck,
     FeishuNotificationResult,
     MainlineContinuity,
     MainlineNewsItem,
     NotificationStatus,
     NotificationRecord,
     OneToTwoBetaReadinessReport,
+    OneToTwoBacktestAuditReport,
     OneToTwoCandidate,
     OneToTwoDoctorCheck,
     OneToTwoDoctorReport,
@@ -642,20 +644,7 @@ class MainChainService:
     ) -> OneToTwoStabilityReport:
         """Replay one-to-two samples over historical dates in an isolated ledger."""
 
-        end_context = self._trading_calendar.resolve(end_date or self._default_trade_date())
-        end_trade_date = date.fromisoformat(end_context.trade_date)
-        start_trade_date = (
-            date.fromisoformat(self._trading_calendar.resolve(start_date).trade_date)
-            if start_date
-            else end_trade_date - timedelta(days=max_trade_days * 2)
-        )
-        dates: list[str] = []
-        cursor = start_trade_date
-        while cursor <= end_trade_date and len(dates) < max_trade_days:
-            context = self._trading_calendar.resolve(cursor.isoformat())
-            if context.trade_date == cursor.isoformat():
-                dates.append(context.trade_date)
-            cursor += timedelta(days=1)
+        dates = self._resolve_backtest_dates(start_date, end_date, max_trade_days)
 
         with TemporaryDirectory() as temp_dir:
             paper_store = PaperTradeStore(
@@ -710,6 +699,158 @@ class MainChainService:
                     holding_trade_days=1,
                 )
             return self._stability_from_account(paper_store.load())
+
+    def build_one_to_two_backtest_audit(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_trade_days: int = 30,
+    ) -> OneToTwoBacktestAuditReport:
+        """Run the backtest and wrap it with data-quality admission checks."""
+
+        dates = self._resolve_backtest_dates(start_date, end_date, max_trade_days)
+        stability_report = self.run_one_to_two_backtest(
+            start_date=start_date,
+            end_date=end_date,
+            max_trade_days=max_trade_days,
+        )
+        quality_checks = self._backtest_data_quality_checks(
+            dates=dates,
+            stability_report=stability_report,
+        )
+        blocked = any(check.status == "blocked" for check in quality_checks)
+        warning = any(check.status == "warning" for check in quality_checks)
+        status = "blocked" if blocked else "warning" if warning else "ready"
+        sample_count = stability_report.sample_count
+        summary = (
+            f"回测准入未通过：{sample_count} 笔样本，存在数据或样本阻断项。"
+            if status == "blocked"
+            else f"回测仍处观察期：{sample_count} 笔样本，尚不足以证明长期稳定。"
+            if status == "warning"
+            else f"回测准入通过：{sample_count} 笔样本，可进入模拟盘 Beta 验证。"
+        )
+        return OneToTwoBacktestAuditReport(
+            report_id=f"one-to-two-backtest-audit-{dates[0] if dates else 'none'}-{dates[-1] if dates else 'none'}",
+            start_date=dates[0] if dates else "",
+            end_date=dates[-1] if dates else "",
+            requested_trade_days=max_trade_days,
+            usable_trade_days=len(dates),
+            data_quality_checks=quality_checks,
+            stability_report=stability_report,
+            status=status,
+            summary=summary,
+            limitations=(
+                "AkShare 免费数据不等同专业 Point-in-Time 数据，退市和历史成分偏差仍需后续加强。",
+                "当前回测以日线/涨停池事件近似，不能替代 Tick 或逐笔成交验证。",
+                "少于 30 笔闭环样本只允许观察，不允许宣称策略稳定盈利。",
+            ),
+            recommended_next_action=(
+                "修复 blocked 项后重新运行 backtest-audit。"
+                if status == "blocked"
+                else "继续扩大回测窗口到 5-8 年或接入更干净的历史数据源。"
+                if status == "warning"
+                else "进入 beta-check 和 beta-start，只做模拟盘实盘跟踪验证。"
+            ),
+        )
+
+    def _resolve_backtest_dates(
+        self,
+        start_date: str | None,
+        end_date: str | None,
+        max_trade_days: int,
+    ) -> list[str]:
+        end_context = self._trading_calendar.resolve(end_date or self._default_trade_date())
+        end_trade_date = date.fromisoformat(end_context.trade_date)
+        start_trade_date = (
+            date.fromisoformat(self._trading_calendar.resolve(start_date).trade_date)
+            if start_date
+            else end_trade_date - timedelta(days=max_trade_days * 2)
+        )
+        dates: list[str] = []
+        cursor = start_trade_date
+        while cursor <= end_trade_date:
+            context = self._trading_calendar.resolve(cursor.isoformat())
+            if context.trade_date == cursor.isoformat():
+                dates.append(context.trade_date)
+                if start_date and len(dates) >= max_trade_days:
+                    break
+            cursor += timedelta(days=1)
+        if start_date:
+            return dates
+        return dates[-max_trade_days:]
+
+    def _backtest_data_quality_checks(
+        self,
+        dates: list[str],
+        stability_report: OneToTwoStabilityReport,
+    ) -> tuple[BacktestDataQualityCheck, ...]:
+        checks: list[BacktestDataQualityCheck] = []
+        checks.append(
+            BacktestDataQualityCheck(
+                check_id="data_window",
+                label="数据窗口",
+                status="ready" if len(dates) >= 20 else "blocked",
+                detail=f"可用交易日 {len(dates)} 天；建议正式研究覆盖 5-8 年多轮牛熊。",
+                next_action=(
+                    "继续执行回测。"
+                    if len(dates) >= 20
+                    else "扩大 --max-trade-days 或指定更长 start/end 日期。"
+                ),
+            )
+        )
+        checks.append(
+            BacktestDataQualityCheck(
+                check_id="sample_size",
+                label="样本数",
+                status=(
+                    "ready"
+                    if stability_report.sample_count >= self._one_to_two_settings.minimum_sample_for_stability
+                    else "warning"
+                    if stability_report.sample_count > 0
+                    else "blocked"
+                ),
+                detail=(
+                    f"闭环样本 {stability_report.sample_count} 笔，"
+                    f"最低观察门槛 {self._one_to_two_settings.minimum_sample_for_stability} 笔。"
+                ),
+                next_action=(
+                    "样本达到初评门槛，可进入策略边界复核。"
+                    if stability_report.sample_count >= self._one_to_two_settings.minimum_sample_for_stability
+                    else "样本不足，只能观察，不能宣称稳定盈利。"
+                ),
+            )
+        )
+        checks.append(
+            BacktestDataQualityCheck(
+                check_id="survivorship_bias",
+                label="幸存者偏差",
+                status="warning",
+                detail="当前 AkShare 回测未完全保证历史退市股票和成分股 Point-in-Time 覆盖。",
+                next_action="后续接入专业 PIT 数据源或维护本地退市股票历史池。",
+            )
+        )
+        checks.append(
+            BacktestDataQualityCheck(
+                check_id="execution_granularity",
+                label="执行颗粒度",
+                status="warning",
+                detail="当前按日线/涨停池事件近似执行，无法模拟排队、炸板瞬时成交和 Tick 级滑点。",
+                next_action="模拟盘 Beta 先验证流程，正式研究再引入分钟线或 Tick 数据。",
+            )
+        )
+        checks.append(
+            BacktestDataQualityCheck(
+                check_id="rule_version",
+                label="规则版本",
+                status="ready",
+                detail=(
+                    "规则已固化为主线首板龙头候选、T+1、8% 止盈、5%/结构止损、"
+                    "主线持续性衰减退出。"
+                ),
+                next_action="回测结果只对当前规则版本负责，改规则后必须重跑。",
+            )
+        )
+        return tuple(checks)
 
     def _stability_from_account(self, account) -> OneToTwoStabilityReport:
         sample_count = len(account.closed_trades)

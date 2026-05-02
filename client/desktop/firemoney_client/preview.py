@@ -145,6 +145,10 @@ def build_preview(output_path: str | Path) -> Path:
             notify=False,
         )
         one_to_two_stability_report = risk_adapter.build_one_to_two_stability_report()
+        backtest_audit = risk_adapter.build_one_to_two_backtest_audit(
+            end_date=PREVIEW_TRADE_DATE,
+            max_trade_days=30,
+        )
         doctor_report = risk_adapter.build_one_to_two_doctor_report(
             trade_date=PREVIEW_TRADE_DATE,
         )
@@ -166,6 +170,7 @@ def build_preview(output_path: str | Path) -> Path:
                 doctor_report=doctor_report,
                 schedule_run=schedule_run,
                 notification_records=notification_records,
+                backtest_audit=backtest_audit,
             ),
             encoding="utf-8",
         )

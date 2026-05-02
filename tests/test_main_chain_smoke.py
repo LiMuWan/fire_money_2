@@ -35,6 +35,7 @@ from shared.contracts import (
     MainlineNewsItem,
     NotificationRecord,
     NotificationStatus,
+    OneToTwoBacktestAuditReport,
     OneToTwoMorningReport,
     OneToTwoBetaRehearsalReport,
     OneToTwoScheduleRun,
@@ -1670,6 +1671,70 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(paper_store.load().closed_trades, ())
             self.assertEqual(paper_store.load().positions, ())
 
+    def test_backtest_audit_reports_data_quality_and_admission_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+
+            report = service.build_one_to_two_backtest_audit(
+                end_date="2026-04-30",
+                max_trade_days=30,
+            )
+            payload = contract_to_dict(report)
+
+            self.assertIsInstance(report, OneToTwoBacktestAuditReport)
+            self.assertEqual(report.status, "warning")
+            self.assertEqual(report.usable_trade_days, 30)
+            self.assertGreaterEqual(report.stability_report.sample_count, 1)
+            self.assertIn("回测仍处观察期", report.summary)
+            checks = {check.check_id: check for check in report.data_quality_checks}
+            self.assertEqual(checks["data_window"].status, "ready")
+            self.assertEqual(checks["sample_size"].status, "warning")
+            self.assertEqual(checks["rule_version"].status, "ready")
+            self.assertIn("Point-in-Time", report.limitations[0])
+            self.assertEqual(payload["data_quality_checks"][0]["check_id"], "data_window")
+            self.assertEqual(paper_store.load().closed_trades, ())
+
+    def test_backtest_audit_cli_brief_prints_standard_flow_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "backtest-audit",
+                    "--brief",
+                    "--sample-data",
+                    "--end-date",
+                    "2026-04-30",
+                    "--max-trade-days",
+                    "30",
+                    "--paper-store",
+                    str(root / "paper_trades.json"),
+                    "--notification-store",
+                    str(root / "notifications.json"),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+
+            self.assertIn("FireMoney 回测准入：warning", completed.stdout)
+            self.assertIn("数据质量：", completed.stdout)
+            self.assertIn("样本数：warning", completed.stdout)
+            self.assertIn("Point-in-Time", completed.stdout)
+            self.assertFalse((root / "paper_trades.json").exists())
+
     def test_scheduler_runs_due_jobs_once_per_trading_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -2390,6 +2455,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("已执行", html)
             self.assertIn("尾盘测评", html)
             self.assertIn("稳定性观察", html)
+            self.assertIn("回测准入", html)
+            self.assertIn("数据窗口", html)
+            self.assertIn("幸存者偏差", html)
             self.assertIn("稳定性阶段", html)
             self.assertIn("最近样本", html)
             self.assertIn("低位换手样本", html)
