@@ -89,6 +89,15 @@ def main() -> None:
         help="Use stricter readiness checks for simulated Beta watch mode.",
     )
     args = parser.parse_args()
+    if args.beta and args.mode == "schedule" and args.no_notify:
+        result = {
+            "mode": "schedule",
+            "status": "blocked",
+            "summary": "模拟盘 Beta 值守必须发送飞书通知，不能同时使用 --no-notify。",
+            "next_action": "移除 --no-notify，或先运行 doctor --beta 修复阻断项。",
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
 
     provider = SampleMarketDataProvider() if args.sample_data else AkshareMarketDataProvider()
     paper_store = PaperTradeStore(args.paper_store) if args.paper_store else None

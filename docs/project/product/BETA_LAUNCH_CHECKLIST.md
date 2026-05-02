@@ -57,6 +57,8 @@ python -m client.desktop.firemoney_client.one_to_two_cli schedule --beta --loop 
 
 本地调度器会按 08:50 早盘、盘中 `scan/auction/open/risk`、15:10 尾盘推进同一条一进二主线，并用 `.firemoney/scheduler_state.json` 防止同日重复触发。`--beta` 会在启动前先运行严格体检；只要不是 `ready`，就输出体检报告并拒绝进入值守。
 
+Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到飞书。
+
 ## 不上线条件
 
 - `doctor` 有任何 `blocked`。

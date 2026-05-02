@@ -1067,6 +1067,43 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertFalse(scheduler_path.exists())
             self.assertEqual(PaperTradeStore(paper_path).load().events, ())
 
+    def test_beta_schedule_cli_rejects_no_notify(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_path = root / "paper_trades.json"
+            scheduler_path = root / "scheduler_state.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "schedule",
+                    "--sample-data",
+                    "--beta",
+                    "--no-notify",
+                    "--trade-date",
+                    "2026-04-30",
+                    "--at",
+                    "09:31",
+                    "--paper-store",
+                    str(paper_path),
+                    "--scheduler-state",
+                    str(scheduler_path),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["mode"], "schedule")
+            self.assertEqual(payload["status"], "blocked")
+            self.assertIn("不能同时使用 --no-notify", payload["summary"])
+            self.assertFalse(paper_path.exists())
+            self.assertFalse(scheduler_path.exists())
+
     def test_feishu_notifier_is_safe_without_webhook(self) -> None:
         old_enabled = os.environ.get("FEISHU_ENABLED")
         old_webhook = os.environ.get("FEISHU_WEBHOOK_URL")
