@@ -234,6 +234,28 @@ button {
   background: var(--warning-soft);
 }
 
+.continuity-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.continuity-card[data-status="strong"] {
+  border-color: rgba(31, 122, 90, 0.45);
+  background: var(--accent-soft);
+}
+
+.continuity-card[data-status="watch"] {
+  border-color: rgba(166, 106, 24, 0.36);
+  background: var(--warning-soft);
+}
+
+.continuity-card[data-status="fading"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
+}
+
 .one-to-two-card p {
   margin: 8px 0 0;
   color: var(--muted);
@@ -621,8 +643,10 @@ button {
           <ul class="detail-list compact">
             <li>封板 20.0/20，主线 20.0/20，龙头 20.0/20，竞价 20.0/20</li>
             <li>位置 25.0/25，流动性 10.0/15，首板质量 25.0/25</li>
-            <li>封板资金占比 20.0%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>封板资金占比 20.0%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1；亏损跌破 10.0 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
             <li>买入价 10.52，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
+            <li>卖点计划：亏损跌破 10.0 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
+            <li>主线持续性：AI端侧主线 100.0/100，消息 0 条，主线仍强，持仓可按止盈和回撤纪律观察。</li>
 
             <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li>
           </ul>
@@ -647,8 +671,10 @@ button {
           <ul class="detail-list compact">
             <li>封板 19.0/20，主线 17.0/20，龙头 19.0/20，竞价 20.0/20</li>
             <li>位置 21.0/25，流动性 10.0/15，首板质量 25.0/25</li>
-            <li>封板资金占比 13.8%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>封板资金占比 13.8%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1；亏损跌破 21.0 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
             <li>买入价 22.0，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
+            <li>卖点计划：亏损跌破 21.0 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
+            <li>主线持续性：非主板 89.8/100，消息 0 条，主线仍强，持仓可按止盈和回撤纪律观察。</li>
             <li>创业板 不在主板 10cm 一进二范围内</li>
             <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li>
           </ul>
@@ -673,8 +699,10 @@ button {
           <ul class="detail-list compact">
             <li>封板 20.0/20，主线 16.0/20，龙头 18.0/20，竞价 13.0/20</li>
             <li>位置 17.0/25，流动性 10.0/15，首板质量 25.0/25</li>
-            <li>封板资金占比 15.0%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>封板资金占比 15.0%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1；亏损跌破 15.67 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
             <li>买入价 16.5，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
+            <li>卖点计划：亏损跌破 15.67 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
+            <li>主线持续性：高位加速 94.3/100，消息 0 条，主线仍强，持仓可按止盈和回撤纪律观察。</li>
             <li>首板前涨幅过大，疑似高位接力</li><li>距离 20 日均线过远，短线乖离过大</li><li>上方压力位过近</li>
             <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li><li>竞价/开盘涨幅偏高，防止高开兑现</li>
           </ul>
@@ -699,8 +727,10 @@ button {
           <ul class="detail-list compact">
             <li>封板 11.0/20，主线 20.0/20，龙头 12.0/20，竞价 11.0/20</li>
             <li>位置 24.0/25，流动性 10.0/15，首板质量 14.0/25</li>
-            <li>封板资金占比 2.3%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1。</li>
+            <li>封板资金占比 2.3%；只做非一字、封板确认后的主线首板候选，次日一进二只作为确认点，模拟盘严格 T+1；亏损跌破 8.4 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
             <li>买入价 8.8，仓位上限 8%，严格 T+1；2 个交易日不走强则纪律退出</li>
+            <li>卖点计划：亏损跌破 8.4 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li>
+            <li>主线持续性：同题材跟风 88.3/100，消息 0 条，主线仍强，持仓可按止盈和回撤纪律观察。</li>
             <li>封板资金不足，不能作为主线首板龙头候选</li><li>龙头候选辨识度不足，避免普通跟风票</li>
             <li>严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出</li><li>封板资金刚过线，盘中炸板风险需要重点盯</li>
           </ul>
@@ -709,6 +739,63 @@ button {
           </div>
         </section>
         <aside class="side-panel">
+          <section class="panel one-to-two-panel">
+            <h2>主线持续性</h2>
+
+        <article class="continuity-card" data-status="strong">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">AI端侧主线</div>
+              <div class="candidate-code">状态 strong / 消息 0 条</div>
+            </div>
+            <div class="candidate-score">90.6</div>
+          </div>
+          <ul class="detail-list compact">
+            <li>同主线候选 1，近涨停强度 0</li>
+            <li>主线仍强，持仓可按止盈和回撤纪律观察。</li>
+            <li>市场温度 74</li><li>主线强度 17/20</li><li>封板纪律 20/20</li><li>龙头辨识度 19/20</li>
+
+
+          </ul>
+        </article>
+
+
+        <article class="continuity-card" data-status="strong">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">非主板</div>
+              <div class="candidate-code">状态 strong / 消息 0 条</div>
+            </div>
+            <div class="candidate-score">89.8</div>
+          </div>
+          <ul class="detail-list compact">
+            <li>同主线候选 1，近涨停强度 0</li>
+            <li>主线仍强，持仓可按止盈和回撤纪律观察。</li>
+            <li>市场温度 74</li><li>主线强度 17/20</li><li>封板纪律 19/20</li><li>龙头辨识度 19/20</li>
+
+
+          </ul>
+        </article>
+
+
+        <article class="continuity-card" data-status="strong">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">高位加速</div>
+              <div class="candidate-code">状态 strong / 消息 0 条</div>
+            </div>
+            <div class="candidate-score">94.3</div>
+          </div>
+          <ul class="detail-list compact">
+            <li>同主线候选 1，近涨停强度 1</li>
+            <li>主线仍强，持仓可按止盈和回撤纪律观察。</li>
+            <li>市场温度 74</li><li>主线强度 16/20</li><li>封板纪律 20/20</li><li>龙头辨识度 18/20</li>
+
+
+          </ul>
+        </article>
+
+          </section>
 
       <section class="panel one-to-two-panel">
         <h2>Beta 预检</h2>
@@ -869,6 +956,8 @@ button {
         <ul class="risk-steps">
           <li><span>浮动盈亏</span><strong>-504.00 / -6.84%</strong></li>
           <li><span>当前纪律</span><strong>跌破止损但受 T+1 约束，次日仍弱再模拟卖出。</strong></li>
+          <li><span>卖点计划</span><strong>亏损跌破 10.0 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</strong></li>
+          <li><span>主线持续性</span><strong>AI端侧主线 100.0/100，消息 2 条，主线仍有持续性，按止盈和回撤纪律观察。</strong></li>
           <li><span>下一步</span><strong>当日只预警不卖出；下一交易日仍低于止损再模拟卖出。</strong></li>
         </ul>
       </article>
@@ -886,7 +975,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">08:50 早盘判断</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>市场温度：74</li><li>主线首板候选：4，可执行候选：1，硬拦截：3</li><li>模拟盘：权益 100000.00，当日已交易 0/1</li><li>主线首板候选入池：</li><li>- 主线首板候选(600001) 分数 100.0，主线龙头候选，封板 20.0/20，主线 20.0/20，龙头 20.0/20，买入参考 10.52，止损 10.0，仓位上限 8%</li><li>主要拦截：</li><li>- 非主板拦截(300003)：创业板 不在主板 10cm 一进二范围内</li><li>- 高位跟风拦截(600002)：首板前涨幅过大，疑似高位接力</li><li>纪律：只做主板 10cm 主线首板龙头候选；一进二只是确认点，当天跌破止损只预警，T+1 再处理。</li>
+          <li>交易日：2026-04-30</li><li>市场温度：74</li><li>主线首板候选：4，可执行候选：1，硬拦截：3</li><li>模拟盘：权益 100000.00，当日已交易 0/1</li><li>主线首板候选入池：</li><li>- 主线首板候选(600001) 分数 100.0，主线龙头候选，封板 20.0/20，主线 20.0/20，龙头 20.0/20，买入参考 10.52，止损 10.0，仓位上限 8%</li><li>  卖点纪律：亏损跌破 10.0 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li><li>  主线持续性：AI端侧主线 100.0/100，主线仍强，持仓可按止盈和回撤纪律观察。</li><li>主要拦截：</li><li>- 非主板拦截(300003)：创业板 不在主板 10cm 一进二范围内</li><li>- 高位跟风拦截(600002)：首板前涨幅过大，疑似高位接力</li><li>纪律：只做主板 10cm 主线首板龙头候选；一进二只是确认点，当天跌破止损只预警，T+1 再处理。</li>
         </ul>
       </article>
 
@@ -894,7 +983,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">盘中事件</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>阶段：risk</li><li>最新事件：跌破止损，已发出 T+1 风险预警。</li><li>止损预警：主线首板候选(600001)</li><li>当前价 9.8，止损价 10.0</li><li>浮动盈亏：-504.00 (-6.84%)</li><li>位置：低位平台突破</li><li>T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
+          <li>交易日：2026-04-30</li><li>阶段：risk</li><li>最新事件：跌破止损，已发出 T+1 风险预警。</li><li>止损预警：主线首板候选(600001)</li><li>当前价 9.8，止损价 10.0</li><li>浮动盈亏：-504.00 (-6.84%)</li><li>位置：低位平台突破</li><li>T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。</li><li>主线持续性：AI端侧主线 100.0/100，消息 2 条，主线仍有持续性，按止盈和回撤纪律观察。</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
         </ul>
       </article>
 
@@ -902,7 +991,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">15:10 尾盘测评</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>权益：99496.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：4，止损预警：1，当日 T+1 卖出：0</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：主线首板候选(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
+          <li>交易日：2026-04-30</li><li>权益：99496.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：4，止损预警：1，当日 T+1 卖出：0</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：主线首板候选(600001)，止损 10.0，仍受 T+1 约束</li><li>隔夜卖点：亏损跌破 10.0 先预警、T+1 再卖；盈利 8% 先落袋；强势到 15% 后用 6% 回撤保护。</li><li>主线持续性：AI端侧主线 100.0/100，主线仍有持续性，按止盈和回撤纪律观察。</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
         </ul>
       </article>
 

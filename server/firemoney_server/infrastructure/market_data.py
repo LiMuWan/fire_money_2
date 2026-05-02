@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
+from shared.contracts import MainlineNewsItem
 
 
 DEFAULT_MARKET_DATA_CACHE_DIR = Path(".firemoney") / "market_data"
@@ -23,6 +24,14 @@ class MarketDataProvider(Protocol):
 
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         """Load normalized one-to-two rows for a trade date."""
+        ...
+
+    def load_mainline_news(
+        self,
+        theme: str,
+        symbols: tuple[str, ...],
+    ) -> tuple[MainlineNewsItem, ...]:
+        """Load normalized mainline news items for continuity review."""
         ...
 
 
@@ -141,6 +150,27 @@ class SampleMarketDataProvider:
             ),
         )
 
+    def load_mainline_news(
+        self,
+        theme: str,
+        symbols: tuple[str, ...],
+    ) -> tuple[MainlineNewsItem, ...]:
+        symbol_text = "、".join(symbols[:3])
+        return (
+            MainlineNewsItem(
+                title=f"{theme} 继续获得资金关注，核心候选 {symbol_text} 进入观察",
+                source="sample",
+                published_at="09:20",
+                related_symbols=symbols[:3],
+            ),
+            MainlineNewsItem(
+                title=f"{theme} 分歧中仍有涨停样本，需结合封板质量确认持续性",
+                source="sample",
+                published_at="10:30",
+                related_symbols=symbols[:3],
+            ),
+        )
+
 
 class AkshareMarketDataProvider:
     """AkShare-backed market data provider with local cache and safe failure."""
@@ -194,6 +224,45 @@ class AkshareMarketDataProvider:
             rows = self._fallback_rows(trade_date)
         self._remember_rows(trade_date, rows)
         return rows
+
+    def load_mainline_news(
+        self,
+        theme: str,
+        symbols: tuple[str, ...],
+    ) -> tuple[MainlineNewsItem, ...]:
+        try:
+            import akshare as ak  # type: ignore
+        except Exception:
+            if self._fallback is not None and hasattr(self._fallback, "load_mainline_news"):
+                return self._fallback.load_mainline_news(theme, symbols)
+            return ()
+
+        news: list[MainlineNewsItem] = []
+        for symbol in symbols[:5]:
+            try:
+                raw_news = ak.stock_news_em(symbol=symbol)
+                records = getattr(raw_news, "to_dict", lambda *_args, **_kwargs: [])("records")
+                self._cache_payload("latest", f"stock_news_em_{symbol}", raw_news)
+            except Exception:
+                continue
+            for item in records[:3]:
+                title = self._first_text(item, ("新闻标题", "标题", "title"))
+                if not title:
+                    continue
+                news.append(
+                    MainlineNewsItem(
+                        title=title,
+                        source=self._first_text(item, ("文章来源", "来源", "source")) or "东方财富",
+                        published_at=self._first_text(item, ("发布时间", "时间", "datetime")),
+                        related_symbols=(symbol,),
+                        url=self._first_text(item, ("新闻链接", "链接", "url")),
+                    )
+                )
+        if news:
+            return tuple(news[:8])
+        if self._fallback is not None and hasattr(self._fallback, "load_mainline_news"):
+            return self._fallback.load_mainline_news(theme, symbols)
+        return ()
 
     def _cached_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...] | None:
         cached = self._row_cache.get(trade_date)

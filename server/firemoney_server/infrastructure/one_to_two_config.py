@@ -31,6 +31,10 @@ class OneToTwoStrategySettings:
     near_pressure_pct: float
     max_holding_trade_days: int
     discipline_exit_min_gain_pct: float
+    first_take_profit_pct: float
+    strong_take_profit_pct: float
+    trailing_stop_pct: float
+    mainline_fade_score: float
     minimum_sample_for_stability: int
     min_sealed_amount_ratio: float
     min_leader_score: float
@@ -71,6 +75,10 @@ def load_one_to_two_settings(
         near_pressure_pct=float(parameters["near_pressure_pct"]),
         max_holding_trade_days=int(parameters["max_holding_trade_days"]),
         discipline_exit_min_gain_pct=float(parameters["discipline_exit_min_gain_pct"]),
+        first_take_profit_pct=float(parameters.get("first_take_profit_pct", 0.08)),
+        strong_take_profit_pct=float(parameters.get("strong_take_profit_pct", 0.15)),
+        trailing_stop_pct=float(parameters.get("trailing_stop_pct", 0.06)),
+        mainline_fade_score=float(parameters.get("mainline_fade_score", 45)),
         minimum_sample_for_stability=int(parameters["minimum_sample_for_stability"]),
         min_sealed_amount_ratio=float(parameters.get("min_sealed_amount_ratio", 0.08)),
         min_leader_score=float(parameters.get("min_leader_score", 16)),

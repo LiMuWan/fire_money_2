@@ -55,6 +55,8 @@ def _render_mainline_candidates(report: OneToTwoMorningReport) -> str:
             <li>位置 {candidate.position_score}/25，流动性 {candidate.liquidity_score}/15，首板质量 {candidate.first_board_score}/25</li>
             <li>{_text(candidate.discipline_summary)}</li>
             <li>买入价 {_text(candidate.entry_price)}，仓位上限 {candidate.position_limit_pct:.0%}，严格 T+1；2 个交易日不走强则纪律退出</li>
+            {f'<li>卖点计划：{_text(candidate.exit_plan.summary)}</li>' if candidate.exit_plan else ''}
+            {f'<li>主线持续性：{_text(candidate.mainline_continuity.theme)} {_text(candidate.mainline_continuity.score)}/100，消息 {candidate.mainline_continuity.news_count} 条，{_text(candidate.mainline_continuity.next_action)}</li>' if candidate.mainline_continuity else ''}
             {"".join(f"<li>{_text(item)}</li>" for item in candidate.blockers[:3])}
             {"".join(f"<li>{_text(item)}</li>" for item in candidate.warnings[:2])}
           </ul>
@@ -129,10 +131,44 @@ def _render_one_to_two_position(report: OneToTwoMorningReport) -> str:
         <ul class="risk-steps">
           <li><span>浮动盈亏</span><strong>{position.unrealized_pnl:.2f} / {position.unrealized_pnl_pct:.2%}</strong></li>
           <li><span>当前纪律</span><strong>{_text(position.risk_note)}</strong></li>
+          {f'<li><span>卖点计划</span><strong>{_text(position.exit_plan.summary)}</strong></li>' if position.exit_plan else ''}
+          {f'<li><span>主线持续性</span><strong>{_text(position.mainline_continuity.theme)} {_text(position.mainline_continuity.score)}/100，消息 {position.mainline_continuity.news_count} 条，{_text(position.mainline_continuity.next_action)}</strong></li>' if position.mainline_continuity else ''}
           <li><span>下一步</span><strong>{_text(action)}</strong></li>
         </ul>
       </article>
     """
+
+
+def _render_mainline_continuity(report: OneToTwoMorningReport) -> str:
+    continuities = tuple(
+        candidate.mainline_continuity
+        for candidate in report.candidates
+        if candidate.mainline_continuity is not None
+    )
+    if not continuities:
+        return '<p class="empty-note">暂无主线持续性证据。</p>'
+    by_theme = {item.theme: item for item in continuities}
+    return "\n".join(
+        f"""
+        <article class="continuity-card" data-status="{_text(item.status)}">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">{_text(theme)}</div>
+              <div class="candidate-code">状态 {_text(item.status)} / 消息 {item.news_count} 条</div>
+            </div>
+            <div class="candidate-score">{_text(item.score)}</div>
+          </div>
+          <ul class="detail-list compact">
+            <li>同主线候选 {item.hot_stock_count}，近涨停强度 {item.limit_up_count}</li>
+            <li>{_text(item.next_action)}</li>
+            {"".join(f"<li>{_text(reason)}</li>" for reason in item.reasons[:4])}
+            {"".join(f"<li>{_text(note)}</li>" for note in item.risk_notes[:2])}
+            {"".join(f"<li>消息：{_text(news.title)}</li>" for news in item.latest_news[:2])}
+          </ul>
+        </article>
+        """
+        for theme, item in list(by_theme.items())[:3]
+    )
 
 
 def _render_schedule_run(schedule_run: OneToTwoScheduleRun) -> str:
@@ -319,6 +355,10 @@ def render_one_to_two_workflow_html(
           </div>
         </section>
         <aside class="side-panel">
+          <section class="panel one-to-two-panel">
+            <h2>主线持续性</h2>
+            {_render_mainline_continuity(watch_report)}
+          </section>
           {_render_doctor_panel(doctor_report)}
           {_render_schedule_panel(schedule_run)}
           <section class="panel one-to-two-panel">

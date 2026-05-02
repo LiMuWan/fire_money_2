@@ -29,6 +29,8 @@ from server.firemoney_server.infrastructure.trading_calendar import (
 )
 from shared.contracts import (
     FeishuNotificationResult,
+    MainlineContinuity,
+    MainlineNewsItem,
     NotificationStatus,
     NotificationRecord,
     OneToTwoBetaReadinessReport,
@@ -165,6 +167,7 @@ class MainChainService:
                 None,
             )
             if matched and phase in {"open", "risk"}:
+                matched = self._with_live_mainline_continuity(matched, report.candidates)
                 account = self._paper_store.update_risk(matched)
                 if account.positions and phase == "risk":
                     account = self._exit_if_discipline_requires(matched)
@@ -218,6 +221,39 @@ class MainChainService:
         position = account.positions[0]
         if not position.can_sell_today:
             return account
+        if (
+            position.mainline_continuity
+            and position.mainline_continuity.score < self._one_to_two_settings.mainline_fade_score
+        ):
+            return self._paper_store.exit_position(
+                candidate,
+                exit_reason="mainline_fade_exit",
+                message=(
+                    "主线持续性跌破纪律阈值，T+1 已到，模拟退出保住本金。"
+                ),
+                event_type=OneToTwoEventType.MAINLINE_FADE_EXIT,
+                holding_trade_days=self._holding_trade_days(
+                    opened_at=position.opened_at,
+                    trade_date=candidate.trade_date,
+                ),
+            )
+        if (
+            position.exit_plan
+            and position.unrealized_pnl_pct >= position.exit_plan.first_take_profit_pct
+        ):
+            return self._paper_store.exit_position(
+                candidate,
+                exit_reason="take_profit_first_target",
+                message=(
+                    f"浮盈达到 {position.exit_plan.first_take_profit_pct:.0%} "
+                    "第一止盈纪律，T+1 已到，模拟落袋。"
+                ),
+                event_type=OneToTwoEventType.TAKE_PROFIT,
+                holding_trade_days=self._holding_trade_days(
+                    opened_at=position.opened_at,
+                    trade_date=candidate.trade_date,
+                ),
+            )
         holding_trade_days = self._holding_trade_days(
             opened_at=position.opened_at,
             trade_date=candidate.trade_date,
@@ -231,6 +267,109 @@ class MainChainService:
             exit_reason="discipline_weak_after_2_days",
             message="持仓超过 2 个交易日未继续走强，按主线首板纪律退出。",
             holding_trade_days=holding_trade_days,
+        )
+
+    def _with_live_mainline_continuity(
+        self,
+        candidate: OneToTwoCandidate,
+        candidates: tuple[OneToTwoCandidate, ...],
+    ) -> OneToTwoCandidate:
+        base = candidate.mainline_continuity
+        if base is None:
+            return candidate
+        symbols = tuple(item.symbol for item in candidates[:8])
+        news = self._load_mainline_news(base.theme, symbols)
+        hot_stock_count = sum(
+            1
+            for item in candidates
+            if item.mainline_continuity
+            and item.mainline_continuity.theme == base.theme
+        )
+        limit_up_count = sum(
+            1 for item in candidates if item.latest_price >= item.limit_up_price * 0.995
+        )
+        news_bonus = min(len(news) * 3, 12)
+        breadth_bonus = min(hot_stock_count * 4 + limit_up_count * 3, 18)
+        adjusted_score = min(100.0, base.score + news_bonus + breadth_bonus)
+        risk_notes = list(base.risk_notes)
+        if not news:
+            risk_notes.append("未抓取到新的主线消息，只按价格和封板持续性观察")
+        status = (
+            "strong"
+            if adjusted_score >= 75
+            else "watch"
+            if adjusted_score >= self._one_to_two_settings.mainline_fade_score
+            else "fading"
+        )
+        continuity = MainlineContinuity(
+            theme=base.theme,
+            score=round(adjusted_score, 2),
+            status=status,
+            hot_stock_count=hot_stock_count,
+            limit_up_count=limit_up_count,
+            news_count=len(news),
+            latest_news=news[:5],
+            reasons=(
+                *base.reasons,
+                f"同主线候选 {hot_stock_count} 个",
+                f"近涨停强度 {limit_up_count} 个",
+                f"消息证据 {len(news)} 条",
+            ),
+            risk_notes=tuple(dict.fromkeys(risk_notes)),
+            next_action=(
+                "主线仍有持续性，按止盈和回撤纪律观察。"
+                if status == "strong"
+                else "主线仍需确认，达到第一止盈优先落袋。"
+                if status == "watch"
+                else "主线持续性衰减，T+1 已到优先退出。"
+            ),
+        )
+        return self._replace_candidate_continuity(candidate, continuity)
+
+    def _load_mainline_news(
+        self,
+        theme: str,
+        symbols: tuple[str, ...],
+    ) -> tuple[MainlineNewsItem, ...]:
+        try:
+            return self._market_data_provider.load_mainline_news(theme, symbols)
+        except Exception:
+            return ()
+
+    def _replace_candidate_continuity(
+        self,
+        candidate: OneToTwoCandidate,
+        continuity: MainlineContinuity,
+    ) -> OneToTwoCandidate:
+        return OneToTwoCandidate(
+            symbol=candidate.symbol,
+            name=candidate.name,
+            trade_date=candidate.trade_date,
+            score=candidate.score,
+            status=candidate.status,
+            latest_price=candidate.latest_price,
+            limit_up_price=candidate.limit_up_price,
+            entry_price=candidate.entry_price,
+            stop_loss=candidate.stop_loss,
+            position_limit_pct=candidate.position_limit_pct,
+            first_board_score=candidate.first_board_score,
+            auction_score=candidate.auction_score,
+            position_score=candidate.position_score,
+            theme_score=candidate.theme_score,
+            liquidity_score=candidate.liquidity_score,
+            position_profile=candidate.position_profile,
+            blockers=candidate.blockers,
+            warnings=candidate.warnings,
+            rationale=candidate.rationale,
+            next_action=candidate.next_action,
+            mainline_score=candidate.mainline_score,
+            sealing_score=candidate.sealing_score,
+            leader_score=candidate.leader_score,
+            leader_label=candidate.leader_label,
+            strategy_tags=candidate.strategy_tags,
+            discipline_summary=candidate.discipline_summary,
+            exit_plan=candidate.exit_plan,
+            mainline_continuity=continuity,
         )
 
     def _holding_trade_days(self, opened_at: str, trade_date: str) -> int:
@@ -1035,6 +1174,8 @@ class MainChainService:
             warnings=(),
             rationale="历史回放强制归档样本。",
             next_action="回放结束。",
+            exit_plan=position.exit_plan,
+            mainline_continuity=position.mainline_continuity,
         )
 
     def _notify_or_prepare(
@@ -1094,6 +1235,14 @@ class MainChainService:
                     f"龙头 {candidate.leader_score}/20，买入参考 {candidate.entry_price}，"
                     f"止损 {candidate.stop_loss}，仓位上限 {candidate.position_limit_pct:.0%}"
                 )
+                if candidate.exit_plan:
+                    lines.append(f"  卖点纪律：{candidate.exit_plan.summary}")
+                if candidate.mainline_continuity:
+                    lines.append(
+                        f"  主线持续性：{candidate.mainline_continuity.theme} "
+                        f"{candidate.mainline_continuity.score}/100，"
+                        f"{candidate.mainline_continuity.next_action}"
+                    )
         else:
             lines.append("今日没有达到模拟买入条件的候选。")
         blockers = tuple(item for item in candidates if item.blockers)
@@ -1147,6 +1296,13 @@ class MainChainService:
                     "T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。",
                 ]
             )
+            if position.mainline_continuity:
+                lines.append(
+                    f"主线持续性：{position.mainline_continuity.theme} "
+                    f"{position.mainline_continuity.score}/100，"
+                    f"消息 {position.mainline_continuity.news_count} 条，"
+                    f"{position.mainline_continuity.next_action}"
+                )
         elif account.positions:
             position = account.positions[0]
             sell_state = "可按纪律卖出" if position.can_sell_today else "T+1 未到，只预警不卖出"
@@ -1158,6 +1314,19 @@ class MainChainService:
                     f"纪律状态：{sell_state}",
                 ]
             )
+            if position.exit_plan:
+                lines.append(f"卖点计划：{position.exit_plan.summary}")
+            if position.mainline_continuity:
+                lines.append(
+                    f"主线持续性：{position.mainline_continuity.theme} "
+                    f"{position.mainline_continuity.score}/100，"
+                    f"状态 {position.mainline_continuity.status}，"
+                    f"消息 {position.mainline_continuity.news_count} 条"
+                )
+                if position.mainline_continuity.latest_news:
+                    lines.append(
+                        f"最新消息：{position.mainline_continuity.latest_news[0].title}"
+                    )
         elif ready:
             candidate = ready[0]
             lines.extend(
@@ -1167,6 +1336,14 @@ class MainChainService:
                     f"仓位上限：{candidate.position_limit_pct:.0%}；状态：{candidate.status}",
                 ]
             )
+            if candidate.exit_plan:
+                lines.append(f"卖点计划：{candidate.exit_plan.summary}")
+            if candidate.mainline_continuity:
+                lines.append(
+                    f"主线持续性：{candidate.mainline_continuity.theme} "
+                    f"{candidate.mainline_continuity.score}/100，"
+                    f"{candidate.mainline_continuity.next_action}"
+                )
         else:
             lines.append("当前无可执行候选，不生成模拟买入。")
         lines.append("提醒：模拟盘不是实盘，不连接真实账户，不自动下单。")
@@ -1208,6 +1385,14 @@ class MainChainService:
                 f"隔夜观察：{position.name}({position.symbol})，止损 {position.stop_loss}，"
                 f"{'次日可卖' if position.can_sell_today else '仍受 T+1 约束'}"
             )
+            if position.exit_plan:
+                lines.append(f"隔夜卖点：{position.exit_plan.summary}")
+            if position.mainline_continuity:
+                lines.append(
+                    f"主线持续性：{position.mainline_continuity.theme} "
+                    f"{position.mainline_continuity.score}/100，"
+                    f"{position.mainline_continuity.next_action}"
+                )
         else:
             lines.append("当前无持仓，等待下一交易日重新扫描主线首板候选池。")
         lines.append("复盘纪律：尾盘只归档和评估边界，不改变当日交易。")

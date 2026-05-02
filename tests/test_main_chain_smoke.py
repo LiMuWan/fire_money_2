@@ -32,6 +32,7 @@ from server.firemoney_server.infrastructure.scheduler_state import SchedulerStat
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
     FeishuNotificationResult,
+    MainlineNewsItem,
     NotificationRecord,
     NotificationStatus,
     OneToTwoMorningReport,
@@ -127,8 +128,13 @@ def _weak_after_two_days_row(trade_date: str) -> OneToTwoMarketRow:
 
 
 class StaticOneToTwoProvider:
-    def __init__(self, rows: tuple[OneToTwoMarketRow, ...]) -> None:
+    def __init__(
+        self,
+        rows: tuple[OneToTwoMarketRow, ...],
+        news: tuple[MainlineNewsItem, ...] = (),
+    ) -> None:
         self._rows = rows
+        self._news = news
 
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         return tuple(
@@ -162,10 +168,24 @@ class StaticOneToTwoProvider:
             for row in self._rows
         )
 
+    def load_mainline_news(
+        self,
+        theme: str,
+        symbols: tuple[str, ...],
+    ) -> tuple[MainlineNewsItem, ...]:
+        return self._news
+
 
 class FailingOneToTwoProvider:
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         raise RuntimeError("market data unavailable")
+
+    def load_mainline_news(
+        self,
+        theme: str,
+        symbols: tuple[str, ...],
+    ) -> tuple[MainlineNewsItem, ...]:
+        raise RuntimeError("news unavailable")
 
 
 class FakeFeishuApiServer:
@@ -764,6 +784,34 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(len(second_watch.account.events), 1)
             self.assertEqual(second_watch.account.daily_trade_count, 1)
 
+    def test_candidate_and_position_include_exit_plan_and_continuity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            morning = service.build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+            open_trigger = service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+
+            candidate = morning.candidates[0]
+            position = open_trigger.account.positions[0]
+            self.assertIsNotNone(candidate.exit_plan)
+            self.assertIsNotNone(candidate.mainline_continuity)
+            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.08)
+            self.assertIn("盈利 8%", candidate.exit_plan.summary)
+            self.assertGreaterEqual(candidate.mainline_continuity.score, 45)
+            self.assertIsNotNone(position.exit_plan)
+            self.assertIsNotNone(position.mainline_continuity)
+            self.assertIn("盈利 8%", position.risk_note)
+
     def test_watch_phases_do_not_buy_before_open_trigger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = _build_service(
@@ -792,6 +840,119 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(open_trigger.account.events[0].event_type.value, "paper_buy")
             self.assertEqual(open_trigger.account.positions[0].status, PaperTradeStatus.HOLDING)
 
+    def test_take_profit_exits_after_t1_when_first_target_is_hit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            profit_row = _weak_after_two_days_row("2026-05-06")
+            profit_row = OneToTwoMarketRow(
+                **(profit_row.__dict__ | {"latest_price": 11.38, "theme": "AI端侧主线"})
+            )
+            service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider((profit_row,)),
+            )
+
+            risk = service.run_one_to_two_watch(
+                trade_date="2026-05-06",
+                phase="risk",
+                notify=False,
+            )
+
+            self.assertEqual(risk.account.positions, ())
+            self.assertEqual(risk.account.events[0].event_type.value, "take_profit")
+            self.assertEqual(risk.account.closed_trades[0].exit_reason, "take_profit_first_target")
+
+    def test_mainline_fade_exits_after_t1_even_without_news(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            fading_row = _weak_after_two_days_row("2026-05-06")
+            fading_row = OneToTwoMarketRow(
+                **(
+                    fading_row.__dict__
+                    | {
+                        "latest_price": 10.8,
+                        "theme": "",
+                        "market_temperature": 0,
+                        "sealed_amount": 0,
+                        "first_limit_up_time": "",
+                        "turnover_rate": 0,
+                        "recent_gain_pct": 0,
+                        "low_20": 1.0,
+                        "high_60": 99.0,
+                    }
+                )
+            )
+            service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider((fading_row,)),
+            )
+
+            risk = service.run_one_to_two_watch(
+                trade_date="2026-05-06",
+                phase="risk",
+                notify=False,
+            )
+
+            self.assertEqual(risk.account.positions, ())
+            self.assertEqual(risk.account.events[0].event_type.value, "mainline_fade_exit")
+            self.assertEqual(risk.account.closed_trades[0].exit_reason, "mainline_fade_exit")
+
+    def test_mainline_news_is_added_to_watch_message_without_trading_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            news = (
+                MainlineNewsItem(
+                    title="AI端侧主线继续发酵",
+                    source="东方财富",
+                    published_at="2026-05-06 09:45",
+                    related_symbols=("600001",),
+                ),
+            )
+            service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider(
+                    (_weak_after_two_days_row("2026-05-06"),),
+                    news=news,
+                ),
+            )
+
+            risk = service.run_one_to_two_watch(
+                trade_date="2026-05-06",
+                phase="risk",
+                notify=False,
+            )
+
+            self.assertIn("主线持续性", risk.notification.message)
+            self.assertIn("消息 1 条", risk.notification.message)
+            self.assertIn("AI端侧主线继续发酵", risk.notification.message)
+
     def test_feishu_messages_include_actionable_one_to_two_discipline(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = _build_service(
@@ -817,7 +978,10 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("止损", morning.notification.message)
             self.assertIn("仓位上限 8%", morning.notification.message)
             self.assertIn("T+1", morning.notification.message)
+            self.assertIn("卖点纪律", morning.notification.message)
+            self.assertIn("主线持续性", morning.notification.message)
             self.assertIn("持仓", open_trigger.notification.message)
+            self.assertIn("卖点计划", open_trigger.notification.message)
             self.assertIn("模拟盘不是实盘", open_trigger.notification.message)
             self.assertIn("样本少于 30 笔", eod.notification.message)
             self.assertIn("最新样本：暂无完成样本", eod.notification.message)
@@ -2167,6 +2331,10 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.max_daily_trades, 1)
         self.assertEqual(settings.max_holding_trade_days, 2)
         self.assertEqual(settings.discipline_exit_min_gain_pct, 0.03)
+        self.assertEqual(settings.first_take_profit_pct, 0.08)
+        self.assertEqual(settings.strong_take_profit_pct, 0.15)
+        self.assertEqual(settings.trailing_stop_pct, 0.06)
+        self.assertEqual(settings.mainline_fade_score, 45)
         self.assertIn("创业板", settings.excluded_boards)
 
     def test_preview_file_can_be_generated_without_legacy_surface(self) -> None:
@@ -2184,6 +2352,10 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("龙头", html)
             self.assertIn("主线首板候选", html)
             self.assertIn("低位平台突破", html)
+            self.assertIn("主线持续性", html)
+            self.assertIn("卖点计划", html)
+            self.assertIn("盈利 8%", html)
+            self.assertIn("消息", html)
             self.assertIn("模拟盘与风险", html)
             self.assertIn("飞书通知", html)
             self.assertIn("08:50 早盘判断", html)

@@ -44,6 +44,9 @@ class _PreviewRiskBreakMarketDataProvider:
         )
         return (warning_row, *rows[1:])
 
+    def load_mainline_news(self, theme: str, symbols: tuple[str, ...]):
+        return self._base_provider.load_mainline_news(theme, symbols)
+
 
 def _seed_preview_closed_sample(paper_store: PaperTradeStore) -> None:
     account = paper_store.load()

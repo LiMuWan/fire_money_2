@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from shared.contracts import (
+    MainlineContinuity,
+    OneToTwoExitPlan,
     OneToTwoCandidate,
     OneToTwoPositionProfile,
 )
@@ -53,6 +55,10 @@ class OneToTwoSettings(Protocol):
     min_leader_score: float
     min_mainline_score: float
     board_strategy_enabled: bool
+    first_take_profit_pct: float
+    strong_take_profit_pct: float
+    trailing_stop_pct: float
+    max_holding_trade_days: int
     exclude_st: bool
     exclude_delisting: bool
     exclude_new_stock_days: int
@@ -109,6 +115,13 @@ class OneToTwoPolicy:
         )
         percent_stop = row.latest_price * (1 - self._settings.stop_loss_pct)
         stop_loss = round(max(structure_stop, percent_stop), 2)
+        exit_plan = self._exit_plan(row.latest_price, stop_loss)
+        continuity = self._mainline_continuity(
+            row,
+            mainline_score=mainline_score,
+            sealing_score=sealing_score,
+            leader_score=leader_score,
+        )
         return OneToTwoCandidate(
             symbol=row.symbol,
             name=row.name,
@@ -141,7 +154,9 @@ class OneToTwoPolicy:
                 sealing_score,
                 mainline_score,
             ),
-            discipline_summary=self._discipline_summary(row),
+            discipline_summary=self._discipline_summary(row, exit_plan),
+            exit_plan=exit_plan,
+            mainline_continuity=continuity,
         )
 
     def _blockers(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
@@ -374,11 +389,98 @@ class OneToTwoPolicy:
             tags.append("高开谨慎")
         return tuple(tags)
 
-    def _discipline_summary(self, row: OneToTwoMarketRow) -> str:
+    def _exit_plan(self, entry_price: float, stop_loss: float) -> OneToTwoExitPlan:
+        first_take_profit_price = round(
+            entry_price * (1 + self._settings.first_take_profit_pct),
+            2,
+        )
+        strong_take_profit_price = round(
+            entry_price * (1 + self._settings.strong_take_profit_pct),
+            2,
+        )
+        stop_loss_pct = (
+            round((entry_price - stop_loss) / entry_price, 4)
+            if entry_price
+            else self._settings.stop_loss_pct
+        )
+        return OneToTwoExitPlan(
+            stop_loss=stop_loss,
+            stop_loss_pct=stop_loss_pct,
+            first_take_profit_price=first_take_profit_price,
+            first_take_profit_pct=self._settings.first_take_profit_pct,
+            strong_take_profit_price=strong_take_profit_price,
+            strong_take_profit_pct=self._settings.strong_take_profit_pct,
+            trailing_stop_pct=self._settings.trailing_stop_pct,
+            max_holding_trade_days=self._settings.max_holding_trade_days,
+            summary=(
+                f"亏损跌破 {stop_loss} 先预警、T+1 再卖；"
+                f"盈利 {self._settings.first_take_profit_pct:.0%} 先落袋；"
+                f"强势到 {self._settings.strong_take_profit_pct:.0%} 后用 "
+                f"{self._settings.trailing_stop_pct:.0%} 回撤保护。"
+            ),
+        )
+
+    def _mainline_continuity(
+        self,
+        row: OneToTwoMarketRow,
+        mainline_score: float,
+        sealing_score: float,
+        leader_score: float,
+    ) -> MainlineContinuity:
+        hot_stock_count = 1 if row.theme else 0
+        limit_up_count = 1 if row.latest_price >= row.limit_up_price * 0.995 else 0
+        score = min(
+            100.0,
+            row.market_temperature * 0.35
+            + mainline_score * 1.5
+            + sealing_score * 0.8
+            + leader_score * 0.8
+            + (8 if row.theme else 0)
+            + (6 if limit_up_count else 0),
+        )
+        reasons = [
+            f"市场温度 {row.market_temperature}",
+            f"主线强度 {mainline_score:.0f}/20",
+            f"封板纪律 {sealing_score:.0f}/20",
+            f"龙头辨识度 {leader_score:.0f}/20",
+        ]
+        risk_notes: list[str] = []
+        if row.market_temperature < 60:
+            risk_notes.append("市场温度不足，接力持续性打折")
+        if mainline_score < self._settings.min_mainline_score:
+            risk_notes.append("主线强度低于执行门槛")
+        status = (
+            "strong"
+            if score >= 75
+            else "watch"
+            if score >= self._settings.mainline_fade_score
+            else "fading"
+        )
+        next_action = (
+            "主线仍强，持仓可按止盈和回撤纪律观察。"
+            if status == "strong"
+            else "主线需继续确认，达到第一止盈优先落袋。"
+            if status == "watch"
+            else "主线衰减，若 T+1 已到应优先退出。"
+        )
+        return MainlineContinuity(
+            theme=row.theme or "未标记主线",
+            score=round(score, 2),
+            status=status,
+            hot_stock_count=hot_stock_count,
+            limit_up_count=limit_up_count,
+            news_count=0,
+            latest_news=(),
+            reasons=tuple(reasons),
+            risk_notes=tuple(risk_notes),
+            next_action=next_action,
+        )
+
+    def _discipline_summary(self, row: OneToTwoMarketRow, exit_plan: OneToTwoExitPlan) -> str:
         sealed_ratio = row.sealed_amount / row.turnover_amount if row.turnover_amount else 0.0
         return (
             f"封板资金占比 {sealed_ratio:.1%}；只做非一字、封板确认后的主线首板候选，"
-            "次日一进二只作为确认点，模拟盘严格 T+1。"
+            f"次日一进二只作为确认点，模拟盘严格 T+1；{exit_plan.summary}"
         )
 
     def _rationale(

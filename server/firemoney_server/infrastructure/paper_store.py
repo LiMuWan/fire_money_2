@@ -9,13 +9,17 @@ from time import strftime
 from typing import Any
 
 from shared.contracts import (
+    MainlineContinuity,
+    MainlineNewsItem,
     OneToTwoCandidate,
     OneToTwoEventType,
+    OneToTwoExitPlan,
     PaperAccount,
     PaperPosition,
     PaperTradeEvent,
     PaperTradeRecord,
     PaperTradeStatus,
+    contract_to_dict,
 )
 
 
@@ -97,6 +101,8 @@ class PaperTradeStore:
                 can_sell_today=True,
                 status=position.status,
                 risk_note="已进入下一交易日，若继续跌破止损可模拟卖出。",
+                exit_plan=position.exit_plan,
+                mainline_continuity=position.mainline_continuity,
             )
             for position in account.positions
         )
@@ -169,7 +175,13 @@ class PaperTradeStore:
             opened_score=candidate.score,
             can_sell_today=False,
             status=PaperTradeStatus.HOLDING,
-            risk_note="严格 T+1：当天跌破止损只预警，不模拟卖出。",
+            risk_note=(
+                candidate.exit_plan.summary
+                if candidate.exit_plan
+                else "严格 T+1：当天跌破止损只预警，不模拟卖出。"
+            ),
+            exit_plan=candidate.exit_plan,
+            mainline_continuity=candidate.mainline_continuity,
         )
         account = PaperAccount(
             account_id=account.account_id,
@@ -228,6 +240,7 @@ class PaperTradeStore:
         if position.symbol != candidate.symbol:
             return account
         account = self._revalue(account, candidate.latest_price)
+        account = self._refresh_position_context(account, candidate)
         position = account.positions[0]
         if candidate.latest_price >= position.stop_loss:
             return self.save(account)
@@ -254,6 +267,8 @@ class PaperTradeStore:
                 can_sell_today=position.can_sell_today,
                 status=PaperTradeStatus.WARNING,
                 risk_note="跌破止损但受 T+1 约束，次日仍弱再模拟卖出。",
+                exit_plan=position.exit_plan,
+                mainline_continuity=candidate.mainline_continuity or position.mainline_continuity,
             )
             account = PaperAccount(
                 account_id=account.account_id,
@@ -332,6 +347,49 @@ class PaperTradeStore:
             "次日仍低于止损，模拟 T+1 卖出。",
         )
         return self.save(account)
+
+    def _refresh_position_context(
+        self,
+        account: PaperAccount,
+        candidate: OneToTwoCandidate,
+    ) -> PaperAccount:
+        if not account.positions:
+            return account
+        position = account.positions[0]
+        refreshed = PaperPosition(
+            symbol=position.symbol,
+            name=position.name,
+            quantity=position.quantity,
+            entry_price=position.entry_price,
+            latest_price=position.latest_price,
+            stop_loss=position.stop_loss,
+            position_value=position.position_value,
+            unrealized_pnl=position.unrealized_pnl,
+            unrealized_pnl_pct=position.unrealized_pnl_pct,
+            opened_at=position.opened_at,
+            position_label=position.position_label,
+            opened_score=position.opened_score,
+            can_sell_today=position.can_sell_today,
+            status=position.status,
+            risk_note=position.risk_note,
+            exit_plan=position.exit_plan or candidate.exit_plan,
+            mainline_continuity=(
+                candidate.mainline_continuity or position.mainline_continuity
+            ),
+        )
+        return PaperAccount(
+            account_id=account.account_id,
+            last_trade_date=account.last_trade_date,
+            cash=account.cash,
+            initial_cash=account.initial_cash,
+            equity=account.equity,
+            max_position_pct=account.max_position_pct,
+            max_daily_trades=account.max_daily_trades,
+            daily_trade_count=account.daily_trade_count,
+            positions=(refreshed,),
+            events=account.events,
+            closed_trades=account.closed_trades,
+        )
 
     def exit_position(
         self,
@@ -421,6 +479,8 @@ class PaperTradeStore:
                 can_sell_today=True,
                 status=position.status,
                 risk_note="已过买入日，若继续跌破止损可模拟卖出。",
+                exit_plan=position.exit_plan,
+                mainline_continuity=position.mainline_continuity,
             )
             for position in account.positions
         )
@@ -510,6 +570,8 @@ class PaperTradeStore:
             can_sell_today=position.can_sell_today,
             status=position.status,
             risk_note=position.risk_note,
+            exit_plan=position.exit_plan,
+            mainline_continuity=position.mainline_continuity,
         )
         return PaperAccount(
             account_id=account.account_id,
@@ -550,7 +612,7 @@ class PaperTradeStore:
             "max_position_pct": account.max_position_pct,
             "max_daily_trades": account.max_daily_trades,
             "daily_trade_count": account.daily_trade_count,
-            "positions": [position.__dict__ | {"status": position.status.value} for position in account.positions],
+            "positions": [contract_to_dict(position) for position in account.positions],
             "events": [
                 event.__dict__ | {"event_type": event.event_type.value}
                 for event in account.events
@@ -590,6 +652,10 @@ class PaperTradeStore:
                     can_sell_today=bool(item["can_sell_today"]),
                     status=PaperTradeStatus(str(item["status"])),
                     risk_note=str(item["risk_note"]),
+                    exit_plan=self._exit_plan_from_payload(item.get("exit_plan")),
+                    mainline_continuity=self._continuity_from_payload(
+                        item.get("mainline_continuity")
+                    ),
                 )
                 for item in payload.get("positions", ())
             ),
@@ -630,6 +696,46 @@ class PaperTradeStore:
                 )
                 for item in payload.get("closed_trades", ())
             ),
+        )
+
+    def _exit_plan_from_payload(self, payload: Any) -> OneToTwoExitPlan | None:
+        if not isinstance(payload, dict):
+            return None
+        return OneToTwoExitPlan(
+            stop_loss=float(payload["stop_loss"]),
+            stop_loss_pct=float(payload["stop_loss_pct"]),
+            first_take_profit_price=float(payload["first_take_profit_price"]),
+            first_take_profit_pct=float(payload["first_take_profit_pct"]),
+            strong_take_profit_price=float(payload["strong_take_profit_price"]),
+            strong_take_profit_pct=float(payload["strong_take_profit_pct"]),
+            trailing_stop_pct=float(payload["trailing_stop_pct"]),
+            max_holding_trade_days=int(payload["max_holding_trade_days"]),
+            summary=str(payload["summary"]),
+        )
+
+    def _continuity_from_payload(self, payload: Any) -> MainlineContinuity | None:
+        if not isinstance(payload, dict):
+            return None
+        return MainlineContinuity(
+            theme=str(payload["theme"]),
+            score=float(payload["score"]),
+            status=str(payload["status"]),
+            hot_stock_count=int(payload["hot_stock_count"]),
+            limit_up_count=int(payload["limit_up_count"]),
+            news_count=int(payload["news_count"]),
+            latest_news=tuple(
+                MainlineNewsItem(
+                    title=str(item["title"]),
+                    source=str(item["source"]),
+                    published_at=str(item["published_at"]),
+                    related_symbols=tuple(str(symbol) for symbol in item.get("related_symbols", ())),
+                    url=str(item.get("url", "")),
+                )
+                for item in payload.get("latest_news", ())
+            ),
+            reasons=tuple(str(item) for item in payload.get("reasons", ())),
+            risk_notes=tuple(str(item) for item in payload.get("risk_notes", ())),
+            next_action=str(payload["next_action"]),
         )
 
     def _infer_last_trade_date(self, payload: dict[str, Any]) -> str:

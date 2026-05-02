@@ -227,6 +227,28 @@ button {
   background: var(--warning-soft);
 }
 
+.continuity-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.continuity-card[data-status="strong"] {
+  border-color: rgba(31, 122, 90, 0.45);
+  background: var(--accent-soft);
+}
+
+.continuity-card[data-status="watch"] {
+  border-color: rgba(166, 106, 24, 0.36);
+  background: var(--warning-soft);
+}
+
+.continuity-card[data-status="fading"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
+}
+
 .one-to-two-card p {
   margin: 8px 0 0;
   color: var(--muted);

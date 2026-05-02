@@ -24,6 +24,8 @@ class OneToTwoEventType(str, Enum):
     PAPER_BUY = "paper_buy"
     STOP_WARNING = "stop_warning"
     T1_SELL = "t1_sell"
+    TAKE_PROFIT = "take_profit"
+    MAINLINE_FADE_EXIT = "mainline_fade_exit"
     DISCIPLINE_EXIT = "discipline_exit"
     END_OF_DAY_REVIEW = "end_of_day_review"
     BLOCKED = "blocked"
@@ -66,6 +68,42 @@ class OneToTwoPositionProfile:
 
 
 @dataclass(frozen=True)
+class OneToTwoExitPlan:
+    stop_loss: float
+    stop_loss_pct: float
+    first_take_profit_price: float
+    first_take_profit_pct: float
+    strong_take_profit_price: float
+    strong_take_profit_pct: float
+    trailing_stop_pct: float
+    max_holding_trade_days: int
+    summary: str
+
+
+@dataclass(frozen=True)
+class MainlineNewsItem:
+    title: str
+    source: str
+    published_at: str
+    related_symbols: tuple[str, ...]
+    url: str = ""
+
+
+@dataclass(frozen=True)
+class MainlineContinuity:
+    theme: str
+    score: float
+    status: str
+    hot_stock_count: int
+    limit_up_count: int
+    news_count: int
+    latest_news: tuple[MainlineNewsItem, ...]
+    reasons: tuple[str, ...]
+    risk_notes: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
 class OneToTwoCandidate:
     symbol: str
     name: str
@@ -93,6 +131,8 @@ class OneToTwoCandidate:
     leader_label: str = ""
     strategy_tags: tuple[str, ...] = ()
     discipline_summary: str = ""
+    exit_plan: OneToTwoExitPlan | None = None
+    mainline_continuity: MainlineContinuity | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +152,8 @@ class PaperPosition:
     can_sell_today: bool
     status: PaperTradeStatus
     risk_note: str
+    exit_plan: OneToTwoExitPlan | None = None
+    mainline_continuity: MainlineContinuity | None = None
 
 
 @dataclass(frozen=True)
