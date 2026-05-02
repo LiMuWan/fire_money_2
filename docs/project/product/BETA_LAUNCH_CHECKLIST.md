@@ -53,7 +53,7 @@
    python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 10
    ```
 
-   `feishu-test` 只用于验证群机器人联通，不会触发模拟买入或卖出。
+   `feishu-test` 只用于验证群机器人联通，不会触发模拟买入或卖出；必须返回 `sent`，HTTP 200 但飞书业务返回码失败也按 `failed` 处理。
 
 ## Beta 值守命令
 

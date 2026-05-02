@@ -1327,6 +1327,46 @@ class MainChainSmokeTest(unittest.TestCase):
             else:
                 os.environ["FEISHU_WEBHOOK_URL"] = old_webhook
 
+    def test_feishu_notifier_checks_business_response_code(self) -> None:
+        class FakeFeishuResponse:
+            status = 200
+
+            def __init__(self, body: bytes) -> None:
+                self._body = body
+
+            def __enter__(self) -> "FakeFeishuResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return self._body
+
+        env = {
+            "FEISHU_ENABLED": "true",
+            "FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test-token",
+        }
+        success_body = b'{"StatusCode":0,"StatusMessage":"success"}'
+        failed_body = b'{"StatusCode":9499,"StatusMessage":"sign invalid"}'
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch(
+                "server.firemoney_server.infrastructure.feishu_notifier.request.urlopen",
+                return_value=FakeFeishuResponse(success_body),
+            ):
+                sent = FeishuNotifier().notify("title", "message")
+            with patch(
+                "server.firemoney_server.infrastructure.feishu_notifier.request.urlopen",
+                return_value=FakeFeishuResponse(failed_body),
+            ):
+                failed = FeishuNotifier().notify("title", "message")
+
+        self.assertEqual(sent.status, NotificationStatus.SENT)
+        self.assertEqual(failed.status, NotificationStatus.FAILED)
+        self.assertIn("9499", failed.error or "")
+        self.assertIn("sign invalid", failed.error or "")
+
     def test_client_adapter_exposes_only_one_to_two_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             adapter = LocalMainChainAdapter(
