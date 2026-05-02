@@ -484,7 +484,12 @@ class MainChainSmokeTest(unittest.TestCase):
                 return self._records
 
         class FakeAk:
+            def __init__(self) -> None:
+                self.previous_calls = 0
+                self.spot_calls = 0
+
             def stock_zt_pool_previous_em(self, date: str) -> FakeFrame:
+                self.previous_calls += 1
                 if date != "20260430":
                     raise AssertionError(f"unexpected date: {date}")
                 return FakeFrame(
@@ -506,6 +511,7 @@ class MainChainSmokeTest(unittest.TestCase):
                 )
 
             def stock_zh_a_spot_em(self) -> FakeFrame:
+                self.spot_calls += 1
                 raise RuntimeError("spot snapshot unavailable")
 
             def stock_zh_a_hist(self, **_kwargs: object) -> FakeFrame:
@@ -518,21 +524,36 @@ class MainChainSmokeTest(unittest.TestCase):
                 )
 
         real_import = __import__
+        fake_ak = FakeAk()
+        ticks = iter((100.0, 110.0, 200.0, 201.0))
 
         def fake_import(name: str, *args: object, **kwargs: object):
             if name == "akshare":
-                return FakeAk()
+                return fake_ak
             return real_import(name, *args, **kwargs)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            provider = AkshareMarketDataProvider(cache_dir=Path(temp_dir))
-            with patch("builtins.__import__", side_effect=fake_import):
+            provider = AkshareMarketDataProvider(
+                cache_dir=Path(temp_dir),
+                cache_ttl_seconds=10,
+            )
+            with patch("builtins.__import__", side_effect=fake_import), patch(
+                "server.firemoney_server.infrastructure.market_data.time.monotonic",
+                side_effect=lambda: next(ticks),
+            ):
                 rows = provider.load_one_to_two_rows("2026-04-30")
+                cached_rows = provider.load_one_to_two_rows("2026-04-30")
+                refreshed_rows = provider.load_one_to_two_rows("2026-04-30")
 
         self.assertEqual(len(rows), 1)
+        self.assertIs(cached_rows, rows)
+        self.assertIsNot(refreshed_rows, rows)
+        self.assertEqual(fake_ak.previous_calls, 2)
+        self.assertEqual(fake_ak.spot_calls, 2)
         self.assertEqual(rows[0].symbol, "600123")
         self.assertEqual(rows[0].board, "主板")
         self.assertEqual(rows[0].theme, "测试题材")
+        self.assertGreaterEqual(rows[0].market_temperature, 50)
 
     def test_one_to_two_paper_buy_respects_position_and_daily_limits(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

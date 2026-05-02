@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
@@ -121,15 +122,25 @@ class AkshareMarketDataProvider:
         self,
         cache_dir: str | Path = DEFAULT_MARKET_DATA_CACHE_DIR,
         fallback: MarketDataProvider | None = None,
+        cache_ttl_seconds: float = 60.0,
     ) -> None:
         self._cache_dir = Path(cache_dir)
         self._fallback = fallback
+        self._cache_ttl_seconds = cache_ttl_seconds
+        self._row_cache: dict[str, tuple[float, tuple[OneToTwoMarketRow, ...]]] = {}
+        self._history_cache: dict[tuple[str, str], dict[str, float]] = {}
 
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        cached_rows = self._cached_rows(trade_date)
+        if cached_rows is not None:
+            return cached_rows
+
         try:
             import akshare as ak  # type: ignore
         except Exception:
-            return self._fallback_rows(trade_date)
+            rows = self._fallback_rows(trade_date)
+            self._remember_rows(trade_date, rows)
+            return rows
 
         try:
             previous_pool = ak.stock_zt_pool_previous_em(
@@ -137,7 +148,9 @@ class AkshareMarketDataProvider:
             )
             self._cache_payload(trade_date, "stock_zt_pool_previous_em", previous_pool)
         except Exception:
-            return self._fallback_rows(trade_date)
+            rows = self._fallback_rows(trade_date)
+            self._remember_rows(trade_date, rows)
+            return rows
 
         try:
             spot = ak.stock_zh_a_spot_em()
@@ -150,9 +163,26 @@ class AkshareMarketDataProvider:
             trade_date,
             ak,
         )
-        if rows or self._fallback is None:
+        if not rows and self._fallback is not None:
+            rows = self._fallback_rows(trade_date)
+        self._remember_rows(trade_date, rows)
+        return rows
+
+    def _cached_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...] | None:
+        cached = self._row_cache.get(trade_date)
+        if not cached:
+            return None
+        cached_at, rows = cached
+        if time.monotonic() - cached_at <= self._cache_ttl_seconds:
             return rows
-        return self._fallback_rows(trade_date)
+        return None
+
+    def _remember_rows(
+        self,
+        trade_date: str,
+        rows: tuple[OneToTwoMarketRow, ...],
+    ) -> None:
+        self._row_cache[trade_date] = (time.monotonic(), rows)
 
     def _fallback_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         if not self._fallback:
@@ -167,13 +197,17 @@ class AkshareMarketDataProvider:
         ak: Any,
     ) -> tuple[OneToTwoMarketRow, ...]:
         rows: list[OneToTwoMarketRow] = []
+        records = getattr(previous_pool, "to_dict", lambda *_args, **_kwargs: [])(
+            "records"
+        )
         spot_by_symbol = {
             str(item.get("代码", "")): item
             for item in getattr(spot, "to_dict", lambda *_args, **_kwargs: [])("records")
         }
-        market_temperature = self._market_temperature(spot_by_symbol.values())
-        records = getattr(previous_pool, "to_dict", lambda *_args, **_kwargs: [])(
-            "records"
+        market_temperature = (
+            self._market_temperature(spot_by_symbol.values())
+            or self._market_temperature(records)
+            or (55 if records else 0)
         )
         for item in records[:80]:
             symbol = str(item.get("代码", ""))
@@ -292,6 +326,10 @@ class AkshareMarketDataProvider:
         trade_date: str,
         latest: float,
     ) -> dict[str, float]:
+        cache_key = (trade_date, symbol)
+        if cache_key in self._history_cache:
+            return self._history_cache[cache_key]
+
         fallback = {
             "low_20": latest * 0.88,
             "high_60": latest * 1.04,
@@ -313,15 +351,17 @@ class AkshareMarketDataProvider:
             )
             records = getattr(hist, "to_dict", lambda *_args, **_kwargs: [])("records")
         except Exception:
+            self._history_cache[cache_key] = fallback
             return fallback
         closes = [self._float(item.get("收盘")) for item in records if self._float(item.get("收盘")) > 0]
         lows = [self._float(item.get("最低")) for item in records if self._float(item.get("最低")) > 0]
         highs = [self._float(item.get("最高")) for item in records if self._float(item.get("最高")) > 0]
         if not closes:
+            self._history_cache[cache_key] = fallback
             return fallback
         pressure_candidates = [price for price in highs[-60:-1] if price > latest]
         base_close = closes[-20] if len(closes) >= 20 and closes[-20] else closes[0]
-        return {
+        profile = {
             "low_20": min(lows[-20:]) if lows else fallback["low_20"],
             "high_60": max(highs[-60:]) if highs else fallback["high_60"],
             "pressure_price": (
@@ -334,6 +374,8 @@ class AkshareMarketDataProvider:
             "ma_20": sum(closes[-20:]) / min(len(closes), 20),
             "recent_gain_pct": (closes[-1] - base_close) / base_close if base_close else 0.0,
         }
+        self._history_cache[cache_key] = profile
+        return profile
 
     def _market_temperature(self, records: Any) -> int:
         changes = [self._float(item.get("涨跌幅")) for item in records]
