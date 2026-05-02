@@ -12,6 +12,7 @@ from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifie
 from server.firemoney_server.infrastructure.market_data import SampleMarketDataProvider
 from server.firemoney_server.infrastructure.one_to_two_config import load_one_to_two_settings
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
+from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
     FeishuNotificationResult,
     NotificationStatus,
@@ -25,10 +26,12 @@ def _build_service(
     root: Path,
     market_data_provider=None,
     paper_store: PaperTradeStore | None = None,
+    trading_calendar=None,
 ) -> MainChainService:
     return MainChainService(
         market_data_provider=market_data_provider,
         paper_store=paper_store or PaperTradeStore(root / "paper_trades.json"),
+        trading_calendar=trading_calendar or WeekdayTradingCalendar(),
     )
 
 
@@ -119,8 +122,23 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsInstance(report, OneToTwoMorningReport)
             self.assertEqual(payload["notification"]["status"], "prepared")
             self.assertEqual(payload["status"], "ready")
+            self.assertEqual(payload["trade_context"]["trade_date"], "2026-04-30")
             self.assertIsInstance(payload["candidates"], list)
             self.assertEqual(payload["candidates"][0]["position_profile"]["label"], "低位平台突破")
+
+    def test_weekend_request_uses_previous_trading_day(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            ).build_one_to_two_morning_report(
+                trade_date="2026-05-02",
+                notify=False,
+            )
+
+            self.assertEqual(report.trade_date, "2026-04-30")
+            self.assertFalse(report.trade_context.is_trading_day)
+            self.assertIn("previous trading day", report.trade_context.note)
 
     def test_one_to_two_scores_low_breakout_and_blocks_risky_boards(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -211,10 +229,12 @@ class MainChainSmokeTest(unittest.TestCase):
 
             watch = service.run_one_to_two_watch(
                 trade_date="2026-05-01",
+                phase="open",
                 notify=False,
             )
             second_watch = service.run_one_to_two_watch(
                 trade_date="2026-05-01",
+                phase="open",
                 notify=False,
             )
 
@@ -230,6 +250,34 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(len(second_watch.account.events), 1)
             self.assertEqual(second_watch.account.daily_trade_count, 1)
 
+    def test_watch_phases_do_not_buy_before_open_trigger(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            scan = service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="scan",
+                notify=False,
+            )
+            auction = service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="auction",
+                notify=False,
+            )
+            open_trigger = service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+
+            self.assertEqual(scan.account.positions, ())
+            self.assertEqual(auction.account.positions, ())
+            self.assertEqual(open_trigger.account.events[0].event_type.value, "paper_buy")
+            self.assertEqual(open_trigger.account.positions[0].status, PaperTradeStatus.HOLDING)
+
     def test_one_to_two_stop_warning_obeys_t1_before_sell(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -239,7 +287,11 @@ class MainChainSmokeTest(unittest.TestCase):
                 market_data_provider=SampleMarketDataProvider(),
                 paper_store=paper_store,
             )
-            buy_service.run_one_to_two_watch(trade_date="2026-05-01", notify=False)
+            buy_service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
             risk_service = _build_service(
                 root,
                 market_data_provider=StaticOneToTwoProvider((_risk_break_row("2026-05-01"),)),
@@ -248,11 +300,12 @@ class MainChainSmokeTest(unittest.TestCase):
 
             warning = risk_service.run_one_to_two_watch(
                 trade_date="2026-05-01",
+                phase="risk",
                 notify=False,
             )
-            paper_store.roll_to_next_day()
             sold = risk_service.run_one_to_two_watch(
-                trade_date="2026-05-02",
+                trade_date="2026-05-06",
+                phase="risk",
                 notify=False,
             )
 
@@ -260,6 +313,45 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(warning.account.events[0].event_type.value, "stop_warning")
             self.assertEqual(sold.account.positions, ())
             self.assertEqual(sold.account.events[0].event_type.value, "t1_sell")
+            self.assertEqual(len(sold.account.closed_trades), 1)
+            self.assertLess(sold.account.closed_trades[0].realized_pnl, 0)
+
+    def test_stability_report_uses_closed_trade_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            buy_service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+            buy_service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            risk_service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider((_risk_break_row("2026-05-01"),)),
+                paper_store=paper_store,
+            )
+            risk_service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="risk",
+                notify=False,
+            )
+            risk_service.run_one_to_two_watch(
+                trade_date="2026-05-06",
+                phase="risk",
+                notify=False,
+            )
+
+            stability = risk_service.build_one_to_two_stability_report()
+
+            self.assertEqual(stability.sample_count, 1)
+            self.assertEqual(stability.stop_warning_rate, 1.0)
+            self.assertLess(stability.average_return_pct, 0)
+            self.assertEqual(stability.status, "observation")
 
     def test_feishu_notifier_is_safe_without_webhook(self) -> None:
         old_enabled = os.environ.get("FEISHU_ENABLED")

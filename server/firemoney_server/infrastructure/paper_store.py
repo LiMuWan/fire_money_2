@@ -14,6 +14,7 @@ from shared.contracts import (
     PaperAccount,
     PaperPosition,
     PaperTradeEvent,
+    PaperTradeRecord,
     PaperTradeStatus,
 )
 
@@ -57,8 +58,64 @@ class PaperTradeStore:
         )
         return account
 
-    def buy_candidate(self, candidate: OneToTwoCandidate) -> PaperAccount:
+    def prepare_for_trade_date(self, trade_date: str) -> PaperAccount:
         account = self.load()
+        if not account.last_trade_date:
+            return self.save(
+                PaperAccount(
+                    account_id=account.account_id,
+                    last_trade_date=trade_date,
+                    cash=account.cash,
+                    initial_cash=account.initial_cash,
+                    equity=account.equity,
+                    max_position_pct=account.max_position_pct,
+                    max_daily_trades=account.max_daily_trades,
+                    daily_trade_count=0,
+                    positions=account.positions,
+                    events=account.events,
+                    closed_trades=account.closed_trades,
+                )
+            )
+        if account.last_trade_date == trade_date:
+            return account
+        positions = tuple(
+            PaperPosition(
+                symbol=position.symbol,
+                name=position.name,
+                quantity=position.quantity,
+                entry_price=position.entry_price,
+                latest_price=position.latest_price,
+                stop_loss=position.stop_loss,
+                position_value=position.position_value,
+                unrealized_pnl=position.unrealized_pnl,
+                unrealized_pnl_pct=position.unrealized_pnl_pct,
+                opened_at=position.opened_at,
+                position_label=position.position_label,
+                opened_score=position.opened_score,
+                can_sell_today=True,
+                status=position.status,
+                risk_note="已进入下一交易日，若继续跌破止损可模拟卖出。",
+            )
+            for position in account.positions
+        )
+        return self.save(
+            PaperAccount(
+                account_id=account.account_id,
+                last_trade_date=trade_date,
+                cash=account.cash,
+                initial_cash=account.initial_cash,
+                equity=account.equity,
+                max_position_pct=account.max_position_pct,
+                max_daily_trades=account.max_daily_trades,
+                daily_trade_count=0,
+                positions=positions,
+                events=account.events,
+                closed_trades=account.closed_trades,
+            )
+        )
+
+    def buy_candidate(self, candidate: OneToTwoCandidate) -> PaperAccount:
+        account = self.prepare_for_trade_date(candidate.trade_date)
         if candidate.status != "ready":
             return self.save(
                 self._append_event(
@@ -106,12 +163,15 @@ class PaperTradeStore:
             unrealized_pnl=0.0,
             unrealized_pnl_pct=0.0,
             opened_at=candidate.trade_date,
+            position_label=candidate.position_profile.label,
+            opened_score=candidate.score,
             can_sell_today=False,
             status=PaperTradeStatus.HOLDING,
             risk_note="严格 T+1：当天跌破止损只预警，不模拟卖出。",
         )
         account = PaperAccount(
             account_id=account.account_id,
+            last_trade_date=candidate.trade_date,
             cash=round(account.cash - amount, 2),
             initial_cash=account.initial_cash,
             equity=account.equity,
@@ -120,6 +180,7 @@ class PaperTradeStore:
             daily_trade_count=account.daily_trade_count + 1,
             positions=(position,),
             events=account.events,
+            closed_trades=account.closed_trades,
         )
         account = self._append_event(
             account,
@@ -131,8 +192,34 @@ class PaperTradeStore:
         )
         return self.save(self._revalue(account, candidate.latest_price))
 
+    def record_candidate_event(
+        self,
+        candidate: OneToTwoCandidate,
+        message: str,
+        event_type: OneToTwoEventType = OneToTwoEventType.CANDIDATE_SELECTED,
+    ) -> PaperAccount:
+        account = self.prepare_for_trade_date(candidate.trade_date)
+        exists = any(
+            event.symbol == candidate.symbol
+            and event.trade_date == candidate.trade_date
+            and event.event_type == event_type
+            for event in account.events
+        )
+        if exists:
+            return account
+        return self.save(
+            self._append_event(
+                account,
+                event_type,
+                candidate,
+                candidate.latest_price,
+                0,
+                message,
+            )
+        )
+
     def update_risk(self, candidate: OneToTwoCandidate) -> PaperAccount:
-        account = self.load()
+        account = self.prepare_for_trade_date(candidate.trade_date)
         if not account.positions:
             return account
         position = account.positions[0]
@@ -143,6 +230,12 @@ class PaperTradeStore:
         if candidate.latest_price >= position.stop_loss:
             return self.save(account)
         if not position.can_sell_today:
+            already_warned = any(
+                event.symbol == position.symbol
+                and event.trade_date == candidate.trade_date
+                and event.event_type == OneToTwoEventType.STOP_WARNING
+                for event in account.events
+            )
             warned = PaperPosition(
                 symbol=position.symbol,
                 name=position.name,
@@ -154,12 +247,15 @@ class PaperTradeStore:
                 unrealized_pnl=position.unrealized_pnl,
                 unrealized_pnl_pct=position.unrealized_pnl_pct,
                 opened_at=position.opened_at,
+                position_label=position.position_label,
+                opened_score=position.opened_score,
                 can_sell_today=position.can_sell_today,
                 status=PaperTradeStatus.WARNING,
                 risk_note="跌破止损但受 T+1 约束，次日仍弱再模拟卖出。",
             )
             account = PaperAccount(
                 account_id=account.account_id,
+                last_trade_date=account.last_trade_date,
                 cash=account.cash,
                 initial_cash=account.initial_cash,
                 equity=account.equity,
@@ -168,7 +264,10 @@ class PaperTradeStore:
                 daily_trade_count=account.daily_trade_count,
                 positions=(warned,),
                 events=account.events,
+                closed_trades=account.closed_trades,
             )
+            if already_warned:
+                return self.save(account)
             account = self._append_event(
                 account,
                 OneToTwoEventType.STOP_WARNING,
@@ -178,9 +277,40 @@ class PaperTradeStore:
                 "跌破止损，已发出 T+1 风险预警。",
             )
             return self.save(account)
+        entry_amount = round(position.quantity * position.entry_price, 2)
         proceeds = round(position.quantity * candidate.latest_price, 2)
+        realized_pnl = round(proceeds - entry_amount, 2)
+        realized_pnl_pct = round(
+            (candidate.latest_price - position.entry_price) / position.entry_price,
+            4,
+        )
+        warning_count = sum(
+            1
+            for event in account.events
+            if event.symbol == position.symbol and event.event_type == OneToTwoEventType.STOP_WARNING
+        )
+        closed_trade = PaperTradeRecord(
+            trade_id=f"{position.symbol}-{position.opened_at}-{candidate.trade_date}",
+            symbol=position.symbol,
+            name=position.name,
+            opened_at=position.opened_at,
+            closed_at=candidate.trade_date,
+            entry_price=position.entry_price,
+            exit_price=round(candidate.latest_price, 2),
+            quantity=position.quantity,
+            entry_amount=entry_amount,
+            exit_amount=proceeds,
+            realized_pnl=realized_pnl,
+            realized_pnl_pct=realized_pnl_pct,
+            holding_trade_days=1 if position.opened_at != candidate.trade_date else 0,
+            exit_reason="stop_loss_t1",
+            position_label=position.position_label,
+            success=realized_pnl > 0,
+            warning_count=warning_count,
+        )
         account = PaperAccount(
             account_id=account.account_id,
+            last_trade_date=account.last_trade_date,
             cash=round(account.cash + proceeds, 2),
             initial_cash=account.initial_cash,
             equity=round(account.cash + proceeds, 2),
@@ -189,6 +319,7 @@ class PaperTradeStore:
             daily_trade_count=account.daily_trade_count,
             positions=(),
             events=account.events,
+            closed_trades=(closed_trade, *account.closed_trades)[:200],
         )
         account = self._append_event(
             account,
@@ -214,6 +345,8 @@ class PaperTradeStore:
                 unrealized_pnl=position.unrealized_pnl,
                 unrealized_pnl_pct=position.unrealized_pnl_pct,
                 opened_at=position.opened_at,
+                position_label=position.position_label,
+                opened_score=position.opened_score,
                 can_sell_today=True,
                 status=position.status,
                 risk_note="已过买入日，若继续跌破止损可模拟卖出。",
@@ -223,6 +356,7 @@ class PaperTradeStore:
         return self.save(
             PaperAccount(
                 account_id=account.account_id,
+                last_trade_date=account.last_trade_date,
                 cash=account.cash,
                 initial_cash=account.initial_cash,
                 equity=account.equity,
@@ -231,6 +365,7 @@ class PaperTradeStore:
                 daily_trade_count=0,
                 positions=positions,
                 events=account.events,
+                closed_trades=account.closed_trades,
             )
         )
 
@@ -257,6 +392,7 @@ class PaperTradeStore:
         )
         return PaperAccount(
             account_id=account.account_id,
+            last_trade_date=account.last_trade_date,
             cash=account.cash,
             initial_cash=account.initial_cash,
             equity=account.equity,
@@ -265,12 +401,14 @@ class PaperTradeStore:
             daily_trade_count=account.daily_trade_count,
             positions=account.positions,
             events=(event, *account.events)[:50],
+            closed_trades=account.closed_trades,
         )
 
     def _revalue(self, account: PaperAccount, latest_price: float) -> PaperAccount:
         if not account.positions:
             return PaperAccount(
                 account_id=account.account_id,
+                last_trade_date=account.last_trade_date,
                 cash=account.cash,
                 initial_cash=account.initial_cash,
                 equity=account.cash,
@@ -279,6 +417,7 @@ class PaperTradeStore:
                 daily_trade_count=account.daily_trade_count,
                 positions=(),
                 events=account.events,
+                closed_trades=account.closed_trades,
             )
         position = account.positions[0]
         value = round(position.quantity * latest_price, 2)
@@ -295,12 +434,15 @@ class PaperTradeStore:
             unrealized_pnl=pnl,
             unrealized_pnl_pct=pnl_pct,
             opened_at=position.opened_at,
+            position_label=position.position_label,
+            opened_score=position.opened_score,
             can_sell_today=position.can_sell_today,
             status=position.status,
             risk_note=position.risk_note,
         )
         return PaperAccount(
             account_id=account.account_id,
+            last_trade_date=account.last_trade_date,
             cash=account.cash,
             initial_cash=account.initial_cash,
             equity=round(account.cash + value, 2),
@@ -309,11 +451,13 @@ class PaperTradeStore:
             daily_trade_count=account.daily_trade_count,
             positions=(updated,),
             events=account.events,
+            closed_trades=account.closed_trades,
         )
 
     def _empty_account(self) -> PaperAccount:
         return PaperAccount(
             account_id="one-to-two-paper",
+            last_trade_date="",
             cash=self._initial_cash,
             initial_cash=self._initial_cash,
             equity=self._initial_cash,
@@ -322,11 +466,13 @@ class PaperTradeStore:
             daily_trade_count=0,
             positions=(),
             events=(),
+            closed_trades=(),
         )
 
     def _to_payload(self, account: PaperAccount) -> dict[str, Any]:
         return {
             "account_id": account.account_id,
+            "last_trade_date": account.last_trade_date,
             "cash": account.cash,
             "initial_cash": account.initial_cash,
             "equity": account.equity,
@@ -338,11 +484,18 @@ class PaperTradeStore:
                 event.__dict__ | {"event_type": event.event_type.value}
                 for event in account.events
             ],
+            "closed_trades": [record.__dict__ for record in account.closed_trades],
         }
 
     def _from_payload(self, payload: dict[str, Any]) -> PaperAccount:
+        last_trade_date = str(
+            payload.get("last_trade_date")
+            or self._infer_last_trade_date(payload)
+            or ""
+        )
         return PaperAccount(
             account_id=str(payload["account_id"]),
+            last_trade_date=last_trade_date,
             cash=float(payload["cash"]),
             initial_cash=float(payload["initial_cash"]),
             equity=float(payload["equity"]),
@@ -361,6 +514,8 @@ class PaperTradeStore:
                     unrealized_pnl=float(item["unrealized_pnl"]),
                     unrealized_pnl_pct=float(item["unrealized_pnl_pct"]),
                     opened_at=str(item["opened_at"]),
+                    position_label=str(item.get("position_label") or "未标记样本"),
+                    opened_score=float(item.get("opened_score", 0.0)),
                     can_sell_today=bool(item["can_sell_today"]),
                     status=PaperTradeStatus(str(item["status"])),
                     risk_note=str(item["risk_note"]),
@@ -382,4 +537,39 @@ class PaperTradeStore:
                 )
                 for item in payload.get("events", ())
             ),
+            closed_trades=tuple(
+                PaperTradeRecord(
+                    trade_id=str(item["trade_id"]),
+                    symbol=str(item["symbol"]),
+                    name=str(item["name"]),
+                    opened_at=str(item["opened_at"]),
+                    closed_at=str(item["closed_at"]),
+                    entry_price=float(item["entry_price"]),
+                    exit_price=float(item["exit_price"]),
+                    quantity=int(item["quantity"]),
+                    entry_amount=float(item["entry_amount"]),
+                    exit_amount=float(item["exit_amount"]),
+                    realized_pnl=float(item["realized_pnl"]),
+                    realized_pnl_pct=float(item["realized_pnl_pct"]),
+                    holding_trade_days=int(item["holding_trade_days"]),
+                    exit_reason=str(item["exit_reason"]),
+                    position_label=str(item["position_label"]),
+                    success=bool(item["success"]),
+                    warning_count=int(item["warning_count"]),
+                )
+                for item in payload.get("closed_trades", ())
+            ),
         )
+
+    def _infer_last_trade_date(self, payload: dict[str, Any]) -> str:
+        dates = [
+            str(item.get("trade_date", ""))
+            for item in payload.get("events", ())
+            if item.get("trade_date")
+        ]
+        dates.extend(
+            str(item.get("opened_at", ""))
+            for item in payload.get("positions", ())
+            if item.get("opened_at")
+        )
+        return max(dates, default="")

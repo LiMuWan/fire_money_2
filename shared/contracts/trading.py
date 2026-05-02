@@ -43,6 +43,16 @@ class PaperTradeStatus(str, Enum):
 
 
 @dataclass(frozen=True)
+class TradingDayContext:
+    requested_date: str
+    trade_date: str
+    previous_trade_date: str
+    next_trade_date: str
+    is_trading_day: bool
+    note: str
+
+
+@dataclass(frozen=True)
 class OneToTwoPositionProfile:
     label: str
     low_position_score: float
@@ -90,6 +100,8 @@ class PaperPosition:
     unrealized_pnl: float
     unrealized_pnl_pct: float
     opened_at: str
+    position_label: str
+    opened_score: float
     can_sell_today: bool
     status: PaperTradeStatus
     risk_note: str
@@ -110,8 +122,30 @@ class PaperTradeEvent:
 
 
 @dataclass(frozen=True)
+class PaperTradeRecord:
+    trade_id: str
+    symbol: str
+    name: str
+    opened_at: str
+    closed_at: str
+    entry_price: float
+    exit_price: float
+    quantity: int
+    entry_amount: float
+    exit_amount: float
+    realized_pnl: float
+    realized_pnl_pct: float
+    holding_trade_days: int
+    exit_reason: str
+    position_label: str
+    success: bool
+    warning_count: int
+
+
+@dataclass(frozen=True)
 class PaperAccount:
     account_id: str
+    last_trade_date: str
     cash: float
     initial_cash: float
     equity: float
@@ -120,6 +154,7 @@ class PaperAccount:
     daily_trade_count: int
     positions: tuple[PaperPosition, ...]
     events: tuple[PaperTradeEvent, ...]
+    closed_trades: tuple[PaperTradeRecord, ...]
 
 
 @dataclass(frozen=True)
@@ -135,6 +170,7 @@ class FeishuNotificationResult:
 class OneToTwoMorningReport:
     report_id: str
     trade_date: str
+    trade_context: TradingDayContext
     market_temperature: int
     status: str
     summary: str
@@ -148,6 +184,7 @@ class OneToTwoMorningReport:
 class OneToTwoEndOfDayReview:
     review_id: str
     trade_date: str
+    trade_context: TradingDayContext
     sample_count: int
     success_count: int
     warning_count: int

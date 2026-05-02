@@ -23,6 +23,12 @@ def main() -> None:
         help="Workflow mode to run.",
     )
     parser.add_argument("--trade-date", default=None)
+    parser.add_argument(
+        "--phase",
+        choices=("scan", "auction", "open", "risk"),
+        default="scan",
+        help="watch mode phase.",
+    )
     parser.add_argument("--no-notify", action="store_true")
     parser.add_argument(
         "--sample-data",
@@ -41,6 +47,7 @@ def main() -> None:
     elif args.mode == "watch":
         result = adapter.run_one_to_two_watch(
             trade_date=args.trade_date,
+            phase=args.phase,
             notify=not args.no_notify,
         )
     elif args.mode == "eod":

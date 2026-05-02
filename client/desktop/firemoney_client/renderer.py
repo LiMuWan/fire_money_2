@@ -123,6 +123,7 @@ def render_one_to_two_workflow_html(
         </div>
         <div class="one-to-two-kpis">
           <div class="metric"><span class="metric-label">市场温度</span><span class="metric-value">{_text(report.market_temperature)}</span></div>
+          <div class="metric"><span class="metric-label">交易日</span><span class="metric-value">{_text(report.trade_context.trade_date)}</span></div>
           <div class="metric"><span class="metric-label">候选数</span><span class="metric-value">{len(report.candidates)}</span></div>
           <div class="metric"><span class="metric-label">模拟权益</span><span class="metric-value">{account.equity:.2f}</span></div>
           <div class="metric"><span class="metric-label">持仓数</span><span class="metric-value">{position_count}</span></div>
@@ -143,6 +144,7 @@ def render_one_to_two_workflow_html(
           <section class="panel one-to-two-panel">
             <h2>飞书通知</h2>
             <ul class="detail-list compact">
+              <li>请求日期：{_text(report.trade_context.requested_date)} / {_text(report.trade_context.note)}</li>
               <li>状态：{_text(notification.status.value)} / Webhook {_text(webhook_state)}</li>
               <li>最新事件：{_text(latest_event)}</li>
             </ul>
@@ -159,6 +161,8 @@ def render_one_to_two_workflow_html(
             <p class="next-action">{_text(stability_report.summary)}</p>
             <ul class="detail-list compact">
               <li>样本数：{stability_report.sample_count}</li>
+              <li>成功率：{stability_report.success_rate:.2%}</li>
+              <li>平均收益：{stability_report.average_return_pct:.2%}</li>
               <li>止损预警率：{stability_report.stop_warning_rate:.2%}</li>
               <li>{_text(stability_report.next_action)}</li>
             </ul>

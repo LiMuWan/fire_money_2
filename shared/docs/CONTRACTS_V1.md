@@ -16,6 +16,19 @@ Code entry point:
 
 ## 2. Core Contracts
 
+### `TradingDayContext`
+
+Describes how the requested date maps to an A-share trading day.
+
+Key fields:
+
+- `requested_date`
+- `trade_date`
+- `previous_trade_date`
+- `next_trade_date`
+- `is_trading_day`
+- `note`
+
 ### `OneToTwoCandidate`
 
 Describes one mainboard 10cm one-to-two candidate and answers: why can this be observed, bought in the paper account, or blocked?
@@ -56,7 +69,7 @@ Key fields:
 - `summary`
 - `risk_notes`
 
-### `PaperAccount`, `PaperPosition`, `PaperTradeEvent`
+### `PaperAccount`, `PaperPosition`, `PaperTradeEvent`, `PaperTradeRecord`
 
 Describe the local event-driven simulation account.
 
@@ -66,6 +79,7 @@ Rules represented by the contracts:
 - same-day positions carry `can_sell_today=False`
 - same-day stop loss breaches are warning events, not sell events
 - T+1 exits are represented by `OneToTwoEventType.T1_SELL`
+- completed exits are stored as `PaperTradeRecord` samples with entry, exit, P/L, holding days, exit reason, position label, and warning count
 
 ### `FeishuNotificationResult`
 
@@ -81,11 +95,11 @@ Key fields:
 
 ### `OneToTwoMorningReport`
 
-Describes the 08:50 one-to-two report: market temperature, yesterday first-board candidates, paper-account state, notification result, and next action.
+Describes the 08:50 one-to-two report: trading-day context, market temperature, yesterday first-board candidates, paper-account state, notification result, and next action.
 
 ### `OneToTwoEndOfDayReview`
 
-Describes the 15:10 one-to-two review: sample count, warning count, realized P/L observation, focus points, paper-account state, notification result, and next action.
+Describes the 15:10 one-to-two review: trading-day context, closed sample count, warning count, realized P/L observation, focus points, paper-account state, notification result, and next action.
 
 ### `OneToTwoStabilityReport`
 
@@ -93,7 +107,7 @@ Describes the strategy stability observation. Fewer than 30 samples must remain 
 
 ## 3. State Enums
 
-- `OneToTwoEventType`: one-to-two morning scan, candidate, paper buy, stop warning, T+1 sell, end-of-day review, and blocked events.
+- `OneToTwoEventType`: one-to-two morning scan, candidate selected, auction confirmed, paper buy, stop warning, T+1 sell, end-of-day review, and blocked events.
 - `NotificationStatus`: disabled, prepared, sent, failed.
 - `PaperTradeStatus`: empty, holding, warning, closed.
 
@@ -103,5 +117,6 @@ Describes the strategy stability observation. Fewer than 30 samples must remain 
 - The client must not infer trusted business outcomes from private fields.
 - The service layer must return enough `summary`, `next_action`, `status`, or equivalent fields to support UI display.
 - One-to-two candidates, risk notes, stop loss, paper-trading state, and Feishu notification results are shared contracts; clients must not recompute them from raw AkShare fields.
+- Stability reports must use closed `PaperTradeRecord` samples. Samples below 30 remain observation-only.
 - AkShare and Feishu details stay behind infrastructure adapters. Shared contracts use project-owned field names only.
 - One-to-two paper trading is simulation only; these contracts do not represent real account orders or unattended live trading.

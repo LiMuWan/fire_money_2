@@ -12,7 +12,9 @@ from .trading import (
     PaperAccount,
     PaperPosition,
     PaperTradeEvent,
+    PaperTradeRecord,
     PaperTradeStatus,
+    TradingDayContext,
     contract_to_dict,
 )
 
@@ -28,6 +30,8 @@ __all__ = [
     "PaperAccount",
     "PaperPosition",
     "PaperTradeEvent",
+    "PaperTradeRecord",
     "PaperTradeStatus",
+    "TradingDayContext",
     "contract_to_dict",
 ]

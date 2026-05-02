@@ -29,10 +29,12 @@ class LocalMainChainAdapter:
     def run_one_to_two_watch(
         self,
         trade_date: str | None = None,
+        phase: str = "scan",
         notify: bool = True,
     ) -> OneToTwoMorningReport:
         return self._service.run_one_to_two_watch(
             trade_date=trade_date,
+            phase=phase,
             notify=notify,
         )
 

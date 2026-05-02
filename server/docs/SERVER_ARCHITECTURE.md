@@ -17,6 +17,7 @@ server/firemoney_server/
     market_data.py         MarketDataProvider boundary and AkShare adapter
     one_to_two_config.py   one-to-two strategy config loader
     paper_store.py         local event-driven paper-trading account
+    trading_calendar.py    trading-day context and T+1 date resolution
     config/
       one_to_two_strategy.zh_CN.json
 ```
@@ -33,7 +34,9 @@ server/firemoney_server/
 ```text
 MarketDataProvider/AkShare
 -> one-to-two candidate scoring
+-> trading-day resolution
 -> event-driven paper account
+-> closed trade records
 -> Feishu notification result
 -> end-of-day review
 -> stability observation
@@ -48,6 +51,9 @@ MarketDataProvider/AkShare
 - If market data is unavailable, the service returns a blocked morning report and no paper buy can be generated.
 - Hard blockers include ST, delisting, new stock, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, and one-word unreachable boards.
 - Same-day stop loss breaches create warning events only; T+1 sell events are allowed only after the position rolls to the next day.
+- Trading dates are resolved before market data and paper trading. Closed dates use the previous A-share trading day so weekends and holidays do not generate false scans.
+- `watch` supports `scan`, `auction`, `open`, and `risk` phases. Only the `open` phase can create a paper buy; `risk` handles stop-warning and T+1 sell events.
+- Completed exits create `PaperTradeRecord` samples. Stability metrics use these closed trade records, not raw event counts.
 - Feishu reads only `FEISHU_ENABLED`, `FEISHU_WEBHOOK_URL`, and optional `FEISHU_WEBHOOK_SECRET`.
 - Notification failures return structured results and do not stop strategy execution.
 - Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, and `backtest`.

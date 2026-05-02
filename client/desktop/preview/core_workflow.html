@@ -145,7 +145,7 @@ button {
 
 .one-to-two-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -346,6 +346,7 @@ button {
         </div>
         <div class="one-to-two-kpis">
           <div class="metric"><span class="metric-label">市场温度</span><span class="metric-value">74</span></div>
+          <div class="metric"><span class="metric-label">交易日</span><span class="metric-value">2026-04-30</span></div>
           <div class="metric"><span class="metric-label">候选数</span><span class="metric-value">3</span></div>
           <div class="metric"><span class="metric-label">模拟权益</span><span class="metric-value">100000.00</span></div>
           <div class="metric"><span class="metric-label">持仓数</span><span class="metric-value">1</span></div>
@@ -446,13 +447,14 @@ button {
           <section class="panel one-to-two-panel">
             <h2>飞书通知</h2>
             <ul class="detail-list compact">
+              <li>请求日期：2026-05-02 / requested date is closed; using previous trading day 2026-04-30</li>
               <li>状态：prepared / Webhook 未配置</li>
               <li>最新事件：模拟买入，一进二事件驱动账本已记录。</li>
             </ul>
           </section>
           <section class="panel one-to-two-panel">
             <h2>尾盘测评</h2>
-            <p class="next-action">一进二尾盘：权益 100000.00，事件 1 个，风险预警 0 个。</p>
+            <p class="next-action">一进二尾盘：权益 100000.00，事件 3 个，风险预警 0 个。</p>
             <ul class="detail-list compact">
               <li>样本少于 30 笔时只观察，不自动调整策略边界。</li><li>继续区分低位突破与高位接力样本。</li>
             </ul>
@@ -461,7 +463,9 @@ button {
             <h2>稳定性观察</h2>
             <p class="next-action">样本处于观察期，暂不自动给出策略边界结论。</p>
             <ul class="detail-list compact">
-              <li>样本数：1</li>
+              <li>样本数：0</li>
+              <li>成功率：0.00%</li>
+              <li>平均收益：0.00%</li>
               <li>止损预警率：0.00%</li>
               <li>继续积累至少 30 笔一进二样本。</li>
             </ul>

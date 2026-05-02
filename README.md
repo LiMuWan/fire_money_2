@@ -39,8 +39,9 @@ docs/
 ```text
 MarketDataProvider/AkShare
 -> 一进二评分与硬拦截
+-> 交易日解析和阶段化 watch
 -> PaperTradeStore 事件驱动模拟盘
--> 止损/T+1 风险事件
+-> 止损/T+1 风险事件和完成样本归档
 -> FeishuNotifier 通知结果
 -> 尾盘测评
 -> 稳定性观察
@@ -52,6 +53,7 @@ MarketDataProvider/AkShare
 - 排除 ST、退市、新股前 5 日、创业板、科创板、北交所。
 - `min_score=70`，10 万模拟本金，单票最多 8%，每天最多 1 笔。
 - 当天跌破止损只发风险预警，次日仍低于止损才模拟卖出。
+- 稳定性统计基于完成交易样本，不再只按事件条数估算。
 - 样本少于 30 笔只显示观察期，不自动给策略边界结论。
 
 ## 配置与本地状态
@@ -74,6 +76,15 @@ python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli watch --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli backtest
+```
+
+盘中 watch 可按阶段手动推进：
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli watch --phase scan --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli watch --phase auction --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli watch --phase open --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no-notify
 ```
 
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
