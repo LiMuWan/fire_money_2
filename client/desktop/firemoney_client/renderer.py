@@ -186,7 +186,8 @@ def _render_doctor_panel(doctor_report: OneToTwoDoctorReport | None) -> str:
         <h2>Beta 预检</h2>
         <p class="next-action">{_text(doctor_report.summary)}</p>
         <ul class="detail-list compact">
-          <li>上线测试入口：先运行 beta-check，返回 ready 后再启动 beta-start。</li>
+          <li>上线测试入口：先运行 beta-rehearsal 离线彩排，再运行 beta-check，返回 ready 后启动 beta-start。</li>
+          <li>beta-rehearsal 使用隔离账本跑完整天流程，不发飞书，不污染真实模拟盘。</li>
           <li>beta-check 会发送飞书测试并执行严格体检，不触发模拟买入或卖出。</li>
           <li>beta-start 会先运行严格门禁，ready 后才推进当前到点的调度任务。</li>
         </ul>

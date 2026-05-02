@@ -287,6 +287,22 @@ class OneToTwoBetaReadinessReport:
 
 
 @dataclass(frozen=True)
+class OneToTwoBetaRehearsalReport:
+    report_id: str
+    trade_date: str
+    status: str
+    summary: str
+    doctor_report: OneToTwoDoctorReport
+    schedule_runs: tuple["OneToTwoScheduleRun", ...]
+    stability_report: OneToTwoStabilityReport
+    notification_record_count: int
+    paper_event_count: int
+    open_position_count: int
+    closed_sample_count: int
+    next_action: str
+
+
+@dataclass(frozen=True)
 class OneToTwoScheduleTask:
     task_id: str
     mode: str

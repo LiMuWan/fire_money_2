@@ -12,6 +12,9 @@ from unittest.mock import patch
 from client.desktop.firemoney_client import LocalMainChainAdapter
 from client.desktop.firemoney_client.preview import build_preview
 from server.firemoney_server import MainChainService
+from server.firemoney_server.application.beta_rehearsal import (
+    run_one_to_two_beta_rehearsal,
+)
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
 from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
@@ -31,6 +34,7 @@ from shared.contracts import (
     NotificationRecord,
     NotificationStatus,
     OneToTwoMorningReport,
+    OneToTwoBetaRehearsalReport,
     OneToTwoScheduleRun,
     PaperAccount,
     PaperTradeRecord,
@@ -1757,6 +1761,71 @@ class MainChainSmokeTest(unittest.TestCase):
                 4,
             )
 
+    def test_beta_rehearsal_runs_full_day_in_isolated_state(self) -> None:
+        report = run_one_to_two_beta_rehearsal(
+            trade_date="2026-04-30",
+            market_data_provider=SampleMarketDataProvider(),
+            trading_calendar=WeekdayTradingCalendar(),
+        )
+        payload = contract_to_dict(report)
+
+        self.assertIsInstance(report, OneToTwoBetaRehearsalReport)
+        self.assertEqual(payload["status"], "ready")
+        self.assertEqual(payload["trade_date"], "2026-04-30")
+        self.assertEqual(len(payload["schedule_runs"]), 9)
+        self.assertEqual(sum(run["executed_count"] for run in payload["schedule_runs"]), 9)
+        self.assertEqual(payload["notification_record_count"], 9)
+        self.assertGreaterEqual(payload["paper_event_count"], 3)
+        self.assertIn(payload["doctor_report"]["status"], {"ready", "warning"})
+        self.assertFalse(
+            any(
+                check["status"] == "blocked"
+                for check in payload["doctor_report"]["checks"]
+            )
+        )
+        self.assertEqual(payload["stability_report"]["status"], "observation")
+
+    def test_beta_rehearsal_cli_does_not_touch_live_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_path = root / "paper_trades.json"
+            scheduler_path = root / "scheduler_state.json"
+            scheduler_run_path = root / "scheduler_runs.json"
+            notifications_path = root / "notifications.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "beta-rehearsal",
+                    "--trade-date",
+                    "2026-04-30",
+                    "--paper-store",
+                    str(paper_path),
+                    "--scheduler-state",
+                    str(scheduler_path),
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
+                    "--notification-store",
+                    str(notifications_path),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["status"], "ready")
+            self.assertEqual(payload["trade_date"], "2026-04-30")
+            self.assertFalse(paper_path.exists())
+            self.assertFalse(scheduler_path.exists())
+            self.assertFalse(scheduler_run_path.exists())
+            self.assertFalse(notifications_path.exists())
+
     def test_beta_schedule_cli_rejects_no_notify(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -2016,6 +2085,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("watch:risk", html)
             self.assertIn("prepared", html)
             self.assertIn("Beta 预检", html)
+            self.assertIn("beta-rehearsal", html)
             self.assertIn("beta-check", html)
             self.assertIn("beta-start", html)
             self.assertIn("主线首板策略配置", html)

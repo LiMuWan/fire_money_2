@@ -10,6 +10,9 @@ from shared.contracts import contract_to_dict
 
 from .adapter import LocalMainChainAdapter
 from server.firemoney_server import MainChainService
+from server.firemoney_server.application.beta_rehearsal import (
+    run_one_to_two_beta_rehearsal,
+)
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
 from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
@@ -34,6 +37,7 @@ def main() -> None:
             "stability",
             "doctor",
             "beta-check",
+            "beta-rehearsal",
             "beta-start",
             "feishu-test",
             "schedule",
@@ -186,6 +190,8 @@ def main() -> None:
             result = adapter.build_one_to_two_beta_readiness_report(
                 trade_date=args.trade_date,
             )
+    elif args.mode == "beta-rehearsal":
+        result = run_one_to_two_beta_rehearsal(trade_date=args.trade_date)
     elif args.mode == "beta-start":
         readiness = adapter.build_one_to_two_doctor_report(
             trade_date=args.trade_date,

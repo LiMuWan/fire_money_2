@@ -1,5 +1,15 @@
 # FireMoney 模拟盘 Beta 上线检查
 
+## 2026-05-03 上线测试前彩排
+
+先运行隔离彩排，不发飞书、不污染真实 `.firemoney/paper_trades.json`：
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli beta-rehearsal --trade-date 2026-04-30
+```
+
+`beta-rehearsal` 会用样例行情和临时账本跑完 `doctor -> morning -> scan -> auction -> open -> risk -> eod -> stability`。返回 `ready` 只代表主线流程、调度和模拟盘闭环能跑通；真实上线测试仍然必须在交易日运行 `beta-check`，确认飞书 `sent` 后再启动 `beta-start --loop --interval-seconds 60`。
+
 当前上线目标只到模拟盘 Beta：接真实行情、发飞书通知、沉淀一进二样本；不连接真实账户，不自动下单。
 
 ## 必过项
