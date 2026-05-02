@@ -14,10 +14,50 @@ from server.firemoney_server.infrastructure.market_data import SampleMarketDataP
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
+from shared.contracts import PaperAccount, PaperTradeRecord
 
 
 PREVIEW_TRADE_DATE = "2026-04-30"
 PREVIEW_CREATED_AT = "20260430093100"
+
+
+def _seed_preview_closed_sample(paper_store: PaperTradeStore) -> None:
+    account = paper_store.load()
+    paper_store.save(
+        PaperAccount(
+            account_id=account.account_id,
+            last_trade_date=account.last_trade_date,
+            cash=account.cash,
+            initial_cash=account.initial_cash,
+            equity=account.equity,
+            max_position_pct=account.max_position_pct,
+            max_daily_trades=account.max_daily_trades,
+            daily_trade_count=account.daily_trade_count,
+            positions=account.positions,
+            events=account.events,
+            closed_trades=(
+                PaperTradeRecord(
+                    trade_id="preview-600018-20260428-20260429",
+                    symbol="600018",
+                    name="低位换手样本",
+                    opened_at="2026-04-28",
+                    closed_at="2026-04-29",
+                    entry_price=10.0,
+                    exit_price=10.38,
+                    quantity=700,
+                    entry_amount=7000.0,
+                    exit_amount=7266.0,
+                    realized_pnl=266.0,
+                    realized_pnl_pct=0.038,
+                    holding_trade_days=1,
+                    exit_reason="discipline_take_profit",
+                    position_label="低位平台突破",
+                    success=True,
+                    warning_count=0,
+                ),
+            ),
+        )
+    )
 
 
 def build_preview(output_path: str | Path) -> Path:
@@ -28,6 +68,7 @@ def build_preview(output_path: str | Path) -> Path:
     with TemporaryDirectory() as temp_dir:
         preview_root = Path(temp_dir)
         paper_store = PaperTradeStore(preview_root / "paper_trades.json")
+        _seed_preview_closed_sample(paper_store)
         notification_store = NotificationRecordStore(
             preview_root / "notifications.json",
             created_at_provider=lambda: PREVIEW_CREATED_AT,

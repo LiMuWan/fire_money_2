@@ -35,3 +35,4 @@ client/desktop/firemoney_client/
 - Feishu delivery is shown as state, not as a blocker for strategy execution.
 - Local schedule status is shown as one-to-two workflow progress, not as a generic job console.
 - The preview and default entry point show only the current one-to-two line.
+- The local preview may seed temporary closed samples to show the review surface, but it never writes those samples to the live `.firemoney/paper_trades.json` ledger.

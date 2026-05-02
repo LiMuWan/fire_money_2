@@ -658,7 +658,7 @@ button {
               <li class="doctor-item" data-status="ready">
                 <span class="doctor-label">模拟盘账本</span>
                 <span class="doctor-status">可运行</span>
-                <span class="doctor-detail">equity=100000.00, positions=1, closed_samples=0</span>
+                <span class="doctor-detail">equity=100000.00, positions=1, closed_samples=1</span>
               </li>
 
               <li class="doctor-item" data-status="warning">
@@ -791,7 +791,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">15:10 尾盘测评</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>权益：100000.00，现金：92636.00，观察盈亏：0.00</li><li>事件数：3，止损预警：0，T+1 卖出：0</li><li>已归档样本：0</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>隔夜观察：低位突破样例(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
+          <li>交易日：2026-04-30</li><li>权益：100000.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：3，止损预警：0，T+1 卖出：1</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>隔夜观察：低位突破样例(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
         </ul>
       </article>
 
@@ -837,10 +837,10 @@ button {
           </section>
           <section class="panel one-to-two-panel">
             <h2>尾盘测评</h2>
-            <p class="next-action">一进二尾盘：完成样本 0 笔，成功 0 笔，已实现盈亏 0.00。</p>
+            <p class="next-action">一进二尾盘：完成样本 1 笔，成功 1 笔，已实现盈亏 266.00。</p>
             <ul class="detail-list compact">
-              <li>完成样本：0，成功样本：0</li>
-              <li>已实现盈亏：0.00，最大回撤：0.00</li>
+              <li>完成样本：1，成功样本：1</li>
+              <li>已实现盈亏：266.00，最大回撤：0.00</li>
               <li>风险预警：0</li>
               <li>稳定性阶段：观察期，下一门槛：30</li>
               <li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li>
@@ -851,19 +851,25 @@ button {
             <h2>稳定性观察</h2>
             <p class="next-action">样本处于观察期，暂不自动给出策略边界结论。</p>
             <ul class="detail-list compact">
-              <li>样本数：0</li>
+              <li>样本数：1</li>
               <li>阶段：观察期，下一门槛：30</li>
-              <li>成功率：0.00%</li>
-              <li>平均收益：0.00%</li>
+              <li>成功率：100.00%</li>
+              <li>平均收益：3.80%</li>
               <li>止损预警率：0.00%</li>
-              <li>位置分布：暂无样本</li>
-              <li>退出原因：暂无样本</li>
+              <li>位置分布：低位平台突破 1</li>
+              <li>退出原因：discipline_take_profit 1</li>
               <li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li>
               <li>继续积累至 30 笔一进二样本。</li>
             </ul>
             <h3 class="panel-subtitle">最近样本</h3>
             <ul class="sample-list">
-              <li class="sample-empty">暂无完成样本，继续按一进二闭环观察。</li>
+
+        <li class="sample-item" data-success="true">
+          <span class="sample-name">低位换手样本(600018)</span>
+          <span class="sample-pnl">3.80%</span>
+          <span class="sample-detail">低位平台突破 / discipline_take_profit / 持仓 1 日</span>
+        </li>
+
             </ul>
           </section>
         </aside>
