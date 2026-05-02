@@ -15,7 +15,7 @@ Core line:
 ```text
 client/desktop/firemoney_client/
   adapter.py        adapter from client to the one-to-two service
-  one_to_two_cli.py local command entry for morning/watch/eod/backtest/schedule/notifications
+  one_to_two_cli.py local command entry for morning/watch/eod/backtest/stability/schedule/notifications
   preview.py        local HTML preview generator
   renderer.py       one-to-two HTML renderer
   static/           CSS for the interface preview

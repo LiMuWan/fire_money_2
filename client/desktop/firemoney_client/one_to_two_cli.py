@@ -24,7 +24,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run FireMoney one-to-two workflow.")
     parser.add_argument(
         "mode",
-        choices=("morning", "watch", "eod", "backtest", "schedule", "notifications"),
+        choices=(
+            "morning",
+            "watch",
+            "eod",
+            "backtest",
+            "stability",
+            "schedule",
+            "notifications",
+        ),
         help="Workflow mode to run.",
     )
     parser.add_argument("--trade-date", default=None)
@@ -111,6 +119,8 @@ def main() -> None:
             end_date=args.end_date or args.trade_date,
             max_trade_days=args.max_trade_days,
         )
+    elif args.mode == "stability":
+        result = adapter.build_one_to_two_stability_report()
     elif args.mode == "notifications":
         records = adapter.load_notification_records(
             workflow=args.workflow,

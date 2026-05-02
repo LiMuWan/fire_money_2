@@ -570,6 +570,64 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(stability.exit_reason_distribution["stop_loss_t1"], 1)
             self.assertEqual(stability.status, "observation")
 
+    def test_stability_cli_reads_current_paper_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            buy_service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+            buy_service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            risk_service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider((_risk_break_row("2026-05-01"),)),
+                paper_store=paper_store,
+            )
+            risk_service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="risk",
+                notify=False,
+            )
+            risk_service.run_one_to_two_watch(
+                trade_date="2026-05-06",
+                phase="risk",
+                notify=False,
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "stability",
+                    "--paper-store",
+                    str(paper_store.path),
+                    "--sample-data",
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["report_id"], "one-to-two-stability")
+            self.assertEqual(payload["sample_count"], 1)
+            self.assertEqual(payload["status"], "observation")
+            self.assertEqual(payload["exit_reason_distribution"]["stop_loss_t1"], 1)
+            self.assertEqual(
+                payload["position_label_distribution"]["低位平台突破"],
+                1,
+            )
+
     def test_end_of_day_review_uses_closed_trade_outcomes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
