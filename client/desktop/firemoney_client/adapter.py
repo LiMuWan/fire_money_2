@@ -50,3 +50,15 @@ class LocalMainChainAdapter:
 
     def build_one_to_two_stability_report(self) -> OneToTwoStabilityReport:
         return self._service.build_one_to_two_stability_report()
+
+    def run_one_to_two_backtest(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_trade_days: int = 30,
+    ) -> OneToTwoStabilityReport:
+        return self._service.run_one_to_two_backtest(
+            start_date=start_date,
+            end_date=end_date,
+            max_trade_days=max_trade_days,
+        )

@@ -23,6 +23,9 @@ def main() -> None:
         help="Workflow mode to run.",
     )
     parser.add_argument("--trade-date", default=None)
+    parser.add_argument("--start-date", default=None)
+    parser.add_argument("--end-date", default=None)
+    parser.add_argument("--max-trade-days", type=int, default=30)
     parser.add_argument(
         "--phase",
         choices=("scan", "auction", "open", "risk"),
@@ -56,7 +59,11 @@ def main() -> None:
             notify=not args.no_notify,
         )
     else:
-        result = adapter.build_one_to_two_stability_report()
+        result = adapter.run_one_to_two_backtest(
+            start_date=args.start_date,
+            end_date=args.end_date or args.trade_date,
+            max_trade_days=args.max_trade_days,
+        )
     print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
 
 

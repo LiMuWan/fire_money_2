@@ -75,7 +75,7 @@ MarketDataProvider/AkShare
 python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli watch --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli backtest
+python -m client.desktop.firemoney_client.one_to_two_cli backtest --start-date 2026-04-01 --end-date 2026-04-30 --max-trade-days 20
 ```
 
 盘中 watch 可按阶段手动推进：
@@ -88,6 +88,8 @@ python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no
 ```
 
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
+
+`backtest` 使用隔离临时账本做历史回放，不会改写 `.firemoney/paper_trades.json`。输出仍遵守样本门槛：少于 30 笔只显示观察期。
 
 重新生成预览：
 

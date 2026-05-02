@@ -118,5 +118,6 @@ Describes the strategy stability observation. Fewer than 30 samples must remain 
 - The service layer must return enough `summary`, `next_action`, `status`, or equivalent fields to support UI display.
 - One-to-two candidates, risk notes, stop loss, paper-trading state, and Feishu notification results are shared contracts; clients must not recompute them from raw AkShare fields.
 - Stability reports must use closed `PaperTradeRecord` samples. Samples below 30 remain observation-only.
+- Backtest output reuses `OneToTwoStabilityReport`; it does not introduce a separate product surface or write live paper-account state.
 - AkShare and Feishu details stay behind infrastructure adapters. Shared contracts use project-owned field names only.
 - One-to-two paper trading is simulation only; these contracts do not represent real account orders or unattended live trading.

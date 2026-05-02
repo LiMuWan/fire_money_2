@@ -353,6 +353,26 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertLess(stability.average_return_pct, 0)
             self.assertEqual(stability.status, "observation")
 
+    def test_backtest_replays_closed_samples_without_mutating_live_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_store = PaperTradeStore(root / "paper_trades.json")
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                paper_store=paper_store,
+            )
+
+            report = service.run_one_to_two_backtest(
+                start_date="2026-04-28",
+                end_date="2026-04-30",
+                max_trade_days=3,
+            )
+
+            self.assertGreaterEqual(report.sample_count, 1)
+            self.assertEqual(paper_store.load().closed_trades, ())
+            self.assertEqual(paper_store.load().positions, ())
+
     def test_feishu_notifier_is_safe_without_webhook(self) -> None:
         old_enabled = os.environ.get("FEISHU_ENABLED")
         old_webhook = os.environ.get("FEISHU_WEBHOOK_URL")

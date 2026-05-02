@@ -24,6 +24,7 @@ class OneToTwoEventType(str, Enum):
     PAPER_BUY = "paper_buy"
     STOP_WARNING = "stop_warning"
     T1_SELL = "t1_sell"
+    DISCIPLINE_EXIT = "discipline_exit"
     END_OF_DAY_REVIEW = "end_of_day_review"
     BLOCKED = "blocked"
 

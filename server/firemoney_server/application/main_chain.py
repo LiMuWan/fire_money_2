@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
+from tempfile import TemporaryDirectory
+from pathlib import Path
 
 from server.firemoney_server.domain.one_to_two import OneToTwoPolicy
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
@@ -211,6 +213,86 @@ class MainChainService:
         """Summarize current paper-trading stability observations."""
 
         account = self._paper_store.load()
+        return self._stability_from_account(account)
+
+    def run_one_to_two_backtest(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_trade_days: int = 30,
+    ) -> OneToTwoStabilityReport:
+        """Replay one-to-two samples over historical dates in an isolated ledger."""
+
+        end_context = self._trading_calendar.resolve(end_date or self._default_trade_date())
+        end_trade_date = date.fromisoformat(end_context.trade_date)
+        start_trade_date = (
+            date.fromisoformat(self._trading_calendar.resolve(start_date).trade_date)
+            if start_date
+            else end_trade_date - timedelta(days=max_trade_days * 2)
+        )
+        dates: list[str] = []
+        cursor = start_trade_date
+        while cursor <= end_trade_date and len(dates) < max_trade_days:
+            context = self._trading_calendar.resolve(cursor.isoformat())
+            if context.trade_date == cursor.isoformat():
+                dates.append(context.trade_date)
+            cursor += timedelta(days=1)
+
+        with TemporaryDirectory() as temp_dir:
+            paper_store = PaperTradeStore(
+                Path(temp_dir) / "paper_trades.json",
+                initial_cash=self._one_to_two_settings.initial_cash,
+                max_position_pct=self._one_to_two_settings.max_position_pct,
+                max_daily_trades=self._one_to_two_settings.max_daily_trades,
+            )
+            policy = OneToTwoPolicy(self._one_to_two_settings)
+            for trade_date in dates:
+                try:
+                    rows = self._market_data_provider.load_one_to_two_rows(trade_date)
+                except Exception:
+                    continue
+                candidates = policy.build_candidates(rows)
+                ready = next(
+                    (candidate for candidate in candidates if candidate.status == "ready"),
+                    None,
+                )
+                if not ready:
+                    continue
+                account = paper_store.load()
+                if account.positions:
+                    position = account.positions[0]
+                    matched = next(
+                        (
+                            candidate
+                            for candidate in candidates
+                            if candidate.symbol == position.symbol
+                        ),
+                        None,
+                    )
+                    if matched and position.can_sell_today:
+                        paper_store.exit_position(
+                            matched,
+                            exit_reason="backtest_discipline",
+                            message="历史回放纪律退出，完成一笔一进二样本。",
+                            holding_trade_days=1,
+                        )
+                if not paper_store.load().positions:
+                    paper_store.buy_candidate(ready)
+            account = paper_store.load()
+            if account.positions and dates:
+                position = account.positions[0]
+                last_date = dates[-1]
+                paper_store.prepare_for_trade_date(last_date)
+                synthetic_exit = self._candidate_for_position(position, last_date)
+                paper_store.exit_position(
+                    synthetic_exit,
+                    exit_reason="backtest_forced_close",
+                    message="历史回放结束，强制按最新价归档样本。",
+                    holding_trade_days=1,
+                )
+            return self._stability_from_account(paper_store.load())
+
+    def _stability_from_account(self, account) -> OneToTwoStabilityReport:
         sample_count = len(account.closed_trades)
         sell_count = sum(1 for record in account.closed_trades if record.success)
         warning_count = sum(record.warning_count for record in account.closed_trades)
@@ -253,6 +335,41 @@ class MainChainService:
                 else "样本达到复查门槛，可以进入策略边界评估。"
             ),
             next_action="继续积累至少 30 笔一进二样本。",
+        )
+
+    def _candidate_for_position(self, position, trade_date: str):
+        from shared.contracts import OneToTwoCandidate, OneToTwoPositionProfile
+
+        return OneToTwoCandidate(
+            symbol=position.symbol,
+            name=position.name,
+            trade_date=trade_date,
+            score=position.opened_score,
+            status="ready",
+            latest_price=position.latest_price,
+            limit_up_price=position.latest_price,
+            entry_price=position.entry_price,
+            stop_loss=position.stop_loss,
+            position_limit_pct=self._one_to_two_settings.max_position_pct,
+            first_board_score=0,
+            auction_score=0,
+            position_score=0,
+            theme_score=0,
+            liquidity_score=0,
+            position_profile=OneToTwoPositionProfile(
+                label=position.position_label,
+                low_position_score=0,
+                breakout_score=0,
+                pressure_score=0,
+                moving_average_score=0,
+                volume_score=0,
+                summary=position.position_label,
+                risk_notes=(),
+            ),
+            blockers=(),
+            warnings=(),
+            rationale="历史回放强制归档样本。",
+            next_action="回放结束。",
         )
 
     def _notify_or_prepare(

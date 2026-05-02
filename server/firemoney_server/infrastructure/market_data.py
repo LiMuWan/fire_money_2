@@ -177,15 +177,32 @@ class AkshareMarketDataProvider:
             if not symbol or self._board_count(item) != 1:
                 continue
             spot_item = spot_by_symbol.get(symbol, {})
-            latest = self._float(spot_item.get("最新价")) or self._float(item.get("最新价"))
-            limit_up_price = self._float(item.get("涨停价")) or round(latest * 1.1, 2)
-            previous_close = self._float(spot_item.get("昨收")) or round(
+            latest = self._first_float(spot_item, ("最新价",)) or self._first_float(item, ("最新价",))
+            limit_up_price = self._first_float(item, ("涨停价", "最新价")) or round(latest * 1.1, 2)
+            previous_close = self._first_float(spot_item, ("昨收", "昨日收盘价")) or round(
                 limit_up_price / 1.1,
                 2,
             )
             if latest <= 0 or previous_close <= 0:
                 continue
             history = self._history_profile(ak, symbol, trade_date, latest)
+            open_price = self._first_float(spot_item, ("今开", "开盘价")) or self._first_float(
+                item,
+                ("开盘价",),
+            )
+            open_pct = (
+                (open_price - previous_close) / previous_close
+                if open_price and previous_close
+                else self._first_float(item, ("竞价涨幅", "开盘涨幅", "涨跌幅")) / 100
+            )
+            turnover_amount = self._first_float(spot_item, ("成交额",)) or self._first_float(
+                item,
+                ("成交额", "昨日成交额"),
+            )
+            auction_amount = self._first_float(
+                item,
+                ("竞价金额", "竞价成交额", "竞价额", "集合竞价成交额"),
+            )
             rows.append(
                 OneToTwoMarketRow(
                     symbol=symbol,
@@ -201,17 +218,14 @@ class AkshareMarketDataProvider:
                     first_limit_up_time=self._format_time(
                         item.get("昨日封板时间") or item.get("首次封板时间")
                     ),
-                    sealed_amount=self._float(item.get("封板资金")),
-                    turnover_amount=(
-                        self._float(spot_item.get("成交额"))
-                        or self._float(item.get("成交额"))
-                    ),
+                    sealed_amount=self._first_float(item, ("封板资金", "封单资金")),
+                    turnover_amount=turnover_amount,
                     turnover_rate=(
-                        self._float(spot_item.get("换手率"))
-                        or self._float(item.get("换手率"))
+                        self._first_float(spot_item, ("换手率",))
+                        or self._first_float(item, ("换手率",))
                     ),
-                    open_pct=self._float(spot_item.get("涨跌幅")) / 100,
-                    auction_amount=0.0,
+                    open_pct=open_pct,
+                    auction_amount=auction_amount,
                     low_20=history["low_20"],
                     high_60=history["high_60"],
                     pressure_price=history["pressure_price"],
@@ -219,7 +233,7 @@ class AkshareMarketDataProvider:
                     ma_10=history["ma_10"],
                     ma_20=history["ma_20"],
                     recent_gain_pct=history["recent_gain_pct"],
-                    theme=str(item.get("所属行业", "")),
+                    theme=self._first_text(item, ("所属行业", "所属概念", "概念", "题材")),
                     market_temperature=market_temperature,
                 )
             )
@@ -376,3 +390,17 @@ class AkshareMarketDataProvider:
             return int(float(value))
         except (TypeError, ValueError):
             return 0
+
+    def _first_float(self, item: dict[str, Any], keys: tuple[str, ...]) -> float:
+        for key in keys:
+            value = self._float(item.get(key))
+            if value:
+                return value
+        return 0.0
+
+    def _first_text(self, item: dict[str, Any], keys: tuple[str, ...]) -> str:
+        for key in keys:
+            value = str(item.get(key, "")).strip()
+            if value and value.lower() != "nan":
+                return value
+        return ""

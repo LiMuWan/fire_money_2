@@ -331,6 +331,75 @@ class PaperTradeStore:
         )
         return self.save(account)
 
+    def exit_position(
+        self,
+        candidate: OneToTwoCandidate,
+        exit_reason: str,
+        message: str,
+        event_type: OneToTwoEventType = OneToTwoEventType.DISCIPLINE_EXIT,
+        holding_trade_days: int = 0,
+    ) -> PaperAccount:
+        account = self.prepare_for_trade_date(candidate.trade_date)
+        if not account.positions:
+            return account
+        position = account.positions[0]
+        if position.symbol != candidate.symbol or not position.can_sell_today:
+            return account
+        entry_amount = round(position.quantity * position.entry_price, 2)
+        proceeds = round(position.quantity * candidate.latest_price, 2)
+        realized_pnl = round(proceeds - entry_amount, 2)
+        realized_pnl_pct = round(
+            (candidate.latest_price - position.entry_price) / position.entry_price,
+            4,
+        )
+        warning_count = sum(
+            1
+            for event in account.events
+            if event.symbol == position.symbol
+            and event.event_type == OneToTwoEventType.STOP_WARNING
+        )
+        closed_trade = PaperTradeRecord(
+            trade_id=f"{position.symbol}-{position.opened_at}-{candidate.trade_date}-{exit_reason}",
+            symbol=position.symbol,
+            name=position.name,
+            opened_at=position.opened_at,
+            closed_at=candidate.trade_date,
+            entry_price=position.entry_price,
+            exit_price=round(candidate.latest_price, 2),
+            quantity=position.quantity,
+            entry_amount=entry_amount,
+            exit_amount=proceeds,
+            realized_pnl=realized_pnl,
+            realized_pnl_pct=realized_pnl_pct,
+            holding_trade_days=holding_trade_days,
+            exit_reason=exit_reason,
+            position_label=position.position_label,
+            success=realized_pnl > 0,
+            warning_count=warning_count,
+        )
+        account = PaperAccount(
+            account_id=account.account_id,
+            last_trade_date=account.last_trade_date,
+            cash=round(account.cash + proceeds, 2),
+            initial_cash=account.initial_cash,
+            equity=round(account.cash + proceeds, 2),
+            max_position_pct=account.max_position_pct,
+            max_daily_trades=account.max_daily_trades,
+            daily_trade_count=account.daily_trade_count,
+            positions=(),
+            events=account.events,
+            closed_trades=(closed_trade, *account.closed_trades)[:200],
+        )
+        account = self._append_event(
+            account,
+            event_type,
+            candidate,
+            candidate.latest_price,
+            position.quantity,
+            message,
+        )
+        return self.save(account)
+
     def roll_to_next_day(self) -> PaperAccount:
         account = self.load()
         positions = tuple(
