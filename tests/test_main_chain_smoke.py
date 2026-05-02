@@ -638,6 +638,10 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(stability.sample_stage, "观察期")
             self.assertEqual(stability.next_milestone, 30)
             self.assertIn("少于 30", stability.strategy_boundary_suggestion)
+            self.assertEqual(len(stability.recent_samples), 1)
+            self.assertEqual(stability.recent_samples[0].symbol, "600001")
+            self.assertEqual(stability.recent_samples[0].exit_reason, "stop_loss_t1")
+            self.assertLess(stability.recent_samples[0].realized_pnl_pct, 0)
 
     def test_stability_cli_reads_current_paper_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -698,6 +702,8 @@ class MainChainSmokeTest(unittest.TestCase):
                 payload["position_label_distribution"]["低位平台突破"],
                 1,
             )
+            self.assertEqual(payload["recent_samples"][0]["symbol"], "600001")
+            self.assertEqual(payload["recent_samples"][0]["exit_reason"], "stop_loss_t1")
 
     def test_stability_report_adds_30_50_100_sample_stage_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -733,6 +739,8 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(stage_30.sample_stage, "30 笔初评")
             self.assertEqual(stage_30.next_milestone, 50)
             self.assertIn("低位平台突破", stage_30.strategy_boundary_suggestion)
+            self.assertEqual(len(stage_30.recent_samples), 5)
+            self.assertEqual(stage_30.recent_samples[0].trade_id, "sample-0")
 
             account_30 = paper_store.load()
             paper_store.save(
@@ -1031,6 +1039,8 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("尾盘测评", html)
             self.assertIn("稳定性观察", html)
             self.assertIn("稳定性阶段", html)
+            self.assertIn("最近样本", html)
+            self.assertIn("暂无完成样本", html)
             self.assertIn("位置分布", html)
             self.assertIn("退出原因", html)
             self.assertIn("阶段", html)

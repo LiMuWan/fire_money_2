@@ -33,6 +33,7 @@ from shared.contracts import (
     OneToTwoEventType,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
+    OneToTwoRecentSample,
     OneToTwoStabilityReport,
     PaperAccount,
     TradingDayContext,
@@ -455,6 +456,23 @@ class MainChainService:
         exit_reason_distribution = self._count_by(
             record.exit_reason for record in account.closed_trades
         )
+        recent_samples = tuple(
+            OneToTwoRecentSample(
+                trade_id=record.trade_id,
+                symbol=record.symbol,
+                name=record.name,
+                opened_at=record.opened_at,
+                closed_at=record.closed_at,
+                realized_pnl=record.realized_pnl,
+                realized_pnl_pct=record.realized_pnl_pct,
+                holding_trade_days=record.holding_trade_days,
+                exit_reason=record.exit_reason,
+                position_label=record.position_label,
+                success=record.success,
+                warning_count=record.warning_count,
+            )
+            for record in account.closed_trades[:5]
+        )
         low_breakout_records = tuple(
             record
             for record in account.closed_trades
@@ -507,6 +525,7 @@ class MainChainService:
             ),
             position_label_distribution=position_label_distribution,
             exit_reason_distribution=exit_reason_distribution,
+            recent_samples=recent_samples,
             status=status,
             summary=(
                 "样本处于观察期，暂不自动给出策略边界结论。"

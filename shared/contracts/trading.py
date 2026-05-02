@@ -144,6 +144,22 @@ class PaperTradeRecord:
 
 
 @dataclass(frozen=True)
+class OneToTwoRecentSample:
+    trade_id: str
+    symbol: str
+    name: str
+    opened_at: str
+    closed_at: str
+    realized_pnl: float
+    realized_pnl_pct: float
+    holding_trade_days: int
+    exit_reason: str
+    position_label: str
+    success: bool
+    warning_count: int
+
+
+@dataclass(frozen=True)
 class PaperAccount:
     account_id: str
     last_trade_date: str
@@ -227,6 +243,7 @@ class OneToTwoStabilityReport:
     low_breakout_success_rate: float
     position_label_distribution: dict[str, int]
     exit_reason_distribution: dict[str, int]
+    recent_samples: tuple[OneToTwoRecentSample, ...]
     status: str
     summary: str
     strategy_boundary_suggestion: str

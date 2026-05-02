@@ -448,6 +448,50 @@ button {
   background: var(--danger-soft);
 }
 
+.sample-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sample-item,
+.sample-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfb;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sample-item[data-success="true"] {
+  border-color: rgba(31, 122, 90, 0.38);
+  background: var(--accent-soft);
+}
+
+.sample-item[data-success="false"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
+}
+
+.sample-name,
+.sample-pnl {
+  color: var(--text);
+  font-weight: 720;
+}
+
+.sample-detail,
+.sample-empty {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
 @media (max-width: 980px) {
   .topbar,
   .one-to-two-hero,

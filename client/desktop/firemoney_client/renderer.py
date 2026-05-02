@@ -10,6 +10,7 @@ from shared.contracts import (
     OneToTwoDoctorReport,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
+    OneToTwoRecentSample,
     OneToTwoScheduleRun,
     OneToTwoStabilityReport,
 )
@@ -178,6 +179,21 @@ def _render_distribution(values: dict[str, int]) -> str:
     return "，".join(f"{_text(label)} {count}" for label, count in list(values.items())[:4])
 
 
+def _render_recent_samples(samples: tuple[OneToTwoRecentSample, ...]) -> str:
+    if not samples:
+        return '<li class="sample-empty">暂无完成样本，继续按一进二闭环观察。</li>'
+    return "\n".join(
+        f"""
+        <li class="sample-item" data-success="{_text(str(sample.success).lower())}">
+          <span class="sample-name">{_text(sample.name)}({_text(sample.symbol)})</span>
+          <span class="sample-pnl">{sample.realized_pnl_pct:.2%}</span>
+          <span class="sample-detail">{_text(sample.position_label)} / {_text(sample.exit_reason)} / 持仓 {sample.holding_trade_days} 日</span>
+        </li>
+        """
+        for sample in samples
+    )
+
+
 def render_one_to_two_workflow_html(
     report: OneToTwoMorningReport,
     watch_report: OneToTwoMorningReport,
@@ -290,6 +306,10 @@ def render_one_to_two_workflow_html(
               <li>退出原因：{_render_distribution(stability_report.exit_reason_distribution)}</li>
               <li>边界建议：{_text(stability_report.strategy_boundary_suggestion)}</li>
               <li>{_text(stability_report.next_action)}</li>
+            </ul>
+            <h3 class="panel-subtitle">最近样本</h3>
+            <ul class="sample-list">
+              {_render_recent_samples(stability_report.recent_samples)}
             </ul>
           </section>
         </aside>

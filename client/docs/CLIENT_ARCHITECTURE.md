@@ -23,7 +23,7 @@ client/desktop/firemoney_client/
 
 ## 3. Client Responsibilities
 
-- Render candidate pool, position labels, stop loss, strict T+1 risk notes, runtime doctor checks, paper-account state, local schedule state, Feishu notification status, notification records, end-of-day review with stability guidance, and stability observation.
+- Render candidate pool, position labels, stop loss, strict T+1 risk notes, runtime doctor checks, paper-account state, local schedule state, Feishu notification status, notification records, end-of-day review with stability guidance, and stability observation with recent closed samples.
 - Capture view/run intent and call the adapter.
 - Consume shared contracts without recomputing score, risk, P/L, or notification state.
 - Keep old demos, CSV order flows, receipt import screens, and generic dashboards out of the default product surface.

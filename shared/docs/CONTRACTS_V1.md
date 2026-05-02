@@ -127,7 +127,7 @@ Rules represented by the contract:
 
 Describes the strategy stability observation. Fewer than 30 samples must remain `observation` and must not automatically produce strategy-boundary conclusions.
 
-Key fields include sample count, sample stage, next milestone, success rate, average return, max drawdown, stop-warning rate, low-breakout success rate, position-label distribution, exit-reason distribution, and strategy-boundary suggestion.
+Key fields include sample count, sample stage, next milestone, success rate, average return, max drawdown, stop-warning rate, low-breakout success rate, position-label distribution, exit-reason distribution, recent closed samples, and strategy-boundary suggestion.
 
 Rules represented by the contract:
 
@@ -135,6 +135,7 @@ Rules represented by the contract:
 - 30 samples produce first-review guidance
 - 50 samples produce second-review guidance
 - 100 samples can enter boundary-setting review
+- `recent_samples` exposes the newest closed `PaperTradeRecord` summaries for review, capped by the service so the client does not become a report-export surface
 - clients display the service-owned `strategy_boundary_suggestion` and must not infer their own boundary decision
 
 ### `OneToTwoDoctorReport`, `OneToTwoDoctorCheck`
