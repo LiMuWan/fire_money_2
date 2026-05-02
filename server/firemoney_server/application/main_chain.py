@@ -356,21 +356,41 @@ class MainChainService:
         """Run the non-trading Beta readiness gate for the one-to-two loop."""
 
         requested_date = trade_date or self._default_trade_date()
-        trade_context = self._trading_calendar.resolve(
-            requested_date
+        trade_context = self._trading_calendar.resolve(requested_date)
+        preflight_report = self.build_one_to_two_doctor_report(
+            trade_date=requested_date,
+            beta=False,
+        )
+        not_ready_preflight_checks = tuple(
+            check
+            for check in preflight_report.checks
+            if check.status != "ready" and check.check_id != "feishu"
+        )
+        feishu_shape_check = self._doctor_feishu_check(
+            trade_context.trade_date,
+            beta=False,
+        )
+        should_send_feishu = (
+            trade_context.is_trading_day
+            and not not_ready_preflight_checks
+            and feishu_shape_check.status == "ready"
         )
         feishu_test = (
-            FeishuNotificationResult(
-                status=NotificationStatus.PREPARED,
-                title="FireMoney 一进二飞书测试",
-                message="非交易日不发送飞书测试，不触发模拟买入或卖出。",
-                webhook_configured=bool(os.environ.get("FEISHU_WEBHOOK_URL", "")),
-                error="non-trading day",
-            )
-            if not trade_context.is_trading_day
-            else self.send_one_to_two_feishu_test(
+            self.send_one_to_two_feishu_test(
                 trade_date=trade_context.trade_date,
                 notify=True,
+            )
+            if should_send_feishu
+            else FeishuNotificationResult(
+                status=NotificationStatus.PREPARED,
+                title="FireMoney 一进二飞书测试",
+                message="Beta 预检未发送飞书测试，不触发模拟买入或卖出。",
+                webhook_configured=bool(os.environ.get("FEISHU_WEBHOOK_URL", "")),
+                error=self._beta_readiness_skip_reason(
+                    trade_context.is_trading_day,
+                    not_ready_preflight_checks,
+                    feishu_shape_check,
+                ),
             )
         )
         doctor_report = self.build_one_to_two_doctor_report(
@@ -396,6 +416,20 @@ class MainChainService:
                 else "按 doctor_report.checks 修复 blocked 项后重新运行 beta-check。"
             ),
         )
+
+    def _beta_readiness_skip_reason(
+        self,
+        is_trading_day: bool,
+        not_ready_preflight_checks: tuple[OneToTwoDoctorCheck, ...],
+        feishu_shape_check: OneToTwoDoctorCheck,
+    ) -> str:
+        if not is_trading_day:
+            return "non-trading day"
+        if not_ready_preflight_checks:
+            return f"preflight not ready: {not_ready_preflight_checks[0].check_id}"
+        if feishu_shape_check.status != "ready":
+            return f"feishu not ready: {feishu_shape_check.detail}"
+        return "preflight blocked"
 
     def build_one_to_two_doctor_report(
         self,

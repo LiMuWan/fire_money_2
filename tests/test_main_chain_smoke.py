@@ -883,6 +883,37 @@ class MainChainSmokeTest(unittest.TestCase):
             checks = {check.check_id: check for check in report.doctor_report.checks}
             self.assertEqual(checks["trading_day"].status, "blocked")
 
+    def test_beta_check_blocks_invalid_webhook_without_sending(self) -> None:
+        class RaisingFeishuNotifier:
+            def notify(self, title: str, message: str) -> FeishuNotificationResult:
+                raise AssertionError("invalid webhook must not send Feishu")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=NotificationRecordStore(root / "notifications.json"),
+            )
+            service._feishu_notifier = RaisingFeishuNotifier()
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://example.com/hook",
+                },
+                clear=True,
+            ):
+                report = service.build_one_to_two_beta_readiness_report(
+                    trade_date="2026-04-30",
+                )
+
+            self.assertEqual(report.status, "blocked")
+            self.assertIn("feishu not ready", report.feishu_test.error or "")
+            checks = {check.check_id: check for check in report.doctor_report.checks}
+            self.assertEqual(checks["feishu"].status, "blocked")
+
     def test_beta_check_cli_rejects_no_notify(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
