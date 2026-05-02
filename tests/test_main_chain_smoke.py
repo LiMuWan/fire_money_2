@@ -20,6 +20,7 @@ from server.firemoney_server.infrastructure.market_data import (
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.one_to_two_config import load_one_to_two_settings
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
+from server.firemoney_server.infrastructure.scheduler_run_store import SchedulerRunStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
@@ -583,6 +584,73 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["records"][0]["workflow"], "watch:open")
             self.assertEqual(payload["records"][0]["status"], "prepared")
 
+    def test_scheduler_runs_are_persisted_and_read_by_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scheduler_run_path = root / "scheduler_runs.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "schedule",
+                    "--sample-data",
+                    "--no-notify",
+                    "--trade-date",
+                    "2026-04-30",
+                    "--at",
+                    "09:31",
+                    "--paper-store",
+                    str(root / "paper_trades.json"),
+                    "--scheduler-state",
+                    str(root / "scheduler_state.json"),
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["run_id"], "one-to-two-schedule-2026-04-30-09:31")
+            self.assertEqual(payload["executed_count"], 4)
+            records = SchedulerRunStore(scheduler_run_path).load()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["run"]["executed_count"], 4)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "scheduler-runs",
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
+                    "--limit",
+                    "1",
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            audit_payload = json.loads(completed.stdout)
+
+            self.assertEqual(audit_payload["mode"], "scheduler-runs")
+            self.assertEqual(audit_payload["record_count"], 1)
+            self.assertEqual(
+                audit_payload["records"][0]["run"]["run_id"],
+                "one-to-two-schedule-2026-04-30-09:31",
+            )
+
     def test_one_to_two_stop_warning_obeys_t1_before_sell(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1037,6 +1105,7 @@ class MainChainSmokeTest(unittest.TestCase):
             root = Path(temp_dir)
             paper_path = root / "paper_trades.json"
             scheduler_path = root / "scheduler_state.json"
+            scheduler_run_path = root / "scheduler_runs.json"
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -1054,6 +1123,8 @@ class MainChainSmokeTest(unittest.TestCase):
                     str(paper_path),
                     "--scheduler-state",
                     str(scheduler_path),
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
                 ],
                 cwd=Path(__file__).resolve().parents[1],
                 check=True,
@@ -1065,6 +1136,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["status"], "blocked")
             self.assertEqual(payload["report_id"], "one-to-two-doctor-2026-04-30")
             self.assertFalse(scheduler_path.exists())
+            self.assertFalse(scheduler_run_path.exists())
             self.assertEqual(PaperTradeStore(paper_path).load().events, ())
 
     def test_beta_schedule_cli_rejects_no_notify(self) -> None:
@@ -1072,6 +1144,7 @@ class MainChainSmokeTest(unittest.TestCase):
             root = Path(temp_dir)
             paper_path = root / "paper_trades.json"
             scheduler_path = root / "scheduler_state.json"
+            scheduler_run_path = root / "scheduler_runs.json"
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -1090,6 +1163,8 @@ class MainChainSmokeTest(unittest.TestCase):
                     str(paper_path),
                     "--scheduler-state",
                     str(scheduler_path),
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
                 ],
                 cwd=Path(__file__).resolve().parents[1],
                 check=True,
@@ -1103,6 +1178,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("不能同时使用 --no-notify", payload["summary"])
             self.assertFalse(paper_path.exists())
             self.assertFalse(scheduler_path.exists())
+            self.assertFalse(scheduler_run_path.exists())
 
     def test_feishu_notifier_is_safe_without_webhook(self) -> None:
         old_enabled = os.environ.get("FEISHU_ENABLED")

@@ -17,6 +17,7 @@ from server.firemoney_server.infrastructure.market_data import (
 )
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
+from server.firemoney_server.infrastructure.scheduler_run_store import SchedulerRunStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 
 
@@ -32,6 +33,7 @@ def main() -> None:
             "stability",
             "doctor",
             "schedule",
+            "scheduler-runs",
             "notifications",
         ),
         help="Workflow mode to run.",
@@ -49,10 +51,15 @@ def main() -> None:
     )
     parser.add_argument("--scheduler-state", default=None, help="Optional scheduler state path.")
     parser.add_argument(
+        "--scheduler-runs",
+        default=None,
+        help="Optional scheduler run audit path.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=20,
-        help="Maximum notification records to print.",
+        help="Maximum local records to print.",
     )
     parser.add_argument(
         "--workflow",
@@ -112,6 +119,11 @@ def main() -> None:
         notification_store=notification_store,
     )
     adapter = LocalMainChainAdapter(service)
+    scheduler_run_store = (
+        SchedulerRunStore(args.scheduler_runs)
+        if args.scheduler_runs
+        else SchedulerRunStore()
+    )
     if args.mode == "morning":
         result = adapter.build_one_to_two_morning_report(
             trade_date=args.trade_date,
@@ -157,6 +169,18 @@ def main() -> None:
                 else "Review failed or prepared records before trusting Feishu delivery."
             ),
         }
+    elif args.mode == "scheduler-runs":
+        records = scheduler_run_store.load(limit=max(0, args.limit))
+        result = {
+            "mode": "scheduler-runs",
+            "record_count": len(records),
+            "records": records,
+            "next_action": (
+                "No scheduler run records yet; run schedule first."
+                if not records
+                else "Review executed, skipped, expired, and failed tasks before trusting Beta watch coverage."
+            ),
+        }
     else:
         if args.beta:
             readiness = adapter.build_one_to_two_doctor_report(
@@ -181,6 +205,7 @@ def main() -> None:
                     at_time=args.at,
                     notify=not args.no_notify,
                 )
+                scheduler_run_store.append(result)
                 print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
                 time.sleep(max(1, args.interval_seconds))
             return
@@ -189,6 +214,7 @@ def main() -> None:
             at_time=args.at,
             notify=not args.no_notify,
         )
+        scheduler_run_store.append(result)
     print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
 
 

@@ -63,6 +63,7 @@ MarketDataProvider/AkShare
 - 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
 - 模拟盘账本：`.firemoney/paper_trades.json`
 - 飞书通知归档：`.firemoney/notifications.json`
+- 调度运行审计：`.firemoney/scheduler_runs.json`
 - AkShare 原始快照缓存：`.firemoney/market_data/`
 - 本地预览：`client/desktop/preview/core_workflow.html`
 
@@ -94,6 +95,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli stability
 python -m client.desktop.firemoney_client.one_to_two_cli doctor
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 20
+python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 20
 ```
 
 盘中 watch 可按阶段手动推进：
@@ -105,7 +107,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli watch --phase open --no
 python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no-notify
 ```
 
-本地调度器只推进一进二主线，会按日内时间触发早盘、`scan`、`auction`、`open`、盘中 `risk` 和尾盘，并用 `.firemoney/scheduler_state.json` 防止同一交易日同一任务重复执行。错过执行窗口的任务会标记为 `expired`，不会在下午补跑开盘买入。本地试跑可以固定时间：
+本地调度器只推进一进二主线，会按日内时间触发早盘、`scan`、`auction`、`open`、盘中 `risk` 和尾盘，并用 `.firemoney/scheduler_state.json` 防止同一交易日同一任务重复执行，同时把每次调度结果写入 `.firemoney/scheduler_runs.json` 便于复核值守覆盖率。错过执行窗口的任务会标记为 `expired`，不会在下午补跑开盘买入。本地试跑可以固定时间：
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --trade-date 2026-04-30 --at 09:31 --sample-data --no-notify --paper-store .firemoney/tmp-paper.json --scheduler-state .firemoney/tmp-scheduler.json
@@ -120,6 +122,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli schedule --beta --loop 
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli notifications --workflow watch:open --status prepared --limit 10
+python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 10
 ```
 
 重新生成预览：
