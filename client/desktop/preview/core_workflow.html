@@ -606,7 +606,7 @@ button {
         <article class="one-to-two-card" data-status="ready">
           <div class="candidate-head">
             <div>
-              <div class="candidate-name">低位突破样例</div>
+              <div class="candidate-name">低位突破候选</div>
               <div class="candidate-code">600001 / 低位平台突破</div>
             </div>
             <div class="candidate-score">92.0</div>
@@ -616,7 +616,7 @@ button {
             <span class="tag">低位平台突破，位置结构 25/25</span>
             <span class="tag is-risk">止损 10.0</span>
           </div>
-          <p>低位突破样例 属于低位平台突破，首板质量、竞价强度和流动性进入一进二观察。</p>
+          <p>低位突破候选 属于低位平台突破，首板质量、竞价强度和流动性进入一进二观察。</p>
           <ul class="detail-list compact">
             <li>首板 25.0/25，竞价 20.0/20，位置 25.0/25，流动性 10.0/15</li>
             <li>买入价 10.52，仓位上限 8%，严格 T+1，2 个交易日不走强则纪律退出</li>
@@ -629,7 +629,7 @@ button {
         <article class="one-to-two-card" data-status="blocked">
           <div class="candidate-head">
             <div>
-              <div class="candidate-name">创业板样例</div>
+              <div class="candidate-name">非主板拦截</div>
               <div class="candidate-code">300003 / 低位启动</div>
             </div>
             <div class="candidate-score">88.0</div>
@@ -639,7 +639,7 @@ button {
             <span class="tag">低位启动，位置结构 21/25</span>
             <span class="tag is-risk">止损 21.0</span>
           </div>
-          <p>创业板样例 被拦截：创业板 不在主板 10cm 一进二范围内</p>
+          <p>非主板拦截 被拦截：创业板 不在主板 10cm 一进二范围内</p>
           <ul class="detail-list compact">
             <li>首板 25.0/25，竞价 20.0/20，位置 21.0/25，流动性 10.0/15</li>
             <li>买入价 22.0，仓位上限 8%，严格 T+1，2 个交易日不走强则纪律退出</li>
@@ -652,7 +652,7 @@ button {
         <article class="one-to-two-card" data-status="blocked">
           <div class="candidate-head">
             <div>
-              <div class="candidate-name">高位乖离样例</div>
+              <div class="candidate-name">高位乖离拦截</div>
               <div class="candidate-code">600002 / 平台突破</div>
             </div>
             <div class="candidate-score">77.0</div>
@@ -662,7 +662,7 @@ button {
             <span class="tag">平台突破，位置结构 17/25</span>
             <span class="tag is-risk">止损 15.67</span>
           </div>
-          <p>高位乖离样例 被拦截：首板前涨幅过大，疑似高位接力</p>
+          <p>高位乖离拦截 被拦截：首板前涨幅过大，疑似高位接力</p>
           <ul class="detail-list compact">
             <li>首板 25.0/25，竞价 13.0/20，位置 17.0/25，流动性 10.0/15</li>
             <li>买入价 16.5，仓位上限 8%，严格 T+1，2 个交易日不走强则纪律退出</li>
@@ -708,6 +708,12 @@ button {
                 <span class="doctor-label">本地调度</span>
                 <span class="doctor-status">可运行</span>
                 <span class="doctor-detail">早盘 08:50, 盘中 scan/auction/open/risk, 尾盘 15:10</span>
+              </li>
+
+              <li class="doctor-item" data-status="ready">
+                <span class="doctor-label">调度审计</span>
+                <span class="doctor-status">可运行</span>
+                <span class="doctor-detail">审计记录可读写，recent_records=0。</span>
               </li>
 
         </ul>
@@ -790,7 +796,7 @@ button {
       <article class="one-to-two-card position-card" data-status="warning">
         <div class="candidate-head">
           <div>
-            <div class="candidate-name">低位突破样例</div>
+            <div class="candidate-name">低位突破候选</div>
             <div class="candidate-code">600001 / 低位平台突破</div>
           </div>
           <div class="candidate-score">-6.84%</div>
@@ -821,7 +827,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">08:50 早盘判断</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>市场温度：74</li><li>昨日首板样本：3，可执行候选：1，硬拦截：2</li><li>模拟盘：权益 100000.00，当日已交易 0/1</li><li>候选入池：</li><li>- 低位突破样例(600001) 分数 92.0，低位平台突破，买入参考 10.52，止损 10.0，仓位上限 8%</li><li>主要拦截：</li><li>- 创业板样例(300003)：创业板 不在主板 10cm 一进二范围内</li><li>- 高位乖离样例(600002)：首板前涨幅过大，疑似高位接力</li><li>纪律：只做主板 10cm 一进二；当天跌破止损只预警，T+1 再处理。</li>
+          <li>交易日：2026-04-30</li><li>市场温度：74</li><li>昨日首板样本：3，可执行候选：1，硬拦截：2</li><li>模拟盘：权益 100000.00，当日已交易 0/1</li><li>候选入池：</li><li>- 低位突破候选(600001) 分数 92.0，低位平台突破，买入参考 10.52，止损 10.0，仓位上限 8%</li><li>主要拦截：</li><li>- 非主板拦截(300003)：创业板 不在主板 10cm 一进二范围内</li><li>- 高位乖离拦截(600002)：首板前涨幅过大，疑似高位接力</li><li>纪律：只做主板 10cm 一进二；当天跌破止损只预警，T+1 再处理。</li>
         </ul>
       </article>
 
@@ -829,7 +835,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">盘中事件</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>阶段：risk</li><li>最新事件：跌破止损，已发出 T+1 风险预警。</li><li>止损预警：低位突破样例(600001)</li><li>当前价 9.8，止损价 10.0</li><li>浮动盈亏：-504.00 (-6.84%)</li><li>位置：低位平台突破</li><li>T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
+          <li>交易日：2026-04-30</li><li>阶段：risk</li><li>最新事件：跌破止损，已发出 T+1 风险预警。</li><li>止损预警：低位突破候选(600001)</li><li>当前价 9.8，止损价 10.0</li><li>浮动盈亏：-504.00 (-6.84%)</li><li>位置：低位平台突破</li><li>T+1 处理：当日只预警不卖出，下一交易日仍低于止损再模拟卖出。</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
         </ul>
       </article>
 
@@ -837,7 +843,7 @@ button {
       <article class="notification-card">
         <div class="notification-title">15:10 尾盘测评</div>
         <ul class="notification-lines">
-          <li>交易日：2026-04-30</li><li>权益：99496.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：4，止损预警：1，当日 T+1 卖出：0</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：低位突破样例(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
+          <li>交易日：2026-04-30</li><li>权益：99496.00，现金：92636.00，观察盈亏：266.00</li><li>事件数：4，止损预警：1，当日 T+1 卖出：0</li><li>已归档样本：1</li><li>稳定性阶段：观察期，下一门槛：30 笔</li><li>边界建议：样本少于 30 笔，只记录现象，不自动收窄或放宽策略边界。</li><li>最新样本：低位换手样本(600018)，收益 3.80%，退出 discipline_take_profit，位置 低位平台突破</li><li>隔夜观察：低位突破候选(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：尾盘只归档和评估边界，不改变当日交易。</li>
         </ul>
       </article>
 

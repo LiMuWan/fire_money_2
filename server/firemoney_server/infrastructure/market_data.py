@@ -32,7 +32,7 @@ class SampleMarketDataProvider:
         return (
             OneToTwoMarketRow(
                 symbol="600001",
-                name="低位突破样例",
+                name="低位突破候选",
                 trade_date=trade_date,
                 board="主板",
                 is_st=False,
@@ -59,7 +59,7 @@ class SampleMarketDataProvider:
             ),
             OneToTwoMarketRow(
                 symbol="600002",
-                name="高位乖离样例",
+                name="高位乖离拦截",
                 trade_date=trade_date,
                 board="主板",
                 is_st=False,
@@ -86,7 +86,7 @@ class SampleMarketDataProvider:
             ),
             OneToTwoMarketRow(
                 symbol="300003",
-                name="创业板样例",
+                name="非主板拦截",
                 trade_date=trade_date,
                 board="创业板",
                 is_st=False,

@@ -58,7 +58,7 @@ def _build_service(
 def _risk_break_row(trade_date: str) -> OneToTwoMarketRow:
     return OneToTwoMarketRow(
         symbol="600001",
-        name="低位突破样例",
+        name="低位突破候选",
         trade_date=trade_date,
         board="主板",
         is_st=False,
@@ -88,7 +88,7 @@ def _risk_break_row(trade_date: str) -> OneToTwoMarketRow:
 def _weak_after_two_days_row(trade_date: str) -> OneToTwoMarketRow:
     return OneToTwoMarketRow(
         symbol="600001",
-        name="低位突破样例",
+        name="低位突破候选",
         trade_date=trade_date,
         board="主板",
         is_st=False,
@@ -230,7 +230,7 @@ class MainChainSmokeTest(unittest.TestCase):
             candidates = {candidate.symbol: candidate for candidate in report.candidates}
             one_word_row = OneToTwoMarketRow(
                 symbol="600004",
-                name="一字买不到样例",
+                name="一字买不到拦截",
                 trade_date="2026-05-01",
                 board="主板",
                 is_st=False,
@@ -1296,6 +1296,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("2 个交易日不走强则纪律退出", html)
             self.assertIn("持仓 700 股", html)
             self.assertNotIn("示例龙头", html)
+            self.assertNotIn("样例", html)
             self.assertNotIn("csv_export", html)
             self.assertNotIn("确认委托", html)
             self.assertNotIn("回执", html)
