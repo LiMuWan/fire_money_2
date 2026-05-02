@@ -554,6 +554,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(sold.account.events[0].event_type.value, "t1_sell")
             self.assertEqual(len(sold.account.closed_trades), 1)
             self.assertLess(sold.account.closed_trades[0].realized_pnl, 0)
+            self.assertIn("完成样本", sold.notification.message)
+            self.assertIn("stop_loss_t1", sold.notification.message)
+            self.assertIn("实现盈亏：-", sold.notification.message)
 
     def test_weak_position_exits_after_two_trading_days(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -587,6 +590,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(weak.account.events[0].event_type.value, "discipline_exit")
             self.assertEqual(weak.account.closed_trades[0].exit_reason, "discipline_weak_after_2_days")
             self.assertEqual(weak.account.closed_trades[0].holding_trade_days, 2)
+            self.assertIn("完成样本", weak.notification.message)
+            self.assertIn("discipline_weak_after_2_days", weak.notification.message)
+            self.assertIn("持仓 2 日", weak.notification.message)
 
     def test_paper_store_does_not_roll_account_backward(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -798,7 +798,22 @@ class MainChainService:
             f"阶段：{phase}",
             f"最新事件：{latest_event}",
         ]
-        if account.positions:
+        latest_closed_sample = account.closed_trades[0] if account.closed_trades else None
+        latest_event_type = account.events[0].event_type if account.events else None
+        if (
+            phase == "risk"
+            and latest_closed_sample
+            and latest_event_type in {OneToTwoEventType.T1_SELL, OneToTwoEventType.DISCIPLINE_EXIT}
+        ):
+            lines.extend(
+                [
+                    f"完成样本：{latest_closed_sample.name}({latest_closed_sample.symbol})",
+                    f"退出原因：{latest_closed_sample.exit_reason}；持仓 {latest_closed_sample.holding_trade_days} 日",
+                    f"实现盈亏：{latest_closed_sample.realized_pnl:.2f} ({latest_closed_sample.realized_pnl_pct:.2%})",
+                    f"位置：{latest_closed_sample.position_label}；止损预警 {latest_closed_sample.warning_count} 次",
+                ]
+            )
+        elif account.positions:
             position = account.positions[0]
             sell_state = "可按纪律卖出" if position.can_sell_today else "T+1 未到，只预警不卖出"
             lines.extend(
