@@ -69,6 +69,8 @@ MarketDataProvider/AkShare
 - `FEISHU_WEBHOOK_URL`
 - `FEISHU_WEBHOOK_SECRET` 可选
 
+飞书消息由服务端业务层统一生成：早盘包含候选、拦截、止损和仓位上限；盘中包含事件、持仓、止损、T+1 状态和模拟盘提醒；尾盘包含事件、预警、样本和观察纪律。
+
 ## 本地运行
 
 ```powershell

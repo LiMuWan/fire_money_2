@@ -281,6 +281,35 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(open_trigger.account.events[0].event_type.value, "paper_buy")
             self.assertEqual(open_trigger.account.positions[0].status, PaperTradeStatus.HOLDING)
 
+    def test_feishu_messages_include_actionable_one_to_two_discipline(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            morning = service.build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+            open_trigger = service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            eod = service.build_one_to_two_end_of_day_review(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+
+            self.assertIn("候选入池", morning.notification.message)
+            self.assertIn("止损", morning.notification.message)
+            self.assertIn("仓位上限 8%", morning.notification.message)
+            self.assertIn("T+1", morning.notification.message)
+            self.assertIn("持仓", open_trigger.notification.message)
+            self.assertIn("模拟盘不是实盘", open_trigger.notification.message)
+            self.assertIn("样本少于 30 笔", eod.notification.message)
+
     def test_one_to_two_stop_warning_obeys_t1_before_sell(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

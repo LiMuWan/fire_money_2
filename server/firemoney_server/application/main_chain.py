@@ -24,10 +24,12 @@ from server.firemoney_server.infrastructure.trading_calendar import (
 from shared.contracts import (
     FeishuNotificationResult,
     NotificationStatus,
+    OneToTwoCandidate,
     OneToTwoEventType,
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
     OneToTwoStabilityReport,
+    PaperAccount,
     TradingDayContext,
 )
 
@@ -91,7 +93,13 @@ class MainChainService:
         notification = self._notify_or_prepare(
             notify=notify,
             title="FireMoney 一进二早盘",
-            message=summary,
+            message=self._morning_notification_message(
+                report_date=report_date,
+                market_temperature=rows[0].market_temperature if rows else 0,
+                data_unavailable=data_unavailable,
+                candidates=candidates,
+                account=account,
+            ),
         )
         return OneToTwoMorningReport(
             report_id=f"one-to-two-morning-{report_date}",
@@ -155,7 +163,13 @@ class MainChainService:
         notification = self._notify_or_prepare(
             notify=notify,
             title="FireMoney 一进二盘中",
-            message=latest_event,
+            message=self._watch_notification_message(
+                phase=phase,
+                report=report,
+                ready=ready,
+                account=account,
+                latest_event=latest_event,
+            ),
         )
         return OneToTwoMorningReport(
             report_id=report.report_id,
@@ -196,7 +210,13 @@ class MainChainService:
         notification = self._notify_or_prepare(
             notify=notify,
             title="FireMoney 一进二尾盘",
-            message=summary,
+            message=self._end_of_day_notification_message(
+                report_date=report_date,
+                account=account,
+                warning_count=warning_count,
+                sell_count=sell_count,
+                realized_pnl=realized_pnl,
+            ),
         )
         return OneToTwoEndOfDayReview(
             review_id=f"one-to-two-eod-{report_date}",
@@ -395,6 +415,106 @@ class MainChainService:
             webhook_configured=False,
             error="notification skipped",
         )
+
+    def _morning_notification_message(
+        self,
+        report_date: str,
+        market_temperature: int,
+        data_unavailable: bool,
+        candidates: tuple[OneToTwoCandidate, ...],
+        account: PaperAccount,
+    ) -> str:
+        ready = tuple(item for item in candidates if item.status == "ready")
+        blocked_count = sum(1 for item in candidates if item.status == "blocked")
+        lines = [
+            f"交易日：{report_date}",
+            f"市场温度：{market_temperature}",
+            f"昨日首板样本：{len(candidates)}，可执行候选：{len(ready)}，硬拦截：{blocked_count}",
+            f"模拟盘：权益 {account.equity:.2f}，当日已交易 {account.daily_trade_count}/{account.max_daily_trades}",
+        ]
+        if data_unavailable:
+            lines.append("行情数据不可用：今日禁止生成模拟买入。")
+            return "\n".join(lines)
+        if ready:
+            lines.append("候选入池：")
+            for candidate in ready[:3]:
+                lines.append(
+                    f"- {candidate.name}({candidate.symbol}) 分数 {candidate.score}，"
+                    f"{candidate.position_profile.label}，买入参考 {candidate.entry_price}，"
+                    f"止损 {candidate.stop_loss}，仓位上限 {candidate.position_limit_pct:.0%}"
+                )
+        else:
+            lines.append("今日没有达到模拟买入条件的候选。")
+        blockers = tuple(item for item in candidates if item.blockers)
+        if blockers:
+            lines.append("主要拦截：")
+            for candidate in blockers[:2]:
+                lines.append(f"- {candidate.name}({candidate.symbol})：{candidate.blockers[0]}")
+        lines.append("纪律：只做主板 10cm 一进二；当天跌破止损只预警，T+1 再处理。")
+        return "\n".join(lines)
+
+    def _watch_notification_message(
+        self,
+        phase: str,
+        report: OneToTwoMorningReport,
+        ready: tuple[OneToTwoCandidate, ...],
+        account: PaperAccount,
+        latest_event: str,
+    ) -> str:
+        lines = [
+            f"交易日：{report.trade_date}",
+            f"阶段：{phase}",
+            f"最新事件：{latest_event}",
+        ]
+        if account.positions:
+            position = account.positions[0]
+            sell_state = "可按纪律卖出" if position.can_sell_today else "T+1 未到，只预警不卖出"
+            lines.extend(
+                [
+                    f"持仓：{position.name}({position.symbol}) {position.quantity} 股",
+                    f"成本 {position.entry_price}，现价 {position.latest_price}，止损 {position.stop_loss}",
+                    f"浮动盈亏：{position.unrealized_pnl:.2f} ({position.unrealized_pnl_pct:.2%})",
+                    f"纪律状态：{sell_state}",
+                ]
+            )
+        elif ready:
+            candidate = ready[0]
+            lines.extend(
+                [
+                    f"观察候选：{candidate.name}({candidate.symbol}) 分数 {candidate.score}",
+                    f"位置：{candidate.position_profile.label}；买入参考 {candidate.entry_price}；止损 {candidate.stop_loss}",
+                    f"仓位上限：{candidate.position_limit_pct:.0%}；状态：{candidate.status}",
+                ]
+            )
+        else:
+            lines.append("当前无可执行候选，不生成模拟买入。")
+        lines.append("提醒：模拟盘不是实盘，不连接真实账户，不自动下单。")
+        return "\n".join(lines)
+
+    def _end_of_day_notification_message(
+        self,
+        report_date: str,
+        account: PaperAccount,
+        warning_count: int,
+        sell_count: int,
+        realized_pnl: float,
+    ) -> str:
+        lines = [
+            f"交易日：{report_date}",
+            f"权益：{account.equity:.2f}，现金：{account.cash:.2f}，观察盈亏：{realized_pnl:.2f}",
+            f"事件数：{len(account.events)}，止损预警：{warning_count}，T+1 卖出：{sell_count}",
+            f"已归档样本：{len(account.closed_trades)}",
+        ]
+        if account.positions:
+            position = account.positions[0]
+            lines.append(
+                f"隔夜观察：{position.name}({position.symbol})，止损 {position.stop_loss}，"
+                f"{'次日可卖' if position.can_sell_today else '仍受 T+1 约束'}"
+            )
+        else:
+            lines.append("当前无持仓，等待下一交易日重新扫描昨日首板池。")
+        lines.append("复盘纪律：样本少于 30 笔只观察，不自动调整策略边界。")
+        return "\n".join(lines)
 
     def _default_trade_date(self) -> str:
         return date.today().isoformat()
