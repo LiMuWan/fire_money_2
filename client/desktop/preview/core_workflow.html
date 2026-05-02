@@ -290,6 +290,52 @@ button {
   line-height: 1.55;
 }
 
+.schedule-list {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schedule-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: #fbfcfb;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.schedule-item[data-status="completed"] {
+  border-color: rgba(31, 122, 90, 0.38);
+  background: var(--accent-soft);
+}
+
+.schedule-item[data-status="pending"] {
+  background: var(--surface-soft);
+}
+
+.schedule-item[data-status="closed"],
+.schedule-item[data-status="failed"] {
+  border-color: rgba(180, 75, 69, 0.32);
+  background: var(--danger-soft);
+}
+
+.schedule-time,
+.schedule-status {
+  font-weight: 720;
+}
+
+.schedule-name {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 980px) {
   .topbar,
   .one-to-two-hero,
@@ -428,6 +474,77 @@ button {
           </div>
         </section>
         <aside class="side-panel">
+
+      <section class="panel one-to-two-panel">
+        <h2>本地调度</h2>
+        <p class="next-action">已到 09:31，应执行 4 项，已执行 4 项，跳过 0 项。</p>
+        <ul class="schedule-list">
+
+            <li class="schedule-item" data-status="completed">
+              <span class="schedule-time">08:50</span>
+              <span class="schedule-name">morning</span>
+              <span class="schedule-status">已执行</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="completed">
+              <span class="schedule-time">09:20</span>
+              <span class="schedule-name">watch / scan</span>
+              <span class="schedule-status">已执行</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="completed">
+              <span class="schedule-time">09:25</span>
+              <span class="schedule-name">watch / auction</span>
+              <span class="schedule-status">已执行</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="completed">
+              <span class="schedule-time">09:31</span>
+              <span class="schedule-name">watch / open</span>
+              <span class="schedule-status">已执行</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="pending">
+              <span class="schedule-time">10:00</span>
+              <span class="schedule-name">watch / risk</span>
+              <span class="schedule-status">待触发</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="pending">
+              <span class="schedule-time">11:00</span>
+              <span class="schedule-name">watch / risk</span>
+              <span class="schedule-status">待触发</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="pending">
+              <span class="schedule-time">14:00</span>
+              <span class="schedule-name">watch / risk</span>
+              <span class="schedule-status">待触发</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="pending">
+              <span class="schedule-time">14:50</span>
+              <span class="schedule-name">watch / risk</span>
+              <span class="schedule-status">待触发</span>
+            </li>
+
+
+            <li class="schedule-item" data-status="pending">
+              <span class="schedule-time">15:10</span>
+              <span class="schedule-name">eod</span>
+              <span class="schedule-status">待触发</span>
+            </li>
+
+        </ul>
+      </section>
+
           <section class="panel one-to-two-panel">
             <h2>模拟盘与风险</h2>
 
@@ -447,7 +564,7 @@ button {
           <section class="panel one-to-two-panel">
             <h2>飞书通知</h2>
             <ul class="detail-list compact">
-              <li>请求日期：2026-05-02 / requested date is closed; using previous trading day 2026-04-30</li>
+              <li>请求日期：2026-04-30 / requested date is an A-share trading day</li>
               <li>状态：prepared / Webhook 未配置</li>
               <li>最新事件：模拟买入，一进二事件驱动账本已记录。</li>
             </ul>

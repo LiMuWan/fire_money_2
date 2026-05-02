@@ -8,6 +8,7 @@ from pathlib import Path
 from shared.contracts import (
     OneToTwoEndOfDayReview,
     OneToTwoMorningReport,
+    OneToTwoScheduleRun,
     OneToTwoStabilityReport,
 )
 
@@ -76,11 +77,49 @@ def _render_one_to_two_position(report: OneToTwoMorningReport) -> str:
     """
 
 
+def _render_schedule_run(schedule_run: OneToTwoScheduleRun) -> str:
+    labels = {
+        "completed": "已执行",
+        "skipped": "已跳过",
+        "pending": "待触发",
+        "closed": "休市闭锁",
+        "failed": "失败",
+    }
+    items = []
+    for task in schedule_run.tasks:
+        phase = f" / {_text(task.phase)}" if task.phase else ""
+        items.append(
+            f"""
+            <li class="schedule-item" data-status="{_text(task.status)}">
+              <span class="schedule-time">{_text(task.scheduled_time)}</span>
+              <span class="schedule-name">{_text(task.mode)}{phase}</span>
+              <span class="schedule-status">{_text(labels.get(task.status, task.status))}</span>
+            </li>
+            """
+        )
+    return "\n".join(items)
+
+
+def _render_schedule_panel(schedule_run: OneToTwoScheduleRun | None) -> str:
+    if schedule_run is None:
+        return ""
+    return f"""
+      <section class="panel one-to-two-panel">
+        <h2>本地调度</h2>
+        <p class="next-action">已到 {schedule_run.requested_time}，应执行 {schedule_run.due_count} 项，已执行 {schedule_run.executed_count} 项，跳过 {schedule_run.skipped_count} 项。</p>
+        <ul class="schedule-list">
+          {_render_schedule_run(schedule_run)}
+        </ul>
+      </section>
+    """
+
+
 def render_one_to_two_workflow_html(
     report: OneToTwoMorningReport,
     watch_report: OneToTwoMorningReport,
     eod_review: OneToTwoEndOfDayReview,
     stability_report: OneToTwoStabilityReport,
+    schedule_run: OneToTwoScheduleRun | None = None,
 ) -> str:
     """Render the current one-to-two product surface only."""
 
@@ -137,6 +176,7 @@ def render_one_to_two_workflow_html(
           </div>
         </section>
         <aside class="side-panel">
+          {_render_schedule_panel(schedule_run)}
           <section class="panel one-to-two-panel">
             <h2>模拟盘与风险</h2>
             {_render_one_to_two_position(watch_report)}
