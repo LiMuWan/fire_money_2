@@ -65,4 +65,5 @@ MarketDataProvider/AkShare
 - Notification failures return structured results and do not stop strategy execution.
 - Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `schedule`, and `notifications`.
 - `notifications` reads recent `.firemoney/notifications.json` records with optional workflow/status/limit filters, so Feishu delivery can be audited without opening the preview page.
-- `schedule` runs only the one-to-two jobs that are due for the requested clock time, skips non-trading requested dates, and records completed task keys in `.firemoney/scheduler_state.json` so loop mode does not duplicate same-day notifications or paper-trading events.
+- `schedule` runs only one-to-two jobs that are due and still inside their execution window. Missed windows are marked `expired` and are not backfilled, so a late afternoon scheduler start cannot create stale open-phase paper buys.
+- Completed, skipped, and expired task keys are recorded in `.firemoney/scheduler_state.json` so loop mode does not duplicate same-day notifications or paper-trading events.

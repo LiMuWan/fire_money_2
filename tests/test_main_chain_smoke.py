@@ -557,6 +557,44 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(len(account.positions), 1)
             self.assertEqual(account.events[0].event_type.value, "paper_buy")
 
+    def test_scheduler_does_not_backfill_expired_open_buy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            scheduler = OneToTwoScheduler(
+                service=service,
+                state_store=SchedulerStateStore(root / "scheduler_state.json"),
+            )
+
+            result = scheduler.run_due(
+                trade_date="2026-04-30",
+                at_time="15:30",
+                notify=False,
+            )
+
+            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(
+                {task.task_id for task in result.tasks if task.status == "expired"},
+                {
+                    "morning",
+                    "watch-scan",
+                    "watch-auction",
+                    "watch-open",
+                    "watch-risk-1000",
+                    "watch-risk-1100",
+                    "watch-risk-1400",
+                    "watch-risk-1450",
+                },
+            )
+            account = PaperTradeStore(root / "paper_trades.json").load()
+            self.assertEqual(account.positions, ())
+            self.assertFalse(
+                any(event.event_type.value == "paper_buy" for event in account.events)
+            )
+
     def test_scheduler_skips_non_trading_requested_dates(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

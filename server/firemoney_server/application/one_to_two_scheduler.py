@@ -20,18 +20,19 @@ class ScheduledOneToTwoJob:
     mode: str
     scheduled_time: str
     phase: str | None = None
+    expires_at: str | None = None
 
 
 DEFAULT_ONE_TO_TWO_SCHEDULE: tuple[ScheduledOneToTwoJob, ...] = (
-    ScheduledOneToTwoJob("morning", "morning", "08:50"),
-    ScheduledOneToTwoJob("watch-scan", "watch", "09:20", "scan"),
-    ScheduledOneToTwoJob("watch-auction", "watch", "09:25", "auction"),
-    ScheduledOneToTwoJob("watch-open", "watch", "09:31", "open"),
-    ScheduledOneToTwoJob("watch-risk-1000", "watch", "10:00", "risk"),
-    ScheduledOneToTwoJob("watch-risk-1100", "watch", "11:00", "risk"),
-    ScheduledOneToTwoJob("watch-risk-1400", "watch", "14:00", "risk"),
-    ScheduledOneToTwoJob("watch-risk-1450", "watch", "14:50", "risk"),
-    ScheduledOneToTwoJob("eod", "eod", "15:10"),
+    ScheduledOneToTwoJob("morning", "morning", "08:50", expires_at="09:31"),
+    ScheduledOneToTwoJob("watch-scan", "watch", "09:20", "scan", "09:31"),
+    ScheduledOneToTwoJob("watch-auction", "watch", "09:25", "auction", "09:31"),
+    ScheduledOneToTwoJob("watch-open", "watch", "09:31", "open", "09:45"),
+    ScheduledOneToTwoJob("watch-risk-1000", "watch", "10:00", "risk", "10:59"),
+    ScheduledOneToTwoJob("watch-risk-1100", "watch", "11:00", "risk", "11:30"),
+    ScheduledOneToTwoJob("watch-risk-1400", "watch", "14:00", "risk", "14:49"),
+    ScheduledOneToTwoJob("watch-risk-1450", "watch", "14:50", "risk", "15:00"),
+    ScheduledOneToTwoJob("eod", "eod", "15:10", expires_at="16:00"),
 )
 
 
@@ -92,6 +93,17 @@ class OneToTwoScheduler:
                 skipped_count += 1
                 task_results.append(
                     _task_contract(job, status="skipped", message="already completed")
+                )
+                continue
+            if _is_expired(job, requested_time):
+                self._state_store.mark_done(task_key)
+                skipped_count += 1
+                task_results.append(
+                    _task_contract(
+                        job,
+                        status="expired",
+                        message="missed execution window; not backfilled",
+                    )
                 )
                 continue
             try:
@@ -172,6 +184,10 @@ def _next_action(executed_count: int, skipped_count: int, due_count: int) -> str
     if skipped_count and skipped_count == due_count:
         return "All due one-to-two jobs were already completed for this trading day."
     return "No one-to-two jobs are due yet."
+
+
+def _is_expired(job: ScheduledOneToTwoJob, requested_time: str) -> bool:
+    return bool(job.expires_at and requested_time > job.expires_at)
 
 
 def _normalize_time(value: str) -> str:

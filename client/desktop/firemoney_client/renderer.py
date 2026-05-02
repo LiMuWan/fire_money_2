@@ -85,6 +85,7 @@ def _render_schedule_run(schedule_run: OneToTwoScheduleRun) -> str:
         "pending": "待触发",
         "closed": "休市闭锁",
         "failed": "失败",
+        "expired": "已过期",
     }
     items = []
     for task in schedule_run.tasks:

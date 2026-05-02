@@ -127,7 +127,8 @@ Describe one local scheduler tick for the one-to-two loop.
 Rules represented by the contracts:
 
 - scheduler output is still part of the one-to-two product line, not a generic job dashboard
-- due tasks are visible with `completed`, `skipped`, `pending`, `failed`, or `closed` status
+- due tasks are visible with `completed`, `skipped`, `pending`, `expired`, `failed`, or `closed` status
+- expired tasks are missed execution windows and must not be backfilled into simulated buys or stale risk checks
 - repeated loop ticks can show skipped work without re-triggering paper-trading events
 - non-trading requested dates are `closed` and do not generate market scans or simulated trades
 
