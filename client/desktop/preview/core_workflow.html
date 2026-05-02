@@ -336,6 +336,41 @@ button {
   overflow-wrap: anywhere;
 }
 
+.notification-stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.notification-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 10px;
+}
+
+.notification-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 760;
+  margin-bottom: 8px;
+}
+
+.notification-lines {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification-lines li {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 980px) {
   .topbar,
   .one-to-two-hero,
@@ -568,6 +603,32 @@ button {
               <li>状态：prepared / Webhook 未配置</li>
               <li>最新事件：模拟买入，一进二事件驱动账本已记录。</li>
             </ul>
+            <div class="notification-stack">
+
+      <article class="notification-card">
+        <div class="notification-title">08:50 早盘判断</div>
+        <ul class="notification-lines">
+          <li>交易日：2026-04-30</li><li>市场温度：74</li><li>昨日首板样本：3，可执行候选：1，硬拦截：2</li><li>模拟盘：权益 100000.00，当日已交易 0/1</li><li>候选入池：</li><li>- 低位突破样例(600001) 分数 92.0，低位平台突破，买入参考 10.52，止损 10.0，仓位上限 8%</li><li>主要拦截：</li><li>- 创业板样例(300003)：创业板 不在主板 10cm 一进二范围内</li><li>- 高位乖离样例(600002)：首板前涨幅过大，疑似高位接力</li><li>纪律：只做主板 10cm 一进二；当天跌破止损只预警，T+1 再处理。</li>
+        </ul>
+      </article>
+
+
+      <article class="notification-card">
+        <div class="notification-title">盘中事件</div>
+        <ul class="notification-lines">
+          <li>交易日：2026-04-30</li><li>阶段：open</li><li>最新事件：模拟买入，一进二事件驱动账本已记录。</li><li>持仓：低位突破样例(600001) 700 股</li><li>成本 10.52，现价 10.52，止损 10.0</li><li>浮动盈亏：0.00 (0.00%)</li><li>纪律状态：T+1 未到，只预警不卖出</li><li>提醒：模拟盘不是实盘，不连接真实账户，不自动下单。</li>
+        </ul>
+      </article>
+
+
+      <article class="notification-card">
+        <div class="notification-title">15:10 尾盘测评</div>
+        <ul class="notification-lines">
+          <li>交易日：2026-04-30</li><li>权益：100000.00，现金：92636.00，观察盈亏：0.00</li><li>事件数：3，止损预警：0，T+1 卖出：0</li><li>已归档样本：0</li><li>隔夜观察：低位突破样例(600001)，止损 10.0，仍受 T+1 约束</li><li>复盘纪律：样本少于 30 笔只观察，不自动调整策略边界。</li>
+        </ul>
+      </article>
+
+            </div>
           </section>
           <section class="panel one-to-two-panel">
             <h2>尾盘测评</h2>

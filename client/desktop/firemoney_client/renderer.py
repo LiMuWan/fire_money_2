@@ -114,6 +114,18 @@ def _render_schedule_panel(schedule_run: OneToTwoScheduleRun | None) -> str:
     """
 
 
+def _render_notification_message(title: str, message: str) -> str:
+    lines = [line for line in message.splitlines() if line.strip()]
+    return f"""
+      <article class="notification-card">
+        <div class="notification-title">{_text(title)}</div>
+        <ul class="notification-lines">
+          {"".join(f"<li>{_text(line)}</li>" for line in lines)}
+        </ul>
+      </article>
+    """
+
+
 def render_one_to_two_workflow_html(
     report: OneToTwoMorningReport,
     watch_report: OneToTwoMorningReport,
@@ -188,6 +200,11 @@ def render_one_to_two_workflow_html(
               <li>状态：{_text(notification.status.value)} / Webhook {_text(webhook_state)}</li>
               <li>最新事件：{_text(latest_event)}</li>
             </ul>
+            <div class="notification-stack">
+              {_render_notification_message("08:50 早盘判断", report.notification.message)}
+              {_render_notification_message("盘中事件", watch_report.notification.message)}
+              {_render_notification_message("15:10 尾盘测评", eod_review.notification.message)}
+            </div>
           </section>
           <section class="panel one-to-two-panel">
             <h2>尾盘测评</h2>
