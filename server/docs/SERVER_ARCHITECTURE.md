@@ -71,11 +71,12 @@ MarketDataProvider/AkShare
 - Application workflows format one-to-two notification content before calling Feishu: morning messages include candidates, blockers, stop loss, and position cap; watch messages include event, position, stop loss, T+1 status, the next-day handling plan for same-day stop warnings, completed sell/discipline-exit sample summaries, and simulation-only warning; end-of-day messages include events, warnings, closed samples, latest sample summary, stability stage, next sample milestone, and service-owned boundary suggestion.
 - Notification results are appended to `.firemoney/notifications.json` for review. Internal workflow reuse must not duplicate records, so `watch` suppresses its internal morning-report record.
 - Notification failures return structured results and do not stop strategy execution.
-- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `stability`, `doctor`, `feishu-test`, `schedule`, `notifications`, and `scheduler-runs`.
+- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `stability`, `doctor`, `beta-check`, `beta-start`, `feishu-test`, `schedule`, `notifications`, and `scheduler-runs`.
 - `stability` reads the current `.firemoney/paper_trades.json` closed samples and returns `OneToTwoStabilityReport` without mutating live state.
 - `doctor` returns one-to-two runtime readiness checks and treats missing market data as `blocked`; disabled Feishu is only a `warning` because notifications must not block simulation.
 - `notifications` reads recent `.firemoney/notifications.json` records with optional workflow/status/limit filters, so Feishu delivery can be audited without opening the preview page.
 - `feishu-test` sends or prepares a non-trading connectivity message and records it as `feishu:test`; it must not create paper-trading events.
+- `beta-start` runs strict Beta doctor gates before scheduler execution. If readiness is not `ready`, it prints the doctor report and does not mutate scheduler state or paper-trading events.
 - `schedule` runs only one-to-two jobs that are due and still inside their execution window. Missed windows are marked `expired` and are not backfilled, so a late afternoon scheduler start cannot create stale open-phase paper buys.
 - Completed, skipped, and expired task keys are recorded in `.firemoney/scheduler_state.json` so loop mode does not duplicate same-day notifications or paper-trading events.
 - Each scheduler tick is appended to `.firemoney/scheduler_runs.json`; `scheduler-runs` reads recent run records so Beta watch coverage can be audited separately from Feishu delivery.

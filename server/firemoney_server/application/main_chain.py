@@ -338,7 +338,7 @@ class MainChainService:
                 f"交易日：{trade_context.trade_date}",
                 "用途：模拟盘 Beta 飞书联通测试",
                 "说明：这不是交易信号，不触发模拟买入或卖出。",
-                "后续：收到后再运行 doctor --beta 和 schedule --beta。",
+                "后续：收到后再运行 doctor --beta 和 beta-start。",
             )
         )
         result = self._notify_or_prepare(
@@ -411,7 +411,7 @@ class MainChainService:
             feishu_test=feishu_test,
             doctor_report=doctor_report,
             next_action=(
-                "运行 schedule --beta --loop --interval-seconds 60。"
+                "运行 beta-start --loop --interval-seconds 60。"
                 if status == "ready"
                 else "按 doctor_report.checks 修复 blocked 项后重新运行 beta-check。"
             ),

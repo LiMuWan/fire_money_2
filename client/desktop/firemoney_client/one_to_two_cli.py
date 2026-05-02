@@ -34,6 +34,7 @@ def main() -> None:
             "stability",
             "doctor",
             "beta-check",
+            "beta-start",
             "feishu-test",
             "schedule",
             "scheduler-runs",
@@ -100,6 +101,15 @@ def main() -> None:
     )
     args = parser.parse_args()
     load_local_feishu_env()
+    if args.mode == "beta-start" and args.no_notify:
+        result = {
+            "mode": "beta-start",
+            "status": "blocked",
+            "summary": "beta-start å¿…é¡»å‘é€é£žä¹¦é€šçŸ¥ï¼Œä¸èƒ½ä½¿ç”¨ --no-notifyã€‚",
+            "next_action": "ç§»é™¤ --no-notifyï¼Œå¹¶å…ˆç”¨ beta-check éªŒè¯é£žä¹¦ sent è®°å½•ã€‚",
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
     if args.beta and args.mode == "schedule" and args.no_notify:
         result = {
             "mode": "schedule",
@@ -170,12 +180,42 @@ def main() -> None:
                 "mode": "beta-check",
                 "status": "blocked",
                 "summary": "beta-check 必须真实发送飞书测试，不能使用 --no-notify。",
-                "next_action": "移除 --no-notify，并确认 FEISHU_ENABLED 与 FEISHU_WEBHOOK_URL 已配置。",
+                "next_action": "移除 --no-notify，并确认飞书 webhook 或应用机器人已配置。",
             }
         else:
             result = adapter.build_one_to_two_beta_readiness_report(
                 trade_date=args.trade_date,
             )
+    elif args.mode == "beta-start":
+        readiness = adapter.build_one_to_two_doctor_report(
+            trade_date=args.trade_date,
+            beta=True,
+        )
+        if readiness.status != "ready":
+            print(json.dumps(contract_to_dict(readiness), ensure_ascii=False, indent=2))
+            return
+        scheduler = OneToTwoScheduler(
+            service=service,
+            state_store=scheduler_state_store,
+        )
+        result = scheduler.run_due(
+            trade_date=args.trade_date,
+            at_time=args.at,
+            notify=True,
+        )
+        scheduler_run_store.append(result)
+        if args.loop:
+            print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
+            while True:
+                time.sleep(max(1, args.interval_seconds))
+                result = scheduler.run_due(
+                    trade_date=args.trade_date,
+                    at_time=args.at,
+                    notify=True,
+                )
+                scheduler_run_store.append(result)
+                print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
+            return
     elif args.mode == "feishu-test":
         result = adapter.send_one_to_two_feishu_test(
             trade_date=args.trade_date,

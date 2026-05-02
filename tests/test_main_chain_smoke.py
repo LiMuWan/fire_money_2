@@ -4,7 +4,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import threading
 from pathlib import Path
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 
 from client.desktop.firemoney_client import LocalMainChainAdapter
@@ -159,6 +161,47 @@ class StaticOneToTwoProvider:
 class FailingOneToTwoProvider:
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         raise RuntimeError("market data unavailable")
+
+
+class FakeFeishuApiServer:
+    def __init__(self) -> None:
+        self.requests: list[tuple[str, dict[str, str], dict[str, object]]] = []
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8")
+                payload = json.loads(body) if body else {}
+                outer.requests.append((self.path, dict(self.headers), payload))
+                if self.path == "/open-apis/auth/v3/tenant_access_token/internal":
+                    response = {"code": 0, "tenant_access_token": "tenant_token"}
+                elif self.path.startswith("/open-apis/im/v1/messages"):
+                    response = {"code": 0, "data": {"message_id": "om_test"}}
+                else:
+                    response = {"code": 404, "msg": "not found"}
+                data = json.dumps(response).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, format: str, *args: object) -> None:
+                return None
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self._server.server_port}"
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    def __enter__(self) -> "FakeFeishuApiServer":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=2)
 
 
 def _closed_trade_record(index: int, realized_pnl_pct: float = 0.02) -> PaperTradeRecord:
@@ -900,7 +943,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(report.status, "ready")
             self.assertEqual(report.feishu_test.status, NotificationStatus.SENT)
             self.assertEqual(report.doctor_report.status, "ready")
-            self.assertIn("schedule --beta", report.next_action)
+            self.assertIn("beta-start", report.next_action)
 
     def test_beta_check_skips_feishu_test_on_non_trading_day(self) -> None:
         class RaisingFeishuNotifier:
@@ -1549,6 +1592,124 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertFalse(notifications_path.exists())
             self.assertEqual(PaperTradeStore(paper_path).load().events, ())
 
+    def test_beta_start_cli_blocks_before_scheduler_when_doctor_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_path = root / "paper_trades.json"
+            scheduler_path = root / "scheduler_state.json"
+            scheduler_run_path = root / "scheduler_runs.json"
+            notifications_path = root / "notifications.json"
+            scheduler_run_path.parent.mkdir(parents=True, exist_ok=True)
+            scheduler_run_path.write_text("{}", encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "beta-start",
+                    "--sample-data",
+                    "--trade-date",
+                    "2026-04-30",
+                    "--at",
+                    "09:31",
+                    "--paper-store",
+                    str(paper_path),
+                    "--scheduler-state",
+                    str(scheduler_path),
+                    "--scheduler-runs",
+                    str(scheduler_run_path),
+                    "--notification-store",
+                    str(notifications_path),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["status"], "blocked")
+            self.assertEqual(payload["report_id"], "one-to-two-doctor-2026-04-30")
+            self.assertFalse(scheduler_path.exists())
+            self.assertEqual(scheduler_run_path.read_text(encoding="utf-8"), "{}")
+            self.assertFalse(notifications_path.exists())
+            self.assertEqual(PaperTradeStore(paper_path).load().events, ())
+
+    def test_beta_start_cli_runs_due_scheduler_after_verified_feishu(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paper_path = root / "paper_trades.json"
+            scheduler_path = root / "scheduler_state.json"
+            scheduler_run_path = root / "scheduler_runs.json"
+            notifications_path = root / "notifications.json"
+            store = NotificationRecordStore(notifications_path)
+            store.append(
+                workflow="feishu:test",
+                trade_date="2026-04-30",
+                result=FeishuNotificationResult(
+                    status=NotificationStatus.SENT,
+                    title="FireMoney 一进二飞书测试",
+                    message="sent",
+                    webhook_configured=True,
+                ),
+            )
+            with FakeFeishuApiServer() as fake_feishu:
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-B",
+                        "-m",
+                        "client.desktop.firemoney_client.one_to_two_cli",
+                        "beta-start",
+                        "--sample-data",
+                        "--trade-date",
+                        "2026-04-30",
+                        "--at",
+                        "09:31",
+                        "--paper-store",
+                        str(paper_path),
+                        "--scheduler-state",
+                        str(scheduler_path),
+                        "--scheduler-runs",
+                        str(scheduler_run_path),
+                        "--notification-store",
+                        str(notifications_path),
+                    ],
+                    cwd=Path(__file__).resolve().parents[1],
+                    env={
+                        **os.environ,
+                        "PYTHONIOENCODING": "utf-8",
+                        "FEISHU_ENABLED": "true",
+                        "FEISHU_APP_ID": "cli_test",
+                        "FEISHU_APP_SECRET": "secret_test",
+                        "FEISHU_RECEIVE_ID": "oc_test",
+                        "FEISHU_API_BASE_URL": fake_feishu.url,
+                    },
+                    check=True,
+                    capture_output=True,
+                    encoding="utf-8",
+                    text=True,
+                )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["run_id"], "one-to-two-schedule-2026-04-30-09:31")
+            self.assertEqual(payload["executed_count"], 4)
+            self.assertEqual(SchedulerRunStore(scheduler_run_path).load()[0]["run"]["executed_count"], 4)
+            account = PaperTradeStore(paper_path).load()
+            self.assertEqual(len(account.positions), 1)
+            self.assertTrue(
+                any(record.workflow == "watch:open" for record in NotificationRecordStore(notifications_path).load())
+            )
+            self.assertGreaterEqual(
+                sum(
+                    1
+                    for path, _, _ in fake_feishu.requests
+                    if path.startswith("/open-apis/im/v1/messages")
+                ),
+                4,
+            )
+
     def test_beta_schedule_cli_rejects_no_notify(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1805,7 +1966,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("prepared", html)
             self.assertIn("Beta 预检", html)
             self.assertIn("beta-check", html)
-            self.assertIn("schedule --beta", html)
+            self.assertIn("beta-start", html)
             self.assertIn("一进二策略配置", html)
             self.assertIn("行情源", html)
             self.assertIn("飞书通知", html)
