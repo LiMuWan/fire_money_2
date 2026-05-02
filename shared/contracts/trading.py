@@ -204,6 +204,9 @@ class OneToTwoEndOfDayReview:
     warning_count: int
     realized_pnl: float
     max_drawdown: float
+    stability_stage: str
+    next_milestone: int
+    strategy_boundary_suggestion: str
     summary: str
     focus_points: tuple[str, ...]
     account: PaperAccount

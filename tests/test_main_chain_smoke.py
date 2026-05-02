@@ -823,6 +823,11 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertLess(review.max_drawdown, 0)
             self.assertIn("完成样本 1 笔", review.summary)
             self.assertIn("成功 0 笔", review.summary)
+            self.assertEqual(review.stability_stage, "观察期")
+            self.assertEqual(review.next_milestone, 30)
+            self.assertIn("少于 30", review.strategy_boundary_suggestion)
+            self.assertIn("稳定性阶段", review.notification.message)
+            self.assertIn("边界建议", review.notification.message)
 
     def test_backtest_replays_closed_samples_without_mutating_live_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1025,6 +1030,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("已执行", html)
             self.assertIn("尾盘测评", html)
             self.assertIn("稳定性观察", html)
+            self.assertIn("稳定性阶段", html)
             self.assertIn("位置分布", html)
             self.assertIn("退出原因", html)
             self.assertIn("阶段", html)

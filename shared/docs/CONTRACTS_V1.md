@@ -115,12 +115,13 @@ Describes the 08:50 one-to-two report: trading-day context, market temperature, 
 
 ### `OneToTwoEndOfDayReview`
 
-Describes the 15:10 one-to-two review: trading-day context, closed sample count, warning count, realized P/L observation, focus points, paper-account state, notification result, and next action.
+Describes the 15:10 one-to-two review: trading-day context, closed sample count, warning count, realized P/L observation, stability stage, next sample milestone, service-owned boundary suggestion, focus points, paper-account state, notification result, and next action.
 
 Rules represented by the contract:
 
 - `sample_count`, `success_count`, `realized_pnl`, and `max_drawdown` are calculated from closed `PaperTradeRecord` samples.
 - A sell event is not automatically a success; `success_count` only counts closed samples with positive realized P/L.
+- `stability_stage`, `next_milestone`, and `strategy_boundary_suggestion` use the same service calculation as `OneToTwoStabilityReport`, so the client and Feishu tail review do not infer their own strategy conclusion.
 
 ### `OneToTwoStabilityReport`
 

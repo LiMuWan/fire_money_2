@@ -262,6 +262,7 @@ class MainChainService:
             current += record.realized_pnl
             realized_curve.append(current)
         max_drawdown = min(realized_curve, default=0.0)
+        stability_report = self._stability_from_account(account)
         summary = (
             f"一进二尾盘：完成样本 {len(closed_trades)} 笔，"
             f"成功 {success_count} 笔，已实现盈亏 {realized_pnl:.2f}。"
@@ -275,6 +276,7 @@ class MainChainService:
                 warning_count=warning_count,
                 sell_count=sell_count,
                 realized_pnl=realized_pnl,
+                stability_report=stability_report,
             ),
         )
         self._record_notification("eod", report_date, notification)
@@ -287,9 +289,12 @@ class MainChainService:
             warning_count=warning_count,
             realized_pnl=realized_pnl,
             max_drawdown=min(0.0, max_drawdown),
+            stability_stage=stability_report.sample_stage,
+            next_milestone=stability_report.next_milestone,
+            strategy_boundary_suggestion=stability_report.strategy_boundary_suggestion,
             summary=summary,
             focus_points=(
-                "样本少于 30 笔时只观察，不自动调整策略边界。",
+                "尾盘只归档和评估完成样本，不改变当日交易。",
                 "继续区分低位突破与高位接力样本。",
             ),
             account=account,
@@ -806,12 +811,20 @@ class MainChainService:
         warning_count: int,
         sell_count: int,
         realized_pnl: float,
+        stability_report: OneToTwoStabilityReport,
     ) -> str:
+        next_milestone = (
+            f"{stability_report.next_milestone} 笔"
+            if stability_report.next_milestone
+            else "滚动复盘"
+        )
         lines = [
             f"交易日：{report_date}",
             f"权益：{account.equity:.2f}，现金：{account.cash:.2f}，观察盈亏：{realized_pnl:.2f}",
             f"事件数：{len(account.events)}，止损预警：{warning_count}，T+1 卖出：{sell_count}",
             f"已归档样本：{len(account.closed_trades)}",
+            f"稳定性阶段：{stability_report.sample_stage}，下一门槛：{next_milestone}",
+            f"边界建议：{stability_report.strategy_boundary_suggestion}",
         ]
         if account.positions:
             position = account.positions[0]
@@ -821,7 +834,7 @@ class MainChainService:
             )
         else:
             lines.append("当前无持仓，等待下一交易日重新扫描昨日首板池。")
-        lines.append("复盘纪律：样本少于 30 笔只观察，不自动调整策略边界。")
+        lines.append("复盘纪律：尾盘只归档和评估边界，不改变当日交易。")
         return "\n".join(lines)
 
     def _default_trade_date(self) -> str:

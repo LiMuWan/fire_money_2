@@ -272,6 +272,8 @@ def render_one_to_two_workflow_html(
               <li>完成样本：{eod_review.sample_count}，成功样本：{eod_review.success_count}</li>
               <li>已实现盈亏：{eod_review.realized_pnl:.2f}，最大回撤：{eod_review.max_drawdown:.2f}</li>
               <li>风险预警：{eod_review.warning_count}</li>
+              <li>稳定性阶段：{_text(eod_review.stability_stage)}，下一门槛：{_text(eod_review.next_milestone or "滚动复盘")}</li>
+              <li>边界建议：{_text(eod_review.strategy_boundary_suggestion)}</li>
               {"".join(f"<li>{_text(item)}</li>" for item in eod_review.focus_points)}
             </ul>
           </section>
