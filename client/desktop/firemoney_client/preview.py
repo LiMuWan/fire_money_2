@@ -17,6 +17,7 @@ from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradi
 
 
 PREVIEW_TRADE_DATE = "2026-04-30"
+PREVIEW_CREATED_AT = "20260430093100"
 
 
 def build_preview(output_path: str | Path) -> Path:
@@ -27,7 +28,10 @@ def build_preview(output_path: str | Path) -> Path:
     with TemporaryDirectory() as temp_dir:
         preview_root = Path(temp_dir)
         paper_store = PaperTradeStore(preview_root / "paper_trades.json")
-        notification_store = NotificationRecordStore(preview_root / "notifications.json")
+        notification_store = NotificationRecordStore(
+            preview_root / "notifications.json",
+            created_at_provider=lambda: PREVIEW_CREATED_AT,
+        )
         service = MainChainService(
             paper_store=paper_store,
             market_data_provider=SampleMarketDataProvider(),

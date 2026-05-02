@@ -253,10 +253,23 @@ class MainChainService:
         account = self._paper_store.load()
         return self._stability_from_account(account)
 
-    def load_notification_records(self) -> tuple[NotificationRecord, ...]:
+    def load_notification_records(
+        self,
+        workflow: str | None = None,
+        status: str | NotificationStatus | None = None,
+        limit: int | None = None,
+    ) -> tuple[NotificationRecord, ...]:
         """Return recent one-to-two notification delivery records."""
 
-        return self._notification_store.load()
+        records = self._notification_store.load()
+        if workflow:
+            records = tuple(record for record in records if record.workflow == workflow)
+        if status:
+            expected = status if isinstance(status, NotificationStatus) else NotificationStatus(status)
+            records = tuple(record for record in records if record.status == expected)
+        if limit is not None:
+            records = records[: max(0, limit)]
+        return records
 
     def run_one_to_two_backtest(
         self,

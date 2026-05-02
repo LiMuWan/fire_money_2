@@ -6,7 +6,7 @@ import json
 from json import JSONDecodeError
 from pathlib import Path
 from time import strftime
-from typing import Any
+from typing import Any, Callable
 
 from shared.contracts import (
     FeishuNotificationResult,
@@ -21,8 +21,13 @@ DEFAULT_NOTIFICATION_STORE_PATH = Path(".firemoney") / "notifications.json"
 class NotificationRecordStore:
     """Stores notification results so Feishu delivery is auditable."""
 
-    def __init__(self, path: str | Path = DEFAULT_NOTIFICATION_STORE_PATH) -> None:
+    def __init__(
+        self,
+        path: str | Path = DEFAULT_NOTIFICATION_STORE_PATH,
+        created_at_provider: Callable[[], str] | None = None,
+    ) -> None:
         self._path = Path(path)
+        self._created_at_provider = created_at_provider
 
     @property
     def path(self) -> Path:
@@ -35,7 +40,11 @@ class NotificationRecordStore:
         result: FeishuNotificationResult,
         channel: str = "feishu",
     ) -> NotificationRecord:
-        created_at = strftime("%Y%m%d%H%M%S")
+        created_at = (
+            self._created_at_provider()
+            if self._created_at_provider
+            else strftime("%Y%m%d%H%M%S")
+        )
         record = NotificationRecord(
             record_id=f"{channel}-{workflow}-{trade_date}-{created_at}",
             channel=channel,

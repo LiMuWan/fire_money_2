@@ -60,6 +60,7 @@ MarketDataProvider/AkShare
 
 - 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
 - 模拟盘账本：`.firemoney/paper_trades.json`
+- 飞书通知归档：`.firemoney/notifications.json`
 - AkShare 原始快照缓存：`.firemoney/market_data/`
 - 本地预览：`client/desktop/preview/core_workflow.html`
 
@@ -79,6 +80,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli watch --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli backtest --start-date 2026-04-01 --end-date 2026-04-30 --max-trade-days 20
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 20
 ```
 
 盘中 watch 可按阶段手动推进：
@@ -100,6 +102,12 @@ python -m client.desktop.firemoney_client.one_to_two_cli schedule --loop --inter
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
 
 `backtest` 使用隔离临时账本做历史回放，不会改写 `.firemoney/paper_trades.json`。输出仍遵守样本门槛：少于 30 笔只显示观察期。
+
+查看飞书触达记录：
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli notifications --workflow watch:open --status prepared --limit 10
+```
 
 重新生成预览：
 

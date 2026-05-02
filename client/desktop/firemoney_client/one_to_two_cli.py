@@ -15,6 +15,7 @@ from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
     SampleMarketDataProvider,
 )
+from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 
@@ -23,7 +24,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run FireMoney one-to-two workflow.")
     parser.add_argument(
         "mode",
-        choices=("morning", "watch", "eod", "backtest", "schedule"),
+        choices=("morning", "watch", "eod", "backtest", "schedule", "notifications"),
         help="Workflow mode to run.",
     )
     parser.add_argument("--trade-date", default=None)
@@ -32,7 +33,29 @@ def main() -> None:
     parser.add_argument("--max-trade-days", type=int, default=30)
     parser.add_argument("--at", default=None, help="schedule mode clock time, HH:MM.")
     parser.add_argument("--paper-store", default=None, help="Optional paper ledger path.")
+    parser.add_argument(
+        "--notification-store",
+        default=None,
+        help="Optional notification record path.",
+    )
     parser.add_argument("--scheduler-state", default=None, help="Optional scheduler state path.")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Maximum notification records to print.",
+    )
+    parser.add_argument(
+        "--workflow",
+        default=None,
+        help="Filter notification records by workflow, for example watch:open.",
+    )
+    parser.add_argument(
+        "--status",
+        choices=("disabled", "prepared", "sent", "failed"),
+        default=None,
+        help="Filter notification records by delivery status.",
+    )
     parser.add_argument(
         "--loop",
         action="store_true",
@@ -55,7 +78,16 @@ def main() -> None:
 
     provider = SampleMarketDataProvider() if args.sample_data else AkshareMarketDataProvider()
     paper_store = PaperTradeStore(args.paper_store) if args.paper_store else None
-    service = MainChainService(market_data_provider=provider, paper_store=paper_store)
+    notification_store = (
+        NotificationRecordStore(args.notification_store)
+        if args.notification_store
+        else None
+    )
+    service = MainChainService(
+        market_data_provider=provider,
+        paper_store=paper_store,
+        notification_store=notification_store,
+    )
     adapter = LocalMainChainAdapter(service)
     if args.mode == "morning":
         result = adapter.build_one_to_two_morning_report(
@@ -79,6 +111,22 @@ def main() -> None:
             end_date=args.end_date or args.trade_date,
             max_trade_days=args.max_trade_days,
         )
+    elif args.mode == "notifications":
+        records = adapter.load_notification_records(
+            workflow=args.workflow,
+            status=args.status,
+            limit=max(0, args.limit),
+        )
+        result = {
+            "mode": "notifications",
+            "record_count": len(records),
+            "records": records,
+            "next_action": (
+                "No notification records yet; run morning, watch, eod, or schedule first."
+                if not records
+                else "Review failed or prepared records before trusting Feishu delivery."
+            ),
+        }
     else:
         scheduler = OneToTwoScheduler(
             service=service,

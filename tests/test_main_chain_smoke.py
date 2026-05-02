@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -318,7 +320,10 @@ class MainChainSmokeTest(unittest.TestCase):
     def test_notification_records_are_persisted_for_review(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            store = NotificationRecordStore(root / "notifications.json")
+            store = NotificationRecordStore(
+                root / "notifications.json",
+                created_at_provider=lambda: "20260501085000",
+            )
             service = _build_service(
                 root,
                 market_data_provider=SampleMarketDataProvider(),
@@ -346,12 +351,74 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsInstance(records[0], NotificationRecord)
             self.assertEqual(records[0].status, NotificationStatus.PREPARED)
             self.assertEqual(payload[0]["status"], "prepared")
+            self.assertEqual(payload[0]["created_at"], "20260501085000")
             self.assertIn("eod", {record.workflow for record in records})
             self.assertIn("watch:open", {record.workflow for record in records})
             self.assertEqual(
                 sum(1 for record in records if record.workflow == "morning"),
                 1,
             )
+
+    def test_notification_records_can_be_filtered_and_read_by_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = NotificationRecordStore(root / "notifications.json")
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=store,
+            )
+
+            service.build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+            service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            service.build_one_to_two_end_of_day_review(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+
+            filtered = service.load_notification_records(
+                workflow="watch:open",
+                status=NotificationStatus.PREPARED,
+                limit=1,
+            )
+            self.assertEqual(len(filtered), 1)
+            self.assertEqual(filtered[0].workflow, "watch:open")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "notifications",
+                    "--notification-store",
+                    str(store.path),
+                    "--workflow",
+                    "watch:open",
+                    "--status",
+                    "prepared",
+                    "--limit",
+                    "1",
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(payload["mode"], "notifications")
+            self.assertEqual(payload["record_count"], 1)
+            self.assertEqual(payload["records"][0]["workflow"], "watch:open")
+            self.assertEqual(payload["records"][0]["status"], "prepared")
 
     def test_one_to_two_stop_warning_obeys_t1_before_sell(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

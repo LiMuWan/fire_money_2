@@ -15,7 +15,7 @@ Core line:
 ```text
 client/desktop/firemoney_client/
   adapter.py        adapter from client to the one-to-two service
-  one_to_two_cli.py local command entry for morning/watch/eod/backtest/schedule
+  one_to_two_cli.py local command entry for morning/watch/eod/backtest/schedule/notifications
   preview.py        local HTML preview generator
   renderer.py       one-to-two HTML renderer
   static/           CSS for the interface preview
@@ -23,7 +23,7 @@ client/desktop/firemoney_client/
 
 ## 3. Client Responsibilities
 
-- Render candidate pool, position labels, stop loss, strict T+1 risk notes, paper-account state, local schedule state, Feishu notification status, end-of-day review, and stability observation.
+- Render candidate pool, position labels, stop loss, strict T+1 risk notes, paper-account state, local schedule state, Feishu notification status, notification records, end-of-day review, and stability observation.
 - Capture view/run intent and call the adapter.
 - Consume shared contracts without recomputing score, risk, P/L, or notification state.
 - Keep old demos, CSV order flows, receipt import screens, and generic dashboards out of the default product surface.
