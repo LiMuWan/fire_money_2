@@ -25,15 +25,23 @@
    $env:FEISHU_WEBHOOK_SECRET="..."
    ```
 
-3. 运行上线前体检。
+3. 先验证飞书真实送达。
+
+   ```powershell
+   python -m client.desktop.firemoney_client.one_to_two_cli feishu-test
+   ```
+
+   `feishu-test` 只用于验证群机器人联通，不会触发模拟买入或卖出；必须返回 `sent`，HTTP 200 但飞书业务返回码失败也按 `failed` 处理。
+
+4. 运行上线前体检。
 
    ```powershell
    python -m client.desktop.firemoney_client.one_to_two_cli doctor --beta
    ```
 
-   `strategy_config`、`trading_day`、`market_data`、`paper_store`、`notification_store`、`feishu`、`scheduler`、`scheduler_state`、`scheduler_runs` 必须全部为 `ready`。
+   `strategy_config`、`trading_day`、`market_data`、`paper_store`、`notification_store`、`feishu`、`scheduler`、`scheduler_state`、`scheduler_runs` 必须全部为 `ready`。Beta 体检会要求当前交易日已有 `feishu-test` 的 `sent` 记录。
 
-4. 先用不发通知模式做一次真实行情空跑。
+5. 先用不发通知模式做一次真实行情空跑。
 
    ```powershell
    python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
@@ -44,16 +52,13 @@
    python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
    ```
 
-5. 确认飞书通知格式后再进入值守。
+6. 确认通知和审计记录后再进入值守。
 
    ```powershell
-   python -m client.desktop.firemoney_client.one_to_two_cli feishu-test
    python -m client.desktop.firemoney_client.one_to_two_cli morning
    python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 10
    python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 10
    ```
-
-   `feishu-test` 只用于验证群机器人联通，不会触发模拟买入或卖出；必须返回 `sent`，HTTP 200 但飞书业务返回码失败也按 `failed` 处理。
 
 ## Beta 值守命令
 
@@ -70,7 +75,7 @@ Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到
 - `doctor` 有任何 `blocked`。
 - 当前不是 A 股交易日。
 - AkShare 无法读取真实行情。
-- 飞书未启用或 webhook 未配置。
+- 飞书未启用、webhook 未配置，或当前交易日没有 `feishu-test` 的 `sent` 记录。
 - `.firemoney/paper_trades.json` 不能读写。
 - `.firemoney/notifications.json`、`.firemoney/scheduler_state.json` 或 `.firemoney/scheduler_runs.json` 不能读写。
 - 没有先用 `--no-notify` 完成一次真实行情空跑。

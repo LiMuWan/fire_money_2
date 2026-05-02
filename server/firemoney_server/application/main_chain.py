@@ -365,7 +365,7 @@ class MainChainService:
             self._doctor_paper_store_check(),
             self._doctor_notification_store_check(),
             self._doctor_scheduler_state_store_check(),
-            self._doctor_feishu_check(beta=beta),
+            self._doctor_feishu_check(trade_context.trade_date, beta=beta),
             self._doctor_scheduler_check(),
             self._doctor_scheduler_run_store_check(),
         )
@@ -773,7 +773,11 @@ class MainChainService:
             next_action="状态可用，schedule --loop 不会重复触发同日任务。",
         )
 
-    def _doctor_feishu_check(self, beta: bool = False) -> OneToTwoDoctorCheck:
+    def _doctor_feishu_check(
+        self,
+        trade_date: str,
+        beta: bool = False,
+    ) -> OneToTwoDoctorCheck:
         enabled = os.environ.get("FEISHU_ENABLED", "").lower() == "true"
         webhook_configured = bool(os.environ.get("FEISHU_WEBHOOK_URL", ""))
         if enabled and not webhook_configured:
@@ -788,17 +792,22 @@ class MainChainService:
             valid_webhook = self._is_feishu_webhook(
                 os.environ.get("FEISHU_WEBHOOK_URL", "")
             )
-            status = "ready" if valid_webhook else ("blocked" if beta else "warning")
-            detail = (
-                "飞书通知已启用，webhook 已配置。"
-                if valid_webhook
-                else "FEISHU_WEBHOOK_URL 不是有效的飞书群机器人 webhook。"
-            )
-            next_action = (
-                "盘前先用 --no-notify 或测试群验证消息格式。"
-                if valid_webhook
-                else "使用 https://open.feishu.cn/open-apis/bot/v2/hook/... 格式的群机器人地址。"
-            )
+            if not valid_webhook:
+                status = "blocked" if beta else "warning"
+                detail = "FEISHU_WEBHOOK_URL 不是有效的飞书群机器人 webhook。"
+                next_action = "使用 https://open.feishu.cn/open-apis/bot/v2/hook/... 格式的群机器人地址。"
+            elif beta and not self._has_sent_feishu_test(trade_date):
+                status = "blocked"
+                detail = "飞书通知已配置，但当前交易日还没有 feishu-test sent 记录。"
+                next_action = "先运行 feishu-test 并确认返回 sent，再重新执行 doctor --beta。"
+            else:
+                status = "ready"
+                detail = "飞书通知已启用，webhook 已配置。"
+                next_action = (
+                    "飞书联通已验证，可以进入 Beta 值守。"
+                    if beta
+                    else "盘前先用 feishu-test 验证消息能到群。"
+                )
         elif beta:
             status = "blocked"
             detail = "模拟盘 Beta 需要飞书值守，但 FEISHU_ENABLED 未开启。"
@@ -813,6 +822,14 @@ class MainChainService:
             status=status,
             detail=detail,
             next_action=next_action,
+        )
+
+    def _has_sent_feishu_test(self, trade_date: str) -> bool:
+        return any(
+            record.workflow == "feishu:test"
+            and record.trade_date == trade_date
+            and record.status == NotificationStatus.SENT
+            for record in self._notification_store.load()
         )
 
     def _is_feishu_webhook(self, value: str) -> bool:

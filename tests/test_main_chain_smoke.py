@@ -389,11 +389,53 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(checks["feishu"].status, "blocked")
             self.assertIn("FEISHU_ENABLED=true", checks["feishu"].next_action)
 
-    def test_beta_doctor_accepts_feishu_environment(self) -> None:
+    def test_beta_doctor_requires_sent_feishu_test_record(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = NotificationRecordStore(root / "notifications.json")
             service = _build_service(
-                Path(temp_dir),
+                root,
                 market_data_provider=SampleMarketDataProvider(),
+                notification_store=store,
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test-token",
+                },
+                clear=True,
+            ):
+                report = service.build_one_to_two_doctor_report(
+                    trade_date="2026-04-30",
+                    beta=True,
+                )
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["trading_day"].status, "ready")
+            self.assertEqual(checks["feishu"].status, "blocked")
+            self.assertIn("feishu-test sent", checks["feishu"].detail)
+
+    def test_beta_doctor_accepts_verified_feishu_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = NotificationRecordStore(root / "notifications.json")
+            store.append(
+                workflow="feishu:test",
+                trade_date="2026-04-30",
+                result=FeishuNotificationResult(
+                    status=NotificationStatus.SENT,
+                    title="FireMoney 一进二飞书测试",
+                    message="sent",
+                    webhook_configured=True,
+                ),
+            )
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                notification_store=store,
             )
 
             with patch.dict(
