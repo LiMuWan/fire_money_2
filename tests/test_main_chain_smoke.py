@@ -884,18 +884,18 @@ class MainChainSmokeTest(unittest.TestCase):
             position = open_trigger.account.positions[0]
             self.assertIsNotNone(candidate.exit_plan)
             self.assertIsNotNone(candidate.mainline_continuity)
-            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.28)
+            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.32)
             self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.0825)
             self.assertGreater(candidate.exit_plan.stop_loss_pct, 0)
             self.assertLessEqual(candidate.exit_plan.stop_loss_pct, 0.0425)
             self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.001)
-            self.assertIn("盈利 28%", candidate.exit_plan.summary)
+            self.assertIn("盈利 32%", candidate.exit_plan.summary)
             self.assertIn("强势达到 8.25%", candidate.exit_plan.summary)
             self.assertIn("0.1%", candidate.exit_plan.summary)
             self.assertGreaterEqual(candidate.mainline_continuity.score, 45)
             self.assertIsNotNone(position.exit_plan)
             self.assertIsNotNone(position.mainline_continuity)
-            self.assertIn("盈利 28%", position.risk_note)
+            self.assertIn("盈利 32%", position.risk_note)
 
     def test_watch_phases_do_not_buy_before_open_trigger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -939,7 +939,7 @@ class MainChainSmokeTest(unittest.TestCase):
             )
             profit_row = _weak_after_two_days_row("2026-05-06")
             profit_row = OneToTwoMarketRow(
-                **(profit_row.__dict__ | {"latest_price": 13.5, "theme": "AI端侧主线"})
+                **(profit_row.__dict__ | {"latest_price": 14.1, "theme": "AI端侧主线"})
             )
             service = _build_service(
                 root,
@@ -2714,7 +2714,7 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.045)
         self.assertEqual(settings.min_confirm_open_pct, 0.0)
         self.assertEqual(settings.max_confirm_open_pct, 0.045)
-        self.assertEqual(settings.first_take_profit_pct, 0.28)
+        self.assertEqual(settings.first_take_profit_pct, 0.32)
         self.assertEqual(settings.strong_take_profit_pct, 0.0825)
         self.assertEqual(settings.stop_loss_pct, 0.0425)
         self.assertEqual(settings.trailing_stop_pct, 0.001)
@@ -2740,7 +2740,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("低位平台突破", html)
             self.assertIn("主线持续性", html)
             self.assertIn("卖点计划", html)
-            self.assertIn("盈利 28%", html)
+            self.assertIn("盈利 32%", html)
             self.assertIn("消息", html)
             self.assertIn("模拟盘与风险", html)
             self.assertIn("飞书通知", html)
