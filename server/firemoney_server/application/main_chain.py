@@ -1070,23 +1070,43 @@ class MainChainService:
         ]
 
         for holding_day, bar in enumerate(bars[1:], start=1):
-            peak_price = max(peak_price, bar.high_price)
             favorable_pct = (bar.high_price - entry_price) / entry_price
             adverse_pct = (bar.low_price - entry_price) / entry_price
             max_favorable_pct = max(max_favorable_pct, favorable_pct)
             max_adverse_pct = min(max_adverse_pct, adverse_pct)
 
+            previous_peak_price = peak_price
+            previous_strong_reached = (
+                (previous_peak_price - entry_price) / entry_price >= strong_take_profit_pct
+                if entry_price
+                else False
+            )
+            previous_trailing_stop = round(
+                previous_peak_price * (1 - trailing_stop_pct),
+                2,
+            )
+
+            if bar.open_price >= first_take_profit_price:
+                exit_bar = bar
+                exit_price = first_take_profit_price
+                exit_reason = "take_profit_first_target"
+                break
+
             if bar.low_price <= stop_loss:
                 exit_bar = bar
-                exit_price = stop_loss
+                exit_price = self._conservative_downside_exit_price(
+                    open_price=bar.open_price,
+                    trigger_price=stop_loss,
+                )
                 exit_reason = "stop_loss_t1"
                 break
 
-            strong_reached = (peak_price - entry_price) / entry_price >= strong_take_profit_pct
-            trailing_stop = round(peak_price * (1 - trailing_stop_pct), 2)
-            if strong_reached and bar.low_price <= trailing_stop:
+            if previous_strong_reached and bar.low_price <= previous_trailing_stop:
                 exit_bar = bar
-                exit_price = trailing_stop
+                exit_price = self._conservative_downside_exit_price(
+                    open_price=bar.open_price,
+                    trigger_price=previous_trailing_stop,
+                )
                 exit_reason = "trailing_take_profit"
                 break
 
@@ -1101,6 +1121,8 @@ class MainChainService:
                 exit_price = bar.close_price
                 exit_reason = "max_holding_close"
                 break
+
+            peak_price = max(peak_price, bar.high_price)
 
         gross_return_pct = (
             (exit_price - entry_price) / entry_price if entry_price else 0.0
@@ -1139,6 +1161,15 @@ class MainChainService:
             data_mode=data_mode,
             notes=tuple(notes),
         )
+
+    @staticmethod
+    def _conservative_downside_exit_price(
+        open_price: float,
+        trigger_price: float,
+    ) -> float:
+        if open_price <= trigger_price:
+            return open_price
+        return trigger_price
 
     def _resolve_backtest_dates(
         self,

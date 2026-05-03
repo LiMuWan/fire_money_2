@@ -934,19 +934,31 @@ def simulate_trade(
     for index in range(entry_index, last_index + 1):
         bar = bars[index]
         holding_trade_days = index - entry_index
-        peak_price = max(peak_price, bar.high)
         if holding_trade_days == 0:
+            peak_price = max(peak_price, bar.high)
             exit_price = bar.close
             exit_date = bar.trade_date
             continue
+        previous_peak_price = peak_price
+        previous_strong_reached = (
+            pct_change(previous_peak_price, entry_price) >= strong_take_profit_pct
+        )
+        previous_trailing_stop_price = previous_peak_price * (1 - trailing_stop_pct)
+        if bar.open >= first_take_profit_price:
+            exit_price = first_take_profit_price
+            exit_date = bar.trade_date
+            exit_reason = "take_profit_first_target"
+            break
         if bar.low <= stop_price:
-            exit_price = stop_price
+            exit_price = conservative_downside_exit_price(bar.open, stop_price)
             exit_date = bar.trade_date
             exit_reason = "stop_loss_t1"
             break
-        trailing_stop_price = peak_price * (1 - trailing_stop_pct)
-        if peak_price >= strong_take_profit_price and bar.low <= trailing_stop_price:
-            exit_price = trailing_stop_price
+        if previous_strong_reached and bar.low <= previous_trailing_stop_price:
+            exit_price = conservative_downside_exit_price(
+                bar.open,
+                previous_trailing_stop_price,
+            )
             exit_date = bar.trade_date
             exit_reason = "trailing_take_profit"
             break
@@ -963,6 +975,7 @@ def simulate_trade(
             exit_date = bar.trade_date
             exit_reason = "discipline_weak_after_2_days"
             break
+        peak_price = max(peak_price, bar.high)
         exit_price = bar.close
         exit_date = bar.trade_date
         exit_reason = "max_simulation_close"
@@ -1023,6 +1036,12 @@ def select_one_position_trades(trades: list[SimulatedTrade]) -> list[SimulatedTr
 
 def round_price_up(value: float) -> float:
     return math.ceil(value * 100 - 1e-9) / 100
+
+
+def conservative_downside_exit_price(open_price: float, trigger_price: float) -> float:
+    if open_price <= trigger_price:
+        return open_price
+    return trigger_price
 
 
 def build_result(

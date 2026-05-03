@@ -1894,9 +1894,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsNotNone(report.trade)
             self.assertEqual(report.candidate.symbol, "600001")
             self.assertEqual(report.trade.entry_date, "2026-04-30")
-            self.assertEqual(report.trade.exit_reason, "trailing_take_profit")
+            self.assertEqual(report.trade.exit_reason, "max_holding_close")
             self.assertGreater(report.trade.realized_pnl_pct, 0)
-            self.assertGreater(report.trade.risk_reward_ratio, 1)
+            self.assertGreater(report.trade.risk_reward_ratio, 0)
             self.assertTrue(
                 any("后续日线只用于模拟卖点" in item for item in report.no_future_leakage_notes)
             )
@@ -1904,7 +1904,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(checks["no_future_selection"].status, "ready")
             self.assertEqual(checks["price_bars"].status, "ready")
             self.assertEqual(checks["daily_bar_sequence"].status, "warning")
-            self.assertEqual(payload["trade"]["exit_reason"], "trailing_take_profit")
+            self.assertEqual(payload["trade"]["exit_reason"], "max_holding_close")
 
     def test_research_backtest_rank_ignores_future_outcome_fields(self) -> None:
         module = self._load_research_backtest_module()
@@ -1978,6 +1978,56 @@ class MainChainSmokeTest(unittest.TestCase):
 
         self.assertTrue(match.second_day_one_word)
         self.assertIn("second_day_one_word_untradable", match.blockers)
+
+    def test_research_backtest_trailing_stop_uses_previous_peak_only(self) -> None:
+        module = self._load_research_backtest_module()
+        match = module.Match(
+            symbol="600001",
+            name="主线首板候选",
+            first_board_date="2026-04-29",
+            second_day_date="2026-04-30",
+            first_board_pct=0.1,
+            second_close_pct=0.01,
+            second_open_pct=0.02,
+            second_high_pct=0.09,
+            buy_open_to_close_pct=0.01,
+            score=90.0,
+            position_label="breakout",
+            estimated_turnover_amount=300000000.0,
+            recent_gain_pct=0.12,
+            ma20_deviation_pct=0.14,
+            pressure_distance_pct=None,
+            first_board_count=60,
+            ready_candidate_count=8,
+            second_day_one_word=False,
+            blockers=(),
+            second_board_closed=False,
+            second_board_touched=False,
+            buy_day_positive=True,
+        )
+        histories = {
+            "600001": [
+                module.DailyBar("2026-04-30", 10.0, 10.1, 10.3, 9.9, 10000),
+                module.DailyBar("2026-05-06", 10.1, 10.2, 11.0, 9.8, 10000),
+                module.DailyBar("2026-05-07", 10.2, 10.3, 10.4, 10.0, 10000),
+            ]
+        }
+
+        trade = module.simulate_trade(
+            match=match,
+            histories=histories,
+            stop_loss_pct=0.2,
+            first_take_profit_pct=0.5,
+            strong_take_profit_pct=0.08,
+            trailing_stop_pct=0.01,
+            discipline_exit_min_gain_pct=-1,
+            max_holding_trade_days=2,
+            max_simulation_trade_days=2,
+        )
+
+        self.assertIsNotNone(trade)
+        self.assertEqual(trade.exit_reason, "trailing_take_profit")
+        self.assertEqual(trade.exit_date, "2026-05-07")
 
     def test_research_backtest_adds_cached_universe_when_provider_is_partial(self) -> None:
         module = self._load_research_backtest_module()
