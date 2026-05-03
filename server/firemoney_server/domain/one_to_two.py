@@ -270,7 +270,9 @@ class OneToTwoPolicy:
         if row.open_pct < self._settings.min_confirm_open_pct:
             blockers.append("次日确认未红盘开，产品算法不进入模拟买入")
         if row.open_pct > self._settings.max_confirm_open_pct:
-            blockers.append("次日确认高开超过 7%，追高盈亏比不足")
+            blockers.append(
+                f"次日确认高开超过 {self._settings.max_confirm_open_pct:.1%}，追高盈亏比不足"
+            )
         if row.open_pct >= 0.095 and row.auction_amount < row.turnover_amount * 0.01:
             blockers.append("一字板买不到，只观察不买入")
         if row.market_temperature < self._settings.market_temperature_floor:
@@ -481,7 +483,7 @@ class OneToTwoPolicy:
             tags.append("主线强度高")
         if profile.low_position_score >= 8 and profile.breakout_score >= 7:
             tags.append("低位突破")
-        if row.open_pct >= 0.07:
+        if row.open_pct >= self._settings.max_confirm_open_pct:
             tags.append("高开谨慎")
         return tuple(tags)
 
@@ -510,11 +512,15 @@ class OneToTwoPolicy:
             max_holding_trade_days=self._settings.max_holding_trade_days,
             summary=(
                 f"亏损跌破 {stop_loss} 先预警、T+1 再卖；"
-                f"盈利 {self._settings.first_take_profit_pct:.0%} 先落袋；"
-                f"强势到 {self._settings.strong_take_profit_pct:.0%} 后用 "
-                f"{self._settings.trailing_stop_pct:.0%} 回撤保护。"
+                f"盈利 {self._format_pct(self._settings.first_take_profit_pct)} 先落袋；"
+                f"强势到 {self._format_pct(self._settings.strong_take_profit_pct)} 后用 "
+                f"{self._format_pct(self._settings.trailing_stop_pct)} 回撤保护。"
             ),
         )
+
+    def _format_pct(self, value: float) -> str:
+        text = f"{value:.1%}"
+        return text.replace(".0%", "%")
 
     def _mainline_continuity(
         self,

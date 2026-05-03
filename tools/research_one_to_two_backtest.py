@@ -37,11 +37,11 @@ SECOND_BOARD_TOUCH_THRESHOLD = 0.095
 DEFAULT_MIN_SCORE = 78.0
 DEFAULT_MIN_TURNOVER_AMOUNT = 80_000_000.0
 DEFAULT_POSITION_PCT = 0.08
-DEFAULT_STOP_LOSS_PCT = 0.05
+DEFAULT_STOP_LOSS_PCT = 0.045
 DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.08
-DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.15
-DEFAULT_TRAILING_STOP_PCT = 0.06
-DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.03
+DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.12
+DEFAULT_TRAILING_STOP_PCT = 0.035
+DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.04
 DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
 DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
 DEFAULT_MIN_LOW_BREAKOUT_FIRST_BOARD_COUNT = 15
@@ -127,7 +127,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--high-deviation-block-pct", type=float, default=0.25)
     parser.add_argument("--near-pressure-pct", type=float, default=0.05)
     parser.add_argument("--min-confirm-open-pct", type=float, default=0.0)
-    parser.add_argument("--max-confirm-open-pct", type=float, default=0.07)
+    parser.add_argument("--max-confirm-open-pct", type=float, default=0.055)
     parser.add_argument("--position-pct", type=float, default=DEFAULT_POSITION_PCT)
     parser.add_argument("--stop-loss-pct", type=float, default=DEFAULT_STOP_LOSS_PCT)
     parser.add_argument(
@@ -801,7 +801,7 @@ def build_product_portfolio(
     return {
         "selection_rule": (
             "候选先过硬拦截；低位平台突破必须满足昨日首板宽度和今日可执行候选宽度；"
-            "只在次日红盘开且不高于 7% 时确认；"
+            "只在次日红盘开且不高于 5.5% 时确认；"
             "每天按当时可见的 score/open/position/turnover 排名最多买 1 笔；"
             "已有持仓时不再开新仓，严格 T+1。"
         ),

@@ -261,8 +261,11 @@ class MainChainService:
                     candidate,
                     exit_reason="trailing_take_profit",
                     message=(
-                        f"强势涨幅已到 {position.exit_plan.strong_take_profit_pct:.0%}，"
-                        f"回撤触发 {position.exit_plan.trailing_stop_pct:.0%} 保护，T+1 已到，模拟止盈。"
+                        "强势涨幅已到 "
+                        f"{self._format_pct(position.exit_plan.strong_take_profit_pct)}，"
+                        "回撤触发 "
+                        f"{self._format_pct(position.exit_plan.trailing_stop_pct)} "
+                        "保护，T+1 已到，模拟止盈。"
                     ),
                     event_type=OneToTwoEventType.TAKE_PROFIT,
                     holding_trade_days=self._holding_trade_days(
@@ -1228,8 +1231,8 @@ class MainChainService:
                 label="规则版本",
                 status="ready",
                 detail=(
-                    "规则已固化为主线首板龙头候选、T+1、8% 止盈、5%/结构止损、"
-                    "主线持续性衰减退出。"
+                    "规则已固化为主线首板龙头候选、T+1、8% 第一止盈、4.5%/结构止损、"
+                    "12% 强势阈值后 3.5% 回撤保护、主线持续性衰减退出。"
                 ),
                 next_action="回测结果只对当前规则版本负责，改规则后必须重跑。",
             )
@@ -1387,8 +1390,8 @@ class MainChainService:
                 f"initial_cash={settings.initial_cash:.2f}, "
                 f"max_position_pct={settings.max_position_pct:.0%}, "
                 f"max_daily_trades={settings.max_daily_trades}, "
-                f"confirm_open={settings.min_confirm_open_pct:.0%}-"
-                f"{settings.max_confirm_open_pct:.0%}"
+                f"confirm_open={self._format_pct(settings.min_confirm_open_pct)}-"
+                f"{self._format_pct(settings.max_confirm_open_pct)}"
             ),
             next_action=(
                 "配置有效，继续保持单一主线首板主线。"
@@ -1396,6 +1399,10 @@ class MainChainService:
                 else "修复 one_to_two_strategy JSON 后再运行策略。"
             ),
         )
+
+    def _format_pct(self, value: float) -> str:
+        text = f"{value:.1%}"
+        return text.replace(".0%", "%")
 
     def _doctor_trading_day_check(
         self,
