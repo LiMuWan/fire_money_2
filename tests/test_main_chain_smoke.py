@@ -369,7 +369,7 @@ class MainChainSmokeTest(unittest.TestCase):
             ).candidates[0]
 
             self.assertEqual(candidates["600001"].status, "ready")
-            self.assertGreaterEqual(candidates["600001"].score, 78)
+            self.assertGreaterEqual(candidates["600001"].score, 82)
             self.assertEqual(candidates["600001"].position_profile.label, "低位平台突破")
             self.assertGreaterEqual(candidates["600001"].sealing_score, 18)
             self.assertGreaterEqual(candidates["600001"].leader_score, 16)
@@ -414,7 +414,7 @@ class MainChainSmokeTest(unittest.TestCase):
         high_open_row = replace(
             base_row,
             symbol="600006",
-            open_pct=0.061,
+            open_pct=0.051,
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -430,7 +430,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(candidates["600005"].status, "blocked")
             self.assertTrue(any("红盘开" in blocker for blocker in candidates["600005"].blockers))
             self.assertEqual(candidates["600006"].status, "blocked")
-            self.assertTrue(any("高开超过 5.5%" in blocker for blocker in candidates["600006"].blockers))
+            self.assertTrue(any("高开超过 4.5%" in blocker for blocker in candidates["600006"].blockers))
 
     def test_weak_sealed_board_is_blocked_for_mainline_leader_candidate(self) -> None:
         weak_row = OneToTwoMarketRow(
@@ -884,11 +884,11 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsNotNone(candidate.exit_plan)
             self.assertIsNotNone(candidate.mainline_continuity)
             self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.08)
-            self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.12)
-            self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.035)
+            self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.1)
+            self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.025)
             self.assertIn("盈利 8%", candidate.exit_plan.summary)
-            self.assertIn("12%", candidate.exit_plan.summary)
-            self.assertIn("3.5%", candidate.exit_plan.summary)
+            self.assertIn("10%", candidate.exit_plan.summary)
+            self.assertIn("2.5%", candidate.exit_plan.summary)
             self.assertGreaterEqual(candidate.mainline_continuity.score, 45)
             self.assertIsNotNone(position.exit_plan)
             self.assertIsNotNone(position.mainline_continuity)
@@ -2599,21 +2599,21 @@ class MainChainSmokeTest(unittest.TestCase):
         settings = load_one_to_two_settings()
 
         self.assertEqual(payload["strategy_id"], settings.strategy_id)
-        self.assertEqual(settings.min_score, 78)
+        self.assertEqual(settings.min_score, 82)
         self.assertEqual(settings.max_position_pct, 0.08)
         self.assertEqual(settings.max_daily_trades, 1)
         self.assertEqual(settings.max_holding_trade_days, 2)
         self.assertEqual(settings.discipline_exit_min_gain_pct, 0.04)
         self.assertEqual(payload["parameters"]["min_confirm_open_pct"], 0.0)
-        self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.055)
+        self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.045)
         self.assertEqual(settings.min_confirm_open_pct, 0.0)
-        self.assertEqual(settings.max_confirm_open_pct, 0.055)
+        self.assertEqual(settings.max_confirm_open_pct, 0.045)
         self.assertEqual(settings.first_take_profit_pct, 0.08)
-        self.assertEqual(settings.strong_take_profit_pct, 0.12)
-        self.assertEqual(settings.trailing_stop_pct, 0.035)
+        self.assertEqual(settings.strong_take_profit_pct, 0.1)
+        self.assertEqual(settings.trailing_stop_pct, 0.025)
         self.assertEqual(settings.mainline_fade_score, 45)
-        self.assertEqual(settings.min_low_breakout_first_board_count, 15)
-        self.assertEqual(settings.min_low_breakout_ready_candidates, 2)
+        self.assertEqual(settings.min_low_breakout_first_board_count, 40)
+        self.assertEqual(settings.min_low_breakout_ready_candidates, 6)
         self.assertIn("创业板", settings.excluded_boards)
 
     def test_preview_file_can_be_generated_without_legacy_surface(self) -> None:
