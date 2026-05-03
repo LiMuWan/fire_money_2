@@ -57,6 +57,8 @@ class OneToTwoSettings(Protocol):
     min_score: int
     max_position_pct: float
     stop_loss_pct: float
+    min_confirm_open_pct: float
+    max_confirm_open_pct: float
     min_turnover_amount: float
     market_temperature_floor: int
     high_deviation_block_pct: float
@@ -86,8 +88,35 @@ class OneToTwoPolicy:
         self,
         rows: tuple[OneToTwoMarketRow, ...],
     ) -> tuple[OneToTwoCandidate, ...]:
-        candidates = tuple(self._candidate_from_row(row) for row in rows)
-        return tuple(sorted(candidates, key=lambda item: item.score, reverse=True))
+        candidates = tuple((row, self._candidate_from_row(row)) for row in rows)
+        ranked = sorted(candidates, key=self._candidate_rank_key, reverse=True)
+        return tuple(candidate for _, candidate in ranked)
+
+    def _candidate_rank_key(
+        self,
+        item: tuple[OneToTwoMarketRow, OneToTwoCandidate],
+    ) -> tuple[float, int, int, float, float]:
+        row, candidate = item
+        open_confirm_bonus = (
+            1
+            if self._settings.min_confirm_open_pct
+            <= row.open_pct
+            <= self._settings.max_confirm_open_pct
+            else 0
+        )
+        position_bonus = (
+            1
+            if candidate.position_profile.low_position_score >= 8
+            or candidate.position_profile.breakout_score >= 7
+            else 0
+        )
+        return (
+            candidate.score,
+            open_confirm_bonus,
+            position_bonus,
+            row.open_pct,
+            row.turnover_amount,
+        )
 
     def _candidate_from_row(self, row: OneToTwoMarketRow) -> OneToTwoCandidate:
         blockers = self._blockers(row)
@@ -186,6 +215,10 @@ class OneToTwoPolicy:
             sealed_ratio = row.sealed_amount / row.turnover_amount
             if sealed_ratio < self._settings.min_sealed_amount_ratio:
                 blockers.append("封板资金不足，不能作为主线首板龙头候选")
+        if row.open_pct < self._settings.min_confirm_open_pct:
+            blockers.append("次日确认未红盘开，产品算法不进入模拟买入")
+        if row.open_pct > self._settings.max_confirm_open_pct:
+            blockers.append("次日确认高开超过 7%，追高盈亏比不足")
         if row.open_pct >= 0.095 and row.auction_amount < row.turnover_amount * 0.01:
             blockers.append("一字板买不到，只观察不买入")
         if row.market_temperature < self._settings.market_temperature_floor:
@@ -209,7 +242,7 @@ class OneToTwoPolicy:
 
     def _warnings(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
         warnings: list[str] = ["严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出"]
-        if row.open_pct > 0.07:
+        if row.open_pct > self._settings.max_confirm_open_pct:
             warnings.append("竞价/开盘涨幅偏高，防止高开兑现")
         if row.turnover_rate < 2:
             warnings.append("换手偏低，可能买不到或承接不足")
@@ -233,9 +266,9 @@ class OneToTwoPolicy:
 
     def _auction_score(self, row: OneToTwoMarketRow) -> float:
         score = 8.0
-        if 0.02 <= row.open_pct <= 0.07:
+        if 0.02 <= row.open_pct <= self._settings.max_confirm_open_pct:
             score += 7.0
-        elif 0 <= row.open_pct < 0.02:
+        elif self._settings.min_confirm_open_pct <= row.open_pct < 0.02:
             score += 3.0
         if row.auction_amount >= row.turnover_amount * 0.04:
             score += 5.0

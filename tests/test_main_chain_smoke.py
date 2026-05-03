@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import threading
+from dataclasses import replace
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
@@ -380,6 +381,34 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertTrue(any("创业板" in blocker for blocker in candidates["300003"].blockers))
             self.assertEqual(one_word.status, "blocked")
             self.assertTrue(any("买不到" in blocker for blocker in one_word.blockers))
+
+    def test_one_to_two_requires_product_open_confirmation_window(self) -> None:
+        base_row = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")[0]
+        low_open_row = replace(
+            base_row,
+            symbol="600005",
+            open_pct=-0.01,
+        )
+        high_open_row = replace(
+            base_row,
+            symbol="600006",
+            open_pct=0.081,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider((low_open_row, high_open_row)),
+            ).build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+
+            candidates = {candidate.symbol: candidate for candidate in report.candidates}
+            self.assertEqual(candidates["600005"].status, "blocked")
+            self.assertTrue(any("红盘开" in blocker for blocker in candidates["600005"].blockers))
+            self.assertEqual(candidates["600006"].status, "blocked")
+            self.assertTrue(any("高开超过 7%" in blocker for blocker in candidates["600006"].blockers))
 
     def test_weak_sealed_board_is_blocked_for_mainline_leader_candidate(self) -> None:
         weak_row = OneToTwoMarketRow(
@@ -897,6 +926,61 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(risk.account.positions, ())
             self.assertEqual(risk.account.events[0].event_type.value, "take_profit")
             self.assertEqual(risk.account.closed_trades[0].exit_reason, "take_profit_first_target")
+
+    def test_trailing_take_profit_exits_after_strong_gain_reverses(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            service.run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+            strong_row = OneToTwoMarketRow(
+                **(
+                    _weak_after_two_days_row("2026-05-06").__dict__
+                    | {
+                        "latest_price": 12.2,
+                        "theme": "AI绔晶涓荤嚎",
+                    }
+                )
+            )
+            service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider((strong_row,)),
+            )
+            hold = service.run_one_to_two_watch(
+                trade_date="2026-05-06",
+                phase="open",
+                notify=False,
+            )
+            self.assertEqual(hold.account.positions[0].peak_price, 12.2)
+
+            pullback_row = OneToTwoMarketRow(
+                **(
+                    _weak_after_two_days_row("2026-05-07").__dict__
+                    | {
+                        "latest_price": 11.4,
+                        "theme": "AI绔晶涓荤嚎",
+                    }
+                )
+            )
+            service = _build_service(
+                root,
+                market_data_provider=StaticOneToTwoProvider((pullback_row,)),
+            )
+            risk = service.run_one_to_two_watch(
+                trade_date="2026-05-07",
+                phase="risk",
+                notify=False,
+            )
+
+            self.assertEqual(risk.account.positions, ())
+            self.assertEqual(risk.account.events[0].event_type.value, "take_profit")
+            self.assertEqual(risk.account.closed_trades[0].exit_reason, "trailing_take_profit")
 
     def test_mainline_fade_exits_after_t1_even_without_news(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2493,6 +2577,10 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.max_daily_trades, 1)
         self.assertEqual(settings.max_holding_trade_days, 2)
         self.assertEqual(settings.discipline_exit_min_gain_pct, 0.03)
+        self.assertEqual(payload["parameters"]["min_confirm_open_pct"], 0.0)
+        self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.07)
+        self.assertEqual(settings.min_confirm_open_pct, 0.0)
+        self.assertEqual(settings.max_confirm_open_pct, 0.07)
         self.assertEqual(settings.first_take_profit_pct, 0.08)
         self.assertEqual(settings.strong_take_profit_pct, 0.15)
         self.assertEqual(settings.trailing_stop_pct, 0.06)

@@ -26,6 +26,12 @@ python -m client.desktop.firemoney_client.one_to_two_cli backtest-audit --brief 
 
 `backtest-audit` 会按“数据准备 -> 策略规则 -> 执行回测 -> 准入结论”输出结果。少于 30 笔闭环样本只允许观察；AkShare 免费数据暂不等同专业 Point-in-Time 数据，不能据此宣称长期稳定盈利。
 
+如果要回答“从 2024 年到现在，这套一进二产品算法到底赚不赚钱”，使用研究脚本按产品执行口径回放。结论只看 `product_portfolio.one_position_no_overlap`，不要看“所有候选全买”：
+
+```powershell
+python -B tools\research_one_to_two_backtest.py --start-date 2024-01-01 --end-date 2026-05-03 --workers 12 --output exports\one_to_two_backtest_2024_to_now.json
+```
+
 单点检查某个历史交易日“当时介入、后面盈亏比”：
 
 ```powershell

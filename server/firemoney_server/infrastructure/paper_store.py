@@ -103,6 +103,7 @@ class PaperTradeStore:
                 risk_note="已进入下一交易日，若继续跌破止损可模拟卖出。",
                 exit_plan=position.exit_plan,
                 mainline_continuity=position.mainline_continuity,
+                peak_price=position.peak_price,
             )
             for position in account.positions
         )
@@ -182,6 +183,7 @@ class PaperTradeStore:
             ),
             exit_plan=candidate.exit_plan,
             mainline_continuity=candidate.mainline_continuity,
+            peak_price=candidate.latest_price,
         )
         account = PaperAccount(
             account_id=account.account_id,
@@ -269,6 +271,7 @@ class PaperTradeStore:
                 risk_note="跌破止损但受 T+1 约束，次日仍弱再模拟卖出。",
                 exit_plan=position.exit_plan,
                 mainline_continuity=candidate.mainline_continuity or position.mainline_continuity,
+                peak_price=position.peak_price,
             )
             account = PaperAccount(
                 account_id=account.account_id,
@@ -376,6 +379,7 @@ class PaperTradeStore:
             mainline_continuity=(
                 candidate.mainline_continuity or position.mainline_continuity
             ),
+            peak_price=position.peak_price,
         )
         return PaperAccount(
             account_id=account.account_id,
@@ -481,6 +485,7 @@ class PaperTradeStore:
                 risk_note="已过买入日，若继续跌破止损可模拟卖出。",
                 exit_plan=position.exit_plan,
                 mainline_continuity=position.mainline_continuity,
+                peak_price=position.peak_price,
             )
             for position in account.positions
         )
@@ -551,6 +556,7 @@ class PaperTradeStore:
                 closed_trades=account.closed_trades,
             )
         position = account.positions[0]
+        peak_price = max(position.peak_price or position.entry_price, latest_price)
         value = round(position.quantity * latest_price, 2)
         pnl = round((latest_price - position.entry_price) * position.quantity, 2)
         pnl_pct = round((latest_price - position.entry_price) / position.entry_price, 4)
@@ -572,6 +578,7 @@ class PaperTradeStore:
             risk_note=position.risk_note,
             exit_plan=position.exit_plan,
             mainline_continuity=position.mainline_continuity,
+            peak_price=round(peak_price, 2),
         )
         return PaperAccount(
             account_id=account.account_id,
@@ -656,6 +663,7 @@ class PaperTradeStore:
                     mainline_continuity=self._continuity_from_payload(
                         item.get("mainline_continuity")
                     ),
+                    peak_price=float(item.get("peak_price", item["latest_price"])),
                 )
                 for item in payload.get("positions", ())
             ),

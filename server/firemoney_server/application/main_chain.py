@@ -244,6 +244,32 @@ class MainChainService:
                     trade_date=candidate.trade_date,
                 ),
             )
+        if position.exit_plan:
+            peak_price = position.peak_price or position.latest_price
+            strong_take_profit_price = position.entry_price * (
+                1 + position.exit_plan.strong_take_profit_pct
+            )
+            trailing_stop_price = round(
+                peak_price * (1 - position.exit_plan.trailing_stop_pct),
+                2,
+            )
+            if (
+                peak_price >= strong_take_profit_price
+                and candidate.latest_price <= trailing_stop_price
+            ):
+                return self._paper_store.exit_position(
+                    candidate,
+                    exit_reason="trailing_take_profit",
+                    message=(
+                        f"强势涨幅已到 {position.exit_plan.strong_take_profit_pct:.0%}，"
+                        f"回撤触发 {position.exit_plan.trailing_stop_pct:.0%} 保护，T+1 已到，模拟止盈。"
+                    ),
+                    event_type=OneToTwoEventType.TAKE_PROFIT,
+                    holding_trade_days=self._holding_trade_days(
+                        opened_at=position.opened_at,
+                        trade_date=candidate.trade_date,
+                    ),
+                )
         if (
             position.exit_plan
             and position.unrealized_pnl_pct >= position.exit_plan.first_take_profit_pct
@@ -1350,6 +1376,7 @@ class MainChainService:
             and settings.initial_cash > 0
             and 0 < settings.max_position_pct <= 1
             and settings.max_daily_trades >= 1
+            and 0 <= settings.min_confirm_open_pct <= settings.max_confirm_open_pct < 0.095
         )
         return OneToTwoDoctorCheck(
             check_id="strategy_config",
@@ -1359,7 +1386,9 @@ class MainChainService:
                 f"min_score={settings.min_score:g}, "
                 f"initial_cash={settings.initial_cash:.2f}, "
                 f"max_position_pct={settings.max_position_pct:.0%}, "
-                f"max_daily_trades={settings.max_daily_trades}"
+                f"max_daily_trades={settings.max_daily_trades}, "
+                f"confirm_open={settings.min_confirm_open_pct:.0%}-"
+                f"{settings.max_confirm_open_pct:.0%}"
             ),
             next_action=(
                 "配置有效，继续保持单一主线首板主线。"

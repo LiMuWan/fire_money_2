@@ -33,6 +33,14 @@ TENCENT_KLINE_URL = "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/newfqkl
 MAINBOARD_PREFIXES = ("000", "001", "002", "003", "600", "601", "603", "605")
 LIMIT_UP_THRESHOLD = 0.095
 SECOND_BOARD_TOUCH_THRESHOLD = 0.095
+DEFAULT_POSITION_PCT = 0.08
+DEFAULT_STOP_LOSS_PCT = 0.05
+DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.08
+DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.15
+DEFAULT_TRAILING_STOP_PCT = 0.06
+DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.03
+DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
+DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
 
 
 @dataclass(frozen=True)
@@ -76,6 +84,25 @@ class Match:
     buy_day_positive: bool
 
 
+@dataclass(frozen=True)
+class SimulatedTrade:
+    symbol: str
+    name: str
+    first_board_date: str
+    entry_date: str
+    exit_date: str
+    entry_price: float
+    exit_price: float
+    return_pct: float
+    r_multiple: float
+    holding_trade_days: int
+    exit_reason: str
+    score: float
+    position_label: str
+    second_open_pct: float
+    estimated_turnover_amount: float
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a daily-bar research backtest for the FireMoney one-to-two strategy."
@@ -92,6 +119,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--recent-gain-block-pct", type=float, default=0.45)
     parser.add_argument("--high-deviation-block-pct", type=float, default=0.25)
     parser.add_argument("--near-pressure-pct", type=float, default=0.05)
+    parser.add_argument("--min-confirm-open-pct", type=float, default=0.0)
+    parser.add_argument("--max-confirm-open-pct", type=float, default=0.07)
+    parser.add_argument("--position-pct", type=float, default=DEFAULT_POSITION_PCT)
+    parser.add_argument("--stop-loss-pct", type=float, default=DEFAULT_STOP_LOSS_PCT)
+    parser.add_argument(
+        "--first-take-profit-pct",
+        type=float,
+        default=DEFAULT_FIRST_TAKE_PROFIT_PCT,
+    )
+    parser.add_argument(
+        "--strong-take-profit-pct",
+        type=float,
+        default=DEFAULT_STRONG_TAKE_PROFIT_PCT,
+    )
+    parser.add_argument(
+        "--trailing-stop-pct",
+        type=float,
+        default=DEFAULT_TRAILING_STOP_PCT,
+    )
+    parser.add_argument(
+        "--discipline-exit-min-gain-pct",
+        type=float,
+        default=DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT,
+    )
+    parser.add_argument(
+        "--max-holding-trade-days",
+        type=int,
+        default=DEFAULT_MAX_HOLDING_TRADE_DAYS,
+    )
+    parser.add_argument(
+        "--max-simulation-trade-days",
+        type=int,
+        default=DEFAULT_MAX_SIMULATION_TRADE_DAYS,
+    )
     parser.add_argument("--sample-preview", type=int, default=30)
     return parser.parse_args()
 
@@ -142,6 +203,8 @@ def main() -> int:
                 recent_gain_block_pct=args.recent_gain_block_pct,
                 high_deviation_block_pct=args.high_deviation_block_pct,
                 near_pressure_pct=args.near_pressure_pct,
+                min_confirm_open_pct=args.min_confirm_open_pct,
+                max_confirm_open_pct=args.max_confirm_open_pct,
             )
         )
 
@@ -155,7 +218,18 @@ def main() -> int:
         failed_symbols=failed[:50],
         basic_matches=matches,
         filtered_matches=filtered,
+        histories=histories,
         min_score=args.min_score,
+        min_confirm_open_pct=args.min_confirm_open_pct,
+        max_confirm_open_pct=args.max_confirm_open_pct,
+        position_pct=args.position_pct,
+        stop_loss_pct=args.stop_loss_pct,
+        first_take_profit_pct=args.first_take_profit_pct,
+        strong_take_profit_pct=args.strong_take_profit_pct,
+        trailing_stop_pct=args.trailing_stop_pct,
+        discipline_exit_min_gain_pct=args.discipline_exit_min_gain_pct,
+        max_holding_trade_days=args.max_holding_trade_days,
+        max_simulation_trade_days=args.max_simulation_trade_days,
         sample_preview=args.sample_preview,
     )
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -387,6 +461,8 @@ def analyze_symbol(
     recent_gain_block_pct: float,
     high_deviation_block_pct: float,
     near_pressure_pct: float,
+    min_confirm_open_pct: float,
+    max_confirm_open_pct: float,
 ) -> list[Match]:
     result: list[Match] = []
     if len(bars) < 65:
@@ -420,6 +496,8 @@ def analyze_symbol(
             recent_gain_block_pct=recent_gain_block_pct,
             high_deviation_block_pct=high_deviation_block_pct,
             near_pressure_pct=near_pressure_pct,
+            min_confirm_open_pct=min_confirm_open_pct,
+            max_confirm_open_pct=max_confirm_open_pct,
         )
         result.append(match)
     return result
@@ -435,6 +513,8 @@ def build_match(
     recent_gain_block_pct: float,
     high_deviation_block_pct: float,
     near_pressure_pct: float,
+    min_confirm_open_pct: float,
+    max_confirm_open_pct: float,
 ) -> Match:
     current = bars[index]
     previous = bars[index - 1]
@@ -498,6 +578,10 @@ def build_match(
     blockers: list[str] = []
     if estimated_turnover_amount < min_turnover_amount:
         blockers.append("turnover_too_low")
+    if second_open_pct < min_confirm_open_pct:
+        blockers.append("second_day_not_red_open")
+    if second_open_pct > max_confirm_open_pct:
+        blockers.append("second_day_open_too_high")
     if recent_gain >= recent_gain_block_pct:
         blockers.append("recent_gain_too_high")
     if ma20_deviation >= high_deviation_block_pct:
@@ -600,6 +684,212 @@ def score_liquidity(estimated_turnover_amount: float, min_turnover_amount: float
     return 0.0
 
 
+def build_product_portfolio(
+    filtered_matches: list[Match],
+    histories: dict[str, list[DailyBar]],
+    position_pct: float,
+    stop_loss_pct: float,
+    first_take_profit_pct: float,
+    strong_take_profit_pct: float,
+    trailing_stop_pct: float,
+    discipline_exit_min_gain_pct: float,
+    max_holding_trade_days: int,
+    max_simulation_trade_days: int,
+) -> dict[str, Any]:
+    simulated = [
+        trade
+        for trade in (
+            simulate_trade(
+                match=item,
+                histories=histories,
+                stop_loss_pct=stop_loss_pct,
+                first_take_profit_pct=first_take_profit_pct,
+                strong_take_profit_pct=strong_take_profit_pct,
+                trailing_stop_pct=trailing_stop_pct,
+                discipline_exit_min_gain_pct=discipline_exit_min_gain_pct,
+                max_holding_trade_days=max_holding_trade_days,
+                max_simulation_trade_days=max_simulation_trade_days,
+            )
+            for item in filtered_matches
+        )
+        if trade is not None
+    ]
+    daily_top_matches = select_daily_top_matches(filtered_matches)
+    daily_top_trades = [
+        trade
+        for trade in (
+            simulate_trade(
+                match=item,
+                histories=histories,
+                stop_loss_pct=stop_loss_pct,
+                first_take_profit_pct=first_take_profit_pct,
+                strong_take_profit_pct=strong_take_profit_pct,
+                trailing_stop_pct=trailing_stop_pct,
+                discipline_exit_min_gain_pct=discipline_exit_min_gain_pct,
+                max_holding_trade_days=max_holding_trade_days,
+                max_simulation_trade_days=max_simulation_trade_days,
+            )
+            for item in daily_top_matches
+        )
+        if trade is not None
+    ]
+    one_position_trades = select_one_position_trades(daily_top_trades)
+    return {
+        "selection_rule": (
+            "候选先过硬拦截；只在次日红盘开且不高于 7% 时确认；"
+            "每天按当时可见的 score/open/position/turnover 排名最多买 1 笔；"
+            "已有持仓时不再开新仓，严格 T+1。"
+        ),
+        "ranking_no_future_fields": True,
+        "position_pct": position_pct,
+        "exit_discipline": {
+            "stop_loss_pct": stop_loss_pct,
+            "first_take_profit_pct": first_take_profit_pct,
+            "strong_take_profit_pct": strong_take_profit_pct,
+            "trailing_stop_pct": trailing_stop_pct,
+            "discipline_exit_min_gain_pct": discipline_exit_min_gain_pct,
+            "max_holding_trade_days": max_holding_trade_days,
+        },
+        "all_filtered_candidates": summarize_trades(simulated, position_pct),
+        "daily_top_one_trade_per_day": summarize_trades(daily_top_trades, position_pct),
+        "one_position_no_overlap": summarize_trades(one_position_trades, position_pct),
+        "yearly_one_position_no_overlap": summarize_trades_by_year(
+            one_position_trades,
+            position_pct,
+        ),
+        "position_labels_one_position_no_overlap": summarize_trades_by_label(
+            one_position_trades,
+            position_pct,
+        ),
+        "exit_reasons_one_position_no_overlap": summarize_trade_exit_reasons(
+            one_position_trades
+        ),
+    }
+
+
+def simulate_trade(
+    match: Match,
+    histories: dict[str, list[DailyBar]],
+    stop_loss_pct: float,
+    first_take_profit_pct: float,
+    strong_take_profit_pct: float,
+    trailing_stop_pct: float,
+    discipline_exit_min_gain_pct: float,
+    max_holding_trade_days: int,
+    max_simulation_trade_days: int,
+) -> SimulatedTrade | None:
+    bars = histories.get(match.symbol)
+    if not bars:
+        return None
+    by_date = {item.trade_date: index for index, item in enumerate(bars)}
+    entry_index = by_date.get(match.second_day_date)
+    if entry_index is None:
+        return None
+    entry_bar = bars[entry_index]
+    entry_price = entry_bar.open
+    if entry_price <= 0:
+        return None
+
+    stop_price = entry_price * (1 - stop_loss_pct)
+    first_take_profit_price = entry_price * (1 + first_take_profit_pct)
+    strong_take_profit_price = entry_price * (1 + strong_take_profit_pct)
+    last_index = min(entry_index + max_simulation_trade_days, len(bars) - 1)
+    exit_price = entry_bar.close
+    exit_date = entry_bar.trade_date
+    exit_reason = "same_day_close_fallback"
+    holding_trade_days = 0
+    peak_price = entry_price
+
+    for index in range(entry_index, last_index + 1):
+        bar = bars[index]
+        holding_trade_days = index - entry_index
+        peak_price = max(peak_price, bar.high)
+        if holding_trade_days == 0:
+            exit_price = bar.close
+            exit_date = bar.trade_date
+            continue
+        if bar.low <= stop_price:
+            exit_price = stop_price
+            exit_date = bar.trade_date
+            exit_reason = "stop_loss_t1"
+            break
+        trailing_stop_price = peak_price * (1 - trailing_stop_pct)
+        if peak_price >= strong_take_profit_price and bar.low <= trailing_stop_price:
+            exit_price = trailing_stop_price
+            exit_date = bar.trade_date
+            exit_reason = "trailing_take_profit"
+            break
+        if bar.high >= first_take_profit_price:
+            exit_price = first_take_profit_price
+            exit_date = bar.trade_date
+            exit_reason = "take_profit_first_target"
+            break
+        if (
+            holding_trade_days >= max_holding_trade_days
+            and pct_change(bar.close, entry_price) < discipline_exit_min_gain_pct
+        ):
+            exit_price = bar.close
+            exit_date = bar.trade_date
+            exit_reason = "discipline_weak_after_2_days"
+            break
+        exit_price = bar.close
+        exit_date = bar.trade_date
+        exit_reason = "max_simulation_close"
+
+    return_pct = pct_change(exit_price, entry_price)
+    risk_pct = stop_loss_pct if stop_loss_pct > 0 else 1.0
+    return SimulatedTrade(
+        symbol=match.symbol,
+        name=match.name,
+        first_board_date=match.first_board_date,
+        entry_date=match.second_day_date,
+        exit_date=exit_date,
+        entry_price=round(entry_price, 2),
+        exit_price=round(exit_price, 2),
+        return_pct=round(return_pct, 4),
+        r_multiple=round(return_pct / risk_pct, 4),
+        holding_trade_days=holding_trade_days,
+        exit_reason=exit_reason,
+        score=match.score,
+        position_label=match.position_label,
+        second_open_pct=match.second_open_pct,
+        estimated_turnover_amount=match.estimated_turnover_amount,
+    )
+
+
+def select_daily_top_matches(matches: list[Match]) -> list[Match]:
+    by_date: dict[str, list[Match]] = {}
+    for item in matches:
+        by_date.setdefault(item.second_day_date, []).append(item)
+    return [
+        sorted(items, key=selection_rank_key, reverse=True)[0]
+        for _, items in sorted(by_date.items())
+    ]
+
+
+def selection_rank_key(match: Match) -> tuple[float, int, int, float, float]:
+    open_confirm_bonus = 1 if 0 <= match.second_open_pct <= 0.07 else 0
+    position_bonus = 1 if match.position_label in {"low_breakout", "low_position"} else 0
+    return (
+        match.score,
+        open_confirm_bonus,
+        position_bonus,
+        match.second_open_pct,
+        match.estimated_turnover_amount,
+    )
+
+
+def select_one_position_trades(trades: list[SimulatedTrade]) -> list[SimulatedTrade]:
+    selected: list[SimulatedTrade] = []
+    next_available_date = ""
+    for trade in sorted(trades, key=lambda item: (item.entry_date, item.symbol)):
+        if next_available_date and trade.entry_date <= next_available_date:
+            continue
+        selected.append(trade)
+        next_available_date = trade.exit_date
+    return selected
+
+
 def build_result(
     start_date: str,
     end_date: str,
@@ -609,7 +899,18 @@ def build_result(
     failed_symbols: list[str],
     basic_matches: list[Match],
     filtered_matches: list[Match],
+    histories: dict[str, list[DailyBar]],
     min_score: float,
+    min_confirm_open_pct: float,
+    max_confirm_open_pct: float,
+    position_pct: float,
+    stop_loss_pct: float,
+    first_take_profit_pct: float,
+    strong_take_profit_pct: float,
+    trailing_stop_pct: float,
+    discipline_exit_min_gain_pct: float,
+    max_holding_trade_days: int,
+    max_simulation_trade_days: int,
     sample_preview: int,
 ) -> dict[str, Any]:
     return {
@@ -625,6 +926,14 @@ def build_result(
                 "turnover amount is estimated from Tencent volume_hands * 100 * close",
             ],
             "min_score": min_score,
+            "confirm_open_window": {
+                "min_pct": min_confirm_open_pct,
+                "max_pct": max_confirm_open_pct,
+            },
+            "product_reliability_note": (
+                "The reliability decision should use product_portfolio.one_position_no_overlap, "
+                "not all filtered candidates."
+            ),
         },
         "data_quality": {
             "universe_count": universe_count,
@@ -639,6 +948,18 @@ def build_result(
             "filtered_strategy_candidates": summarize_by_year(filtered_matches),
         },
         "position_labels": summarize_by_label(filtered_matches),
+        "product_portfolio": build_product_portfolio(
+            filtered_matches=filtered_matches,
+            histories=histories,
+            position_pct=position_pct,
+            stop_loss_pct=stop_loss_pct,
+            first_take_profit_pct=first_take_profit_pct,
+            strong_take_profit_pct=strong_take_profit_pct,
+            trailing_stop_pct=trailing_stop_pct,
+            discipline_exit_min_gain_pct=discipline_exit_min_gain_pct,
+            max_holding_trade_days=max_holding_trade_days,
+            max_simulation_trade_days=max_simulation_trade_days,
+        ),
         "blockers": summarize_blockers(basic_matches),
         "recent_samples": [asdict(item) for item in filtered_matches[-sample_preview:]],
     }
@@ -705,9 +1026,96 @@ def summarize_blockers(matches: list[Match]) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
+def summarize_trades(trades: list[SimulatedTrade], position_pct: float) -> dict[str, Any]:
+    if not trades:
+        return {
+            "sample_count": 0,
+            "win_count": 0,
+            "win_rate": None,
+            "average_return_pct": None,
+            "median_return_pct": None,
+            "average_r": None,
+            "average_win_pct": None,
+            "average_loss_pct": None,
+            "payoff_ratio": None,
+            "position_weighted_return_pct": None,
+            "max_drawdown_pct": None,
+        }
+    wins = [item for item in trades if item.return_pct > 0]
+    losses = [item for item in trades if item.return_pct <= 0]
+    avg_win = mean(item.return_pct for item in wins) if wins else 0.0
+    avg_loss = mean(item.return_pct for item in losses) if losses else 0.0
+    payoff = abs(avg_win / avg_loss) if avg_loss < 0 else None
+    equity_curve = build_equity_curve(trades, position_pct)
+    return {
+        "sample_count": len(trades),
+        "win_count": len(wins),
+        "win_rate": ratio(len(wins), len(trades)),
+        "average_return_pct": round(mean(item.return_pct for item in trades), 4),
+        "median_return_pct": round(median(item.return_pct for item in trades), 4),
+        "average_r": round(mean(item.r_multiple for item in trades), 4),
+        "average_win_pct": round(avg_win, 4) if wins else None,
+        "average_loss_pct": round(avg_loss, 4) if losses else None,
+        "payoff_ratio": round(payoff, 4) if payoff is not None else None,
+        "position_weighted_return_pct": equity_curve["total_return_pct"],
+        "max_drawdown_pct": equity_curve["max_drawdown_pct"],
+    }
+
+
+def build_equity_curve(trades: list[SimulatedTrade], position_pct: float) -> dict[str, float]:
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    for trade in sorted(trades, key=lambda item: (item.exit_date, item.entry_date, item.symbol)):
+        equity *= 1 + trade.return_pct * position_pct
+        peak = max(peak, equity)
+        drawdown = (equity - peak) / peak if peak else 0.0
+        max_drawdown = min(max_drawdown, drawdown)
+    return {
+        "total_return_pct": round(equity - 1, 4),
+        "max_drawdown_pct": round(max_drawdown, 4),
+    }
+
+
+def summarize_trades_by_year(
+    trades: list[SimulatedTrade],
+    position_pct: float,
+) -> dict[str, dict[str, Any]]:
+    years = sorted({item.entry_date[:4] for item in trades})
+    return {
+        year: summarize_trades(
+            [item for item in trades if item.entry_date.startswith(year)],
+            position_pct,
+        )
+        for year in years
+    }
+
+
+def summarize_trades_by_label(
+    trades: list[SimulatedTrade],
+    position_pct: float,
+) -> dict[str, dict[str, Any]]:
+    labels = sorted({item.position_label for item in trades})
+    return {
+        label: summarize_trades(
+            [item for item in trades if item.position_label == label],
+            position_pct,
+        )
+        for label in labels
+    }
+
+
+def summarize_trade_exit_reasons(trades: list[SimulatedTrade]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in trades:
+        counts[item.exit_reason] = counts.get(item.exit_reason, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
 def print_summary(result: dict[str, Any]) -> None:
     basic = result["basic_first_board"]
     filtered = result["filtered_strategy_candidates"]
+    product = result["product_portfolio"]["one_position_no_overlap"]
     print("summary:", flush=True)
     print(
         "  basic samples={sample_count} close_win={second_board_close_win_rate} "
@@ -723,6 +1131,23 @@ def print_summary(result: dict[str, Any]) -> None:
     for year, stats in result["yearly"]["filtered_strategy_candidates"].items():
         print(
             "    {year}: samples={sample_count} close_win={second_board_close_win_rate}".format(
+                year=year,
+                **stats,
+            ),
+            flush=True,
+        )
+    print(
+        "  product one-position trades={sample_count} win={win_rate} avg_return={average_return_pct} "
+        "portfolio_return={position_weighted_return_pct} max_dd={max_drawdown_pct}".format(
+            **product
+        ),
+        flush=True,
+    )
+    print("  yearly product one-position:", flush=True)
+    for year, stats in result["product_portfolio"]["yearly_one_position_no_overlap"].items():
+        print(
+            "    {year}: trades={sample_count} win={win_rate} avg_return={average_return_pct} "
+            "portfolio_return={position_weighted_return_pct}".format(
                 year=year,
                 **stats,
             ),

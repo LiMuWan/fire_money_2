@@ -24,6 +24,8 @@ class OneToTwoStrategySettings:
     max_daily_trades: int
     initial_cash: float
     stop_loss_pct: float
+    min_confirm_open_pct: float
+    max_confirm_open_pct: float
     min_turnover_amount: float
     market_temperature_floor: int
     high_deviation_block_pct: float
@@ -68,6 +70,8 @@ def load_one_to_two_settings(
         max_daily_trades=int(parameters["max_daily_trades"]),
         initial_cash=float(parameters["initial_cash"]),
         stop_loss_pct=float(parameters["stop_loss_pct"]),
+        min_confirm_open_pct=float(parameters.get("min_confirm_open_pct", 0.0)),
+        max_confirm_open_pct=float(parameters.get("max_confirm_open_pct", 0.07)),
         min_turnover_amount=float(parameters["min_turnover_amount"]),
         market_temperature_floor=int(parameters["market_temperature_floor"]),
         high_deviation_block_pct=float(parameters["high_deviation_block_pct"]),

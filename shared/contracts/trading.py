@@ -154,6 +154,7 @@ class PaperPosition:
     risk_note: str
     exit_plan: OneToTwoExitPlan | None = None
     mainline_continuity: MainlineContinuity | None = None
+    peak_price: float = 0.0
 
 
 @dataclass(frozen=True)

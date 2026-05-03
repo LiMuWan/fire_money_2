@@ -9,6 +9,8 @@
     "max_daily_trades": 1,
     "initial_cash": 100000,
     "stop_loss_pct": 0.05,
+    "min_confirm_open_pct": 0.0,
+    "max_confirm_open_pct": 0.07,
     "min_turnover_amount": 80000000,
     "market_temperature_floor": 50,
     "high_deviation_block_pct": 0.25,
