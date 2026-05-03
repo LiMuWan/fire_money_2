@@ -520,8 +520,8 @@ class OneToTwoPolicy:
         )
 
     def _format_pct(self, value: float) -> str:
-        text = f"{value:.1%}"
-        return text.replace(".0%", "%")
+        text = f"{value * 100:.2f}".rstrip("0").rstrip(".")
+        return f"{text}%"
 
     def _round_price_up(self, value: float) -> float:
         return math.ceil(value * 100 - 1e-9) / 100

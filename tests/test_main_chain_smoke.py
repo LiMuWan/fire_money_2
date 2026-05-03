@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import os
 import subprocess
 import sys
@@ -883,18 +884,18 @@ class MainChainSmokeTest(unittest.TestCase):
             position = open_trigger.account.positions[0]
             self.assertIsNotNone(candidate.exit_plan)
             self.assertIsNotNone(candidate.mainline_continuity)
-            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.08)
+            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.0825)
             self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.09)
             self.assertGreater(candidate.exit_plan.stop_loss_pct, 0)
             self.assertLessEqual(candidate.exit_plan.stop_loss_pct, 0.0425)
             self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.005)
-            self.assertIn("盈利 8%", candidate.exit_plan.summary)
+            self.assertIn("盈利 8.25%", candidate.exit_plan.summary)
             self.assertIn("9%", candidate.exit_plan.summary)
             self.assertIn("0.5%", candidate.exit_plan.summary)
             self.assertGreaterEqual(candidate.mainline_continuity.score, 45)
             self.assertIsNotNone(position.exit_plan)
             self.assertIsNotNone(position.mainline_continuity)
-            self.assertIn("盈利 8%", position.risk_note)
+            self.assertIn("盈利 8.25%", position.risk_note)
 
     def test_watch_phases_do_not_buy_before_open_trigger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -940,6 +941,7 @@ class MainChainSmokeTest(unittest.TestCase):
             profit_row = OneToTwoMarketRow(
                 **(profit_row.__dict__ | {"latest_price": 11.38, "theme": "AI端侧主线"})
             )
+            profit_row = replace(profit_row, latest_price=11.39)
             service = _build_service(
                 root,
                 market_data_provider=StaticOneToTwoProvider((profit_row,)),
@@ -1893,7 +1895,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsNotNone(report.trade)
             self.assertEqual(report.candidate.symbol, "600001")
             self.assertEqual(report.trade.entry_date, "2026-04-30")
-            self.assertEqual(report.trade.exit_reason, "take_profit_first_target")
+            self.assertEqual(report.trade.exit_reason, "trailing_take_profit")
             self.assertGreater(report.trade.realized_pnl_pct, 0)
             self.assertGreater(report.trade.risk_reward_ratio, 1)
             self.assertTrue(
@@ -1903,7 +1905,60 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(checks["no_future_selection"].status, "ready")
             self.assertEqual(checks["price_bars"].status, "ready")
             self.assertEqual(checks["daily_bar_sequence"].status, "warning")
-            self.assertEqual(payload["trade"]["exit_reason"], "take_profit_first_target")
+            self.assertEqual(payload["trade"]["exit_reason"], "trailing_take_profit")
+
+    def test_research_backtest_rank_ignores_future_outcome_fields(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "firemoney_research_backtest_for_test",
+            Path("tools/research_one_to_two_backtest.py"),
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+
+        visible_fields = {
+            "symbol": "600001",
+            "name": "主线首板候选",
+            "first_board_date": "2026-04-29",
+            "second_day_date": "2026-04-30",
+            "first_board_pct": 0.1,
+            "second_open_pct": 0.03,
+            "score": 87.0,
+            "position_label": "breakout",
+            "estimated_turnover_amount": 300000000.0,
+            "recent_gain_pct": 0.12,
+            "ma20_deviation_pct": 0.14,
+            "pressure_distance_pct": None,
+            "first_board_count": 60,
+            "ready_candidate_count": 8,
+            "second_day_one_word": False,
+            "blockers": (),
+        }
+        strong_future = module.Match(
+            **visible_fields,
+            second_close_pct=0.1,
+            second_high_pct=0.1,
+            buy_open_to_close_pct=0.068,
+            second_board_closed=True,
+            second_board_touched=True,
+            buy_day_positive=True,
+        )
+        weak_future = module.Match(
+            **visible_fields,
+            second_close_pct=-0.06,
+            second_high_pct=0.02,
+            buy_open_to_close_pct=-0.087,
+            second_board_closed=False,
+            second_board_touched=False,
+            buy_day_positive=False,
+        )
+
+        self.assertEqual(
+            module.selection_rank_key(strong_future),
+            module.selection_rank_key(weak_future),
+        )
 
     def test_historical_replay_cli_brief_prints_profit_loss_ratio(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2610,7 +2665,7 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.045)
         self.assertEqual(settings.min_confirm_open_pct, 0.0)
         self.assertEqual(settings.max_confirm_open_pct, 0.045)
-        self.assertEqual(settings.first_take_profit_pct, 0.08)
+        self.assertEqual(settings.first_take_profit_pct, 0.0825)
         self.assertEqual(settings.strong_take_profit_pct, 0.09)
         self.assertEqual(settings.stop_loss_pct, 0.0425)
         self.assertEqual(settings.trailing_stop_pct, 0.005)
@@ -2636,7 +2691,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("低位平台突破", html)
             self.assertIn("主线持续性", html)
             self.assertIn("卖点计划", html)
-            self.assertIn("盈利 8%", html)
+            self.assertIn("盈利 8.25%", html)
             self.assertIn("消息", html)
             self.assertIn("模拟盘与风险", html)
             self.assertIn("飞书通知", html)

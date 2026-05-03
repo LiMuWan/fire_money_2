@@ -281,7 +281,7 @@ class MainChainService:
                 candidate,
                 exit_reason="take_profit_first_target",
                 message=(
-                    f"浮盈达到 {position.exit_plan.first_take_profit_pct:.0%} "
+                    f"浮盈达到 {self._format_pct(position.exit_plan.first_take_profit_pct)} "
                     "第一止盈纪律，T+1 已到，模拟落袋。"
                 ),
                 event_type=OneToTwoEventType.TAKE_PROFIT,
@@ -1231,7 +1231,7 @@ class MainChainService:
                 label="规则版本",
                 status="ready",
                 detail=(
-                    "规则已固化为主线首板龙头候选、T+1、8% 第一止盈、4.25%/结构止损、"
+                    "规则已固化为主线首板龙头候选、T+1、8.25% 第一止盈、4.25%/结构止损、"
                     "9% 强势阈值后 0.5% 回撤保护、主线持续性衰减退出。"
                 ),
                 next_action="回测结果只对当前规则版本负责，改规则后必须重跑。",
@@ -1401,8 +1401,8 @@ class MainChainService:
         )
 
     def _format_pct(self, value: float) -> str:
-        text = f"{value:.1%}"
-        return text.replace(".0%", "%")
+        text = f"{value * 100:.2f}".rstrip("0").rstrip(".")
+        return f"{text}%"
 
     def _doctor_trading_day_check(
         self,
