@@ -513,8 +513,9 @@ class OneToTwoPolicy:
             max_holding_trade_days=self._settings.max_holding_trade_days,
             summary=(
                 f"亏损跌破 {stop_loss} 先预警、T+1 再卖；"
-                f"盈利 {self._format_pct(self._settings.first_take_profit_pct)} 后进入保护；"
-                f"达标后用 {self._format_pct(self._settings.trailing_stop_pct)} 回撤保护。"
+                f"盈利 {self._format_pct(self._settings.first_take_profit_pct)} 第一止盈；"
+                f"强势达到 {self._format_pct(self._settings.strong_take_profit_pct)} 后用 "
+                f"{self._format_pct(self._settings.trailing_stop_pct)} 回撤保护。"
             ),
         )
 
