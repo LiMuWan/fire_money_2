@@ -39,8 +39,8 @@ DEFAULT_MIN_TURNOVER_AMOUNT = 80_000_000.0
 DEFAULT_POSITION_PCT = 0.08
 DEFAULT_STOP_LOSS_PCT = 0.0425
 DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.0825
-DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.09
-DEFAULT_TRAILING_STOP_PCT = 0.005
+DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.085
+DEFAULT_TRAILING_STOP_PCT = 0.003
 DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.04
 DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
 DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
@@ -565,10 +565,7 @@ def build_match(
     second_open_pct = pct_change(next_bar.open, current.close)
     second_high_pct = pct_change(next_bar.high, current.close)
     buy_open_to_close_pct = pct_change(next_bar.close, next_bar.open)
-    second_day_one_word = (
-        second_open_pct >= LIMIT_UP_THRESHOLD
-        and pct_change(next_bar.low, current.close) >= LIMIT_UP_THRESHOLD
-    )
+    second_day_one_word = second_open_pct >= LIMIT_UP_THRESHOLD
 
     first_board_score = score_first_board(
         first_pct=first_pct,

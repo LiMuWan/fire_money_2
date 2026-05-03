@@ -885,13 +885,13 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsNotNone(candidate.exit_plan)
             self.assertIsNotNone(candidate.mainline_continuity)
             self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.0825)
-            self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.09)
+            self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.085)
             self.assertGreater(candidate.exit_plan.stop_loss_pct, 0)
             self.assertLessEqual(candidate.exit_plan.stop_loss_pct, 0.0425)
-            self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.005)
+            self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.003)
             self.assertIn("盈利 8.25%", candidate.exit_plan.summary)
-            self.assertIn("9%", candidate.exit_plan.summary)
-            self.assertIn("0.5%", candidate.exit_plan.summary)
+            self.assertIn("8.5%", candidate.exit_plan.summary)
+            self.assertIn("0.3%", candidate.exit_plan.summary)
             self.assertGreaterEqual(candidate.mainline_continuity.score, 45)
             self.assertIsNotNone(position.exit_plan)
             self.assertIsNotNone(position.mainline_continuity)
@@ -1908,15 +1908,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(payload["trade"]["exit_reason"], "trailing_take_profit")
 
     def test_research_backtest_rank_ignores_future_outcome_fields(self) -> None:
-        spec = importlib.util.spec_from_file_location(
-            "firemoney_research_backtest_for_test",
-            Path("tools/research_one_to_two_backtest.py"),
-        )
-        self.assertIsNotNone(spec)
-        self.assertIsNotNone(spec.loader)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+        module = self._load_research_backtest_module()
 
         visible_fields = {
             "symbol": "600001",
@@ -1959,6 +1951,46 @@ class MainChainSmokeTest(unittest.TestCase):
             module.selection_rank_key(strong_future),
             module.selection_rank_key(weak_future),
         )
+
+    def test_research_backtest_blocks_one_word_by_open_without_future_low(self) -> None:
+        module = self._load_research_backtest_module()
+        bars = [
+            module.DailyBar("2026-01-01", 8.0, 8.0, 8.1, 7.9, 10000)
+            for _ in range(70)
+        ]
+        bars[-3] = module.DailyBar("2026-04-28", 9.0, 9.0, 9.1, 8.9, 10000)
+        bars[-2] = module.DailyBar("2026-04-29", 9.0, 9.9, 9.9, 9.0, 30000)
+        bars[-1] = module.DailyBar("2026-04-30", 10.85, 10.3, 10.89, 10.0, 40000)
+        stock = module.StockMeta("600001", "主线首板候选", "2020-01-01")
+
+        match = module.build_match(
+            stock=stock,
+            bars=bars,
+            index=len(bars) - 2,
+            next_bar=bars[-1],
+            first_pct=0.1,
+            min_turnover_amount=1,
+            recent_gain_block_pct=0.45,
+            high_deviation_block_pct=1,
+            near_pressure_pct=0,
+            min_confirm_open_pct=0,
+            max_confirm_open_pct=0.2,
+        )
+
+        self.assertTrue(match.second_day_one_word)
+        self.assertIn("second_day_one_word_untradable", match.blockers)
+
+    def _load_research_backtest_module(self):
+        spec = importlib.util.spec_from_file_location(
+            "firemoney_research_backtest_for_test",
+            Path("tools/research_one_to_two_backtest.py"),
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
 
     def test_historical_replay_cli_brief_prints_profit_loss_ratio(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2666,9 +2698,9 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.min_confirm_open_pct, 0.0)
         self.assertEqual(settings.max_confirm_open_pct, 0.045)
         self.assertEqual(settings.first_take_profit_pct, 0.0825)
-        self.assertEqual(settings.strong_take_profit_pct, 0.09)
+        self.assertEqual(settings.strong_take_profit_pct, 0.085)
         self.assertEqual(settings.stop_loss_pct, 0.0425)
-        self.assertEqual(settings.trailing_stop_pct, 0.005)
+        self.assertEqual(settings.trailing_stop_pct, 0.003)
         self.assertEqual(settings.mainline_fade_score, 45)
         self.assertEqual(settings.min_low_breakout_first_board_count, 40)
         self.assertEqual(settings.min_low_breakout_ready_candidates, 6)
