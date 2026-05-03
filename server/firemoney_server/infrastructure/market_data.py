@@ -78,7 +78,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.18,
                 theme="AI端侧主线",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="600007",
@@ -106,7 +106,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.16,
                 theme="AI端侧主线",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="600008",
@@ -134,7 +134,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.18,
                 theme="AI端侧主线",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="600009",
@@ -162,7 +162,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.15,
                 theme="AI端侧主线",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="600010",
@@ -190,7 +190,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.2,
                 theme="AI端侧主线",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="600011",
@@ -218,7 +218,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.22,
                 theme="AI端侧主线",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="600002",
@@ -246,7 +246,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.52,
                 theme="高位加速",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="300003",
@@ -274,7 +274,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.16,
                 theme="非主板",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
             OneToTwoMarketRow(
                 symbol="600004",
@@ -302,7 +302,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.14,
                 theme="同题材跟风",
                 market_temperature=74,
-                first_board_count=42,
+                first_board_count=45,
             ),
         )
 

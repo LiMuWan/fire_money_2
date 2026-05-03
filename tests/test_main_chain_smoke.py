@@ -2702,7 +2702,7 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.stop_loss_pct, 0.0425)
         self.assertEqual(settings.trailing_stop_pct, 0.003)
         self.assertEqual(settings.mainline_fade_score, 45)
-        self.assertEqual(settings.min_low_breakout_first_board_count, 40)
+        self.assertEqual(settings.min_low_breakout_first_board_count, 45)
         self.assertEqual(settings.min_low_breakout_ready_candidates, 6)
         self.assertIn("创业板", settings.excluded_boards)
 
