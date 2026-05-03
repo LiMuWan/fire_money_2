@@ -36,6 +36,7 @@ def main() -> None:
             "eod",
             "backtest",
             "backtest-audit",
+            "replay",
             "stability",
             "doctor",
             "beta-check",
@@ -53,6 +54,12 @@ def main() -> None:
     parser.add_argument("--start-date", default=None)
     parser.add_argument("--end-date", default=None)
     parser.add_argument("--max-trade-days", type=int, default=30)
+    parser.add_argument(
+        "--holding-days",
+        type=int,
+        default=5,
+        help="Maximum future trading days used by replay mode for exit accounting.",
+    )
     parser.add_argument("--at", default=None, help="schedule mode clock time, HH:MM.")
     parser.add_argument("--paper-store", default=None, help="Optional paper ledger path.")
     parser.add_argument(
@@ -185,6 +192,11 @@ def main() -> None:
             end_date=args.end_date or args.trade_date,
             max_trade_days=args.max_trade_days,
         )
+    elif args.mode == "replay":
+        result = adapter.run_one_to_two_historical_replay(
+            as_of_date=args.trade_date,
+            holding_days=args.holding_days,
+        )
     elif args.mode == "stability":
         result = adapter.build_one_to_two_stability_report()
     elif args.mode == "doctor":
@@ -310,6 +322,9 @@ def main() -> None:
     if args.brief and args.mode == "backtest-audit":
         print(_format_backtest_audit_brief(result))
         return
+    if args.brief and args.mode == "replay":
+        print(_format_historical_replay_brief(result))
+        return
     print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
 
 
@@ -358,6 +373,51 @@ def _format_backtest_audit_brief(report) -> str:
     lines.append("局限：")
     lines.extend(f"- {item}" for item in report.limitations)
     lines.append(f"下一步：{report.recommended_next_action}")
+    return "\n".join(lines)
+
+
+def _format_historical_replay_brief(report) -> str:
+    lines = [
+        f"FireMoney 历史逐日回放：{report.status}",
+        f"介入日：{report.entry_date}",
+        f"数据模式：{report.data_mode}",
+    ]
+    if report.candidate:
+        lines.append(
+            f"候选：{report.candidate.name}({report.candidate.symbol}) "
+            f"分数 {report.candidate.score}，位置 {report.candidate.position_profile.label}"
+        )
+        lines.append(
+            f"买入参考：{report.candidate.entry_price}，止损：{report.candidate.stop_loss}"
+        )
+    if report.trade:
+        lines.extend(
+            [
+                (
+                    f"卖出：{report.trade.exit_date} {report.trade.exit_price} "
+                    f"原因 {report.trade.exit_reason}"
+                ),
+                (
+                    f"收益：{report.trade.realized_pnl_pct:.2%}，"
+                    f"盈亏比：{report.trade.risk_reward_ratio:.2f}R，"
+                    f"盈亏金额：{report.trade.realized_pnl:.2f}"
+                ),
+                (
+                    f"最大顺风：{report.trade.max_favorable_pct:.2%}，"
+                    f"最大逆风：{report.trade.max_adverse_pct:.2%}"
+                ),
+            ]
+        )
+    else:
+        lines.append("交易：未生成")
+    lines.append("无未来函数说明：")
+    lines.extend(f"- {item}" for item in report.no_future_leakage_notes)
+    lines.append("数据质量：")
+    lines.extend(
+        f"- {check.label}：{check.status}，{check.detail}"
+        for check in report.quality_checks
+    )
+    lines.append(f"下一步：{report.next_action}")
     return "\n".join(lines)
 
 

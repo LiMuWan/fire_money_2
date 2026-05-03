@@ -26,6 +26,14 @@ python -m client.desktop.firemoney_client.one_to_two_cli backtest-audit --brief 
 
 `backtest-audit` 会按“数据准备 -> 策略规则 -> 执行回测 -> 准入结论”输出结果。少于 30 笔闭环样本只允许观察；AkShare 免费数据暂不等同专业 Point-in-Time 数据，不能据此宣称长期稳定盈利。
 
+单点检查某个历史交易日“当时介入、后面盈亏比”：
+
+```powershell
+python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-date 2026-04-24 --holding-days 3
+```
+
+`replay` 只用指定交易日当时的候选池做选股，后续日线只用于模拟 T+1 之后的卖点和盈亏比。它适合快速核对一笔样本的买卖纪律，但不能替代 30/50/100 笔稳定性统计。
+
 当前上线目标只到模拟盘 Beta：接真实行情、发飞书通知、沉淀一进二样本；不连接真实账户，不自动下单。
 
 ## 必过项

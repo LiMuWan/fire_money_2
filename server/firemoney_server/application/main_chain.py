@@ -9,7 +9,10 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 from urllib.parse import urlparse
 
-from server.firemoney_server.domain.one_to_two import OneToTwoPolicy
+from server.firemoney_server.domain.one_to_two import (
+    HistoricalPriceBar,
+    OneToTwoPolicy,
+)
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
 from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
@@ -41,6 +44,8 @@ from shared.contracts import (
     OneToTwoDoctorReport,
     OneToTwoEventType,
     OneToTwoEndOfDayReview,
+    OneToTwoHistoricalReplayReport,
+    OneToTwoHistoricalReplayTrade,
     OneToTwoMorningReport,
     OneToTwoRecentSample,
     OneToTwoStabilityReport,
@@ -751,6 +756,359 @@ class MainChainService:
                 if status == "warning"
                 else "进入 beta-check 和 beta-start，只做模拟盘实盘跟踪验证。"
             ),
+        )
+
+    def run_one_to_two_historical_replay(
+        self,
+        as_of_date: str | None = None,
+        holding_days: int = 5,
+    ) -> OneToTwoHistoricalReplayReport:
+        """Replay one historical decision without using future bars for selection."""
+
+        trade_context = self._trading_calendar.resolve(
+            as_of_date or self._default_trade_date()
+        )
+        entry_date = trade_context.trade_date
+        data_mode = self._market_data_provider.__class__.__name__
+        no_future_notes = (
+            f"选股只读取 {entry_date} 当时的一进二候选池和策略配置。",
+            "后续日线只用于模拟卖点、盈亏和盈亏比，不参与候选评分。",
+            "日线无法还原盘中先后顺序，同日触发止损和止盈时按保守止损优先。",
+        )
+        quality_checks: list[BacktestDataQualityCheck] = [
+            BacktestDataQualityCheck(
+                check_id="no_future_selection",
+                label="无未来函数",
+                status="ready",
+                detail=f"候选选择阶段截止到 {entry_date}，未读取后续价格柱。",
+                next_action="正式研究时继续使用逐日快照或 Point-in-Time 数据源复核。",
+            )
+        ]
+        if isinstance(self._market_data_provider, AkshareMarketDataProvider):
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="point_in_time_data",
+                    label="PIT 数据",
+                    status="warning",
+                    detail="AkShare 免费数据适合验证流程，但不等同专业 Point-in-Time 快照。",
+                    next_action="正式评价长期胜率前，接入退市样本和逐日快照数据。",
+                )
+            )
+
+        try:
+            rows = self._market_data_provider.load_one_to_two_rows(entry_date)
+        except Exception as exc:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="candidate_pool",
+                    label="候选池",
+                    status="blocked",
+                    detail=f"{entry_date} 候选池不可用：{exc}",
+                    next_action="先修复行情源或改用 --sample-data 验证链路。",
+                )
+            )
+            return self._historical_replay_blocked_report(
+                entry_date=entry_date,
+                data_mode=data_mode,
+                quality_checks=tuple(quality_checks),
+                no_future_notes=no_future_notes,
+                summary="历史逐日回放被阻断：候选池不可用。",
+                next_action="修复行情源后重新运行 replay。",
+            )
+
+        candidates = self._one_to_two_policy.build_candidates(rows)
+        candidate = next(
+            (item for item in candidates if item.status == "ready"),
+            None,
+        )
+        if candidate is None:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="candidate_pool",
+                    label="候选池",
+                    status="blocked",
+                    detail=f"{entry_date} 没有达到执行分数和硬过滤的候选。",
+                    next_action="保留空样本，不生成模拟买入。",
+                )
+            )
+            return self._historical_replay_blocked_report(
+                entry_date=entry_date,
+                data_mode=data_mode,
+                quality_checks=tuple(quality_checks),
+                no_future_notes=no_future_notes,
+                summary="历史逐日回放无交易：当日没有合格候选。",
+                next_action="换一个历史交易日，或先扩大回放窗口做样本统计。",
+            )
+
+        replay_dates = self._replay_trade_dates(
+            entry_date=entry_date,
+            holding_days=holding_days,
+        )
+        if len(replay_dates) < 2:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="price_window",
+                    label="价格窗口",
+                    status="blocked",
+                    detail="缺少 T+1 之后的交易日，无法计算卖出和盈亏比。",
+                    next_action="选择更早的历史日期或等待后续交易日数据。",
+                )
+            )
+            return self._historical_replay_blocked_report(
+                entry_date=entry_date,
+                data_mode=data_mode,
+                quality_checks=tuple(quality_checks),
+                no_future_notes=no_future_notes,
+                summary="历史逐日回放被阻断：没有足够后续交易日。",
+                candidate=candidate,
+                next_action="选择更早的历史日期重新运行 replay。",
+            )
+
+        try:
+            bars = self._market_data_provider.load_price_bars(
+                candidate.symbol,
+                replay_dates[0],
+                replay_dates[-1],
+            )
+        except Exception as exc:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="price_bars",
+                    label="日线价格",
+                    status="blocked",
+                    detail=f"{candidate.symbol} 后续日线不可用：{exc}",
+                    next_action="修复历史日线源后重新运行 replay。",
+                )
+            )
+            return self._historical_replay_blocked_report(
+                entry_date=entry_date,
+                data_mode=data_mode,
+                quality_checks=tuple(quality_checks),
+                no_future_notes=no_future_notes,
+                summary="历史逐日回放被阻断：后续价格不可用。",
+                candidate=candidate,
+                next_action="修复历史日线源后重新运行 replay。",
+            )
+
+        expected_dates = set(replay_dates)
+        bars = tuple(bar for bar in bars if bar.trade_date in expected_dates)
+        if len(bars) < 2:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="price_bars",
+                    label="日线价格",
+                    status="blocked",
+                    detail=f"{candidate.symbol} 只取得 {len(bars)} 根价格柱，无法完成 T+1 回放。",
+                    next_action="选择更早日期，或检查历史日线是否缺失。",
+                )
+            )
+            return self._historical_replay_blocked_report(
+                entry_date=entry_date,
+                data_mode=data_mode,
+                quality_checks=tuple(quality_checks),
+                no_future_notes=no_future_notes,
+                summary="历史逐日回放被阻断：日线样本不足。",
+                candidate=candidate,
+                next_action="补齐历史价格后重新运行 replay。",
+            )
+
+        quality_checks.append(
+            BacktestDataQualityCheck(
+                check_id="price_bars",
+                label="日线价格",
+                status="ready",
+                detail=f"取得 {candidate.symbol} {bars[0].trade_date} 到 {bars[-1].trade_date} 的 {len(bars)} 根日线。",
+                next_action="用后续价格柱执行卖点，不回灌选股。",
+            )
+        )
+        quality_checks.append(
+            BacktestDataQualityCheck(
+                check_id="daily_bar_sequence",
+                label="日内顺序",
+                status="warning",
+                detail="日线只有高低收，无法证明盘中先止盈还是先止损；当前按保守止损优先。",
+                next_action="后续若接入分钟线或 Tick，可把执行价精度升级。",
+            )
+        )
+        trade = self._simulate_historical_trade(
+            candidate=candidate,
+            bars=bars,
+            data_mode=data_mode,
+        )
+        warning = any(check.status == "warning" for check in quality_checks)
+        status = "warning" if warning else "ready"
+        summary = (
+            f"历史逐日回放完成：{candidate.name}({candidate.symbol}) "
+            f"{trade.entry_date} 买入，{trade.exit_date} 按 {trade.exit_reason} 卖出，"
+            f"收益 {trade.realized_pnl_pct:.2%}，盈亏比 {trade.risk_reward_ratio:.2f}R。"
+        )
+        return OneToTwoHistoricalReplayReport(
+            report_id=f"one-to-two-replay-{entry_date}-{candidate.symbol}",
+            as_of_date=entry_date,
+            entry_date=trade.entry_date,
+            exit_date=trade.exit_date,
+            data_mode=data_mode,
+            status=status,
+            summary=summary,
+            candidate=candidate,
+            trade=trade,
+            quality_checks=tuple(quality_checks),
+            no_future_leakage_notes=no_future_notes,
+            next_action=(
+                "这是一笔单点回放；下一步应扩大到连续历史窗口，统计 30/50/100 笔样本。"
+            ),
+        )
+
+    def _historical_replay_blocked_report(
+        self,
+        entry_date: str,
+        data_mode: str,
+        quality_checks: tuple[BacktestDataQualityCheck, ...],
+        no_future_notes: tuple[str, ...],
+        summary: str,
+        next_action: str,
+        candidate: OneToTwoCandidate | None = None,
+    ) -> OneToTwoHistoricalReplayReport:
+        return OneToTwoHistoricalReplayReport(
+            report_id=f"one-to-two-replay-{entry_date}-blocked",
+            as_of_date=entry_date,
+            entry_date=entry_date,
+            exit_date="",
+            data_mode=data_mode,
+            status="blocked",
+            summary=summary,
+            candidate=candidate,
+            trade=None,
+            quality_checks=quality_checks,
+            no_future_leakage_notes=no_future_notes,
+            next_action=next_action,
+        )
+
+    def _replay_trade_dates(self, entry_date: str, holding_days: int) -> list[str]:
+        dates = [entry_date]
+        current = entry_date
+        for _index in range(max(1, holding_days)):
+            context = self._trading_calendar.resolve(current)
+            next_date = context.next_trade_date
+            if next_date <= current:
+                break
+            dates.append(next_date)
+            current = next_date
+        return dates
+
+    def _simulate_historical_trade(
+        self,
+        candidate: OneToTwoCandidate,
+        bars: tuple[HistoricalPriceBar, ...],
+        data_mode: str,
+    ) -> OneToTwoHistoricalReplayTrade:
+        entry_price = candidate.entry_price
+        exit_plan = candidate.exit_plan
+        stop_loss = exit_plan.stop_loss if exit_plan else candidate.stop_loss
+        first_take_profit_price = (
+            exit_plan.first_take_profit_price
+            if exit_plan
+            else round(entry_price * (1 + self._one_to_two_settings.first_take_profit_pct), 2)
+        )
+        strong_take_profit_pct = (
+            exit_plan.strong_take_profit_pct
+            if exit_plan
+            else self._one_to_two_settings.strong_take_profit_pct
+        )
+        trailing_stop_pct = (
+            exit_plan.trailing_stop_pct
+            if exit_plan
+            else self._one_to_two_settings.trailing_stop_pct
+        )
+        max_holding_trade_days = min(
+            len(bars) - 1,
+            exit_plan.max_holding_trade_days if exit_plan else self._one_to_two_settings.max_holding_trade_days,
+        )
+        position_cash = self._one_to_two_settings.initial_cash * candidate.position_limit_pct
+        quantity = int(position_cash // (entry_price * 100)) * 100 if entry_price else 0
+        if quantity <= 0 and entry_price > 0:
+            quantity = 100
+
+        exit_bar = bars[min(max_holding_trade_days, len(bars) - 1)]
+        exit_price = exit_bar.close_price
+        exit_reason = "replay_forced_close"
+        peak_price = entry_price
+        max_favorable_pct = 0.0
+        max_adverse_pct = 0.0
+        notes = [
+            "严格 T+1：买入当天不模拟卖出。",
+            "选股完成后才读取后续价格柱计算盈亏。",
+        ]
+
+        for holding_day, bar in enumerate(bars[1:], start=1):
+            peak_price = max(peak_price, bar.high_price)
+            favorable_pct = (bar.high_price - entry_price) / entry_price
+            adverse_pct = (bar.low_price - entry_price) / entry_price
+            max_favorable_pct = max(max_favorable_pct, favorable_pct)
+            max_adverse_pct = min(max_adverse_pct, adverse_pct)
+
+            if bar.low_price <= stop_loss:
+                exit_bar = bar
+                exit_price = stop_loss
+                exit_reason = "stop_loss_t1"
+                break
+
+            strong_reached = (peak_price - entry_price) / entry_price >= strong_take_profit_pct
+            trailing_stop = round(peak_price * (1 - trailing_stop_pct), 2)
+            if strong_reached and bar.low_price <= trailing_stop:
+                exit_bar = bar
+                exit_price = trailing_stop
+                exit_reason = "trailing_take_profit"
+                break
+
+            if bar.high_price >= first_take_profit_price:
+                exit_bar = bar
+                exit_price = first_take_profit_price
+                exit_reason = "take_profit_first_target"
+                break
+
+            if holding_day >= max_holding_trade_days:
+                exit_bar = bar
+                exit_price = bar.close_price
+                exit_reason = "max_holding_close"
+                break
+
+        gross_return_pct = (
+            (exit_price - entry_price) / entry_price if entry_price else 0.0
+        )
+        realized_pnl = round((exit_price - entry_price) * quantity, 2)
+        stop_risk_pct = (
+            exit_plan.stop_loss_pct
+            if exit_plan and exit_plan.stop_loss_pct > 0
+            else max((entry_price - stop_loss) / entry_price, 0.0001)
+            if entry_price
+            else 0.0001
+        )
+        risk_reward_ratio = gross_return_pct / max(stop_risk_pct, 0.0001)
+        return OneToTwoHistoricalReplayTrade(
+            symbol=candidate.symbol,
+            name=candidate.name,
+            entry_date=bars[0].trade_date,
+            exit_date=exit_bar.trade_date,
+            entry_price=round(entry_price, 2),
+            exit_price=round(exit_price, 2),
+            quantity=quantity,
+            gross_return_pct=round(gross_return_pct, 6),
+            realized_pnl=realized_pnl,
+            realized_pnl_pct=round(gross_return_pct, 6),
+            holding_trade_days=self._holding_trade_days(
+                opened_at=bars[0].trade_date,
+                trade_date=exit_bar.trade_date,
+            ),
+            exit_reason=exit_reason,
+            risk_reward_ratio=round(risk_reward_ratio, 4),
+            max_favorable_pct=round(max_favorable_pct, 6),
+            max_adverse_pct=round(max_adverse_pct, 6),
+            candidate_score=candidate.score,
+            position_label=candidate.position_profile.label,
+            evidence_date=candidate.trade_date,
+            data_mode=data_mode,
+            notes=tuple(notes),
         )
 
     def _resolve_backtest_dates(

@@ -10,6 +10,7 @@ from shared.contracts import (
     OneToTwoBacktestAuditReport,
     OneToTwoDoctorReport,
     OneToTwoEndOfDayReview,
+    OneToTwoHistoricalReplayReport,
     OneToTwoMorningReport,
     OneToTwoStabilityReport,
 )
@@ -118,4 +119,14 @@ class LocalMainChainAdapter:
             start_date=start_date,
             end_date=end_date,
             max_trade_days=max_trade_days,
+        )
+
+    def run_one_to_two_historical_replay(
+        self,
+        as_of_date: str | None = None,
+        holding_days: int = 5,
+    ) -> OneToTwoHistoricalReplayReport:
+        return self._service.run_one_to_two_historical_replay(
+            as_of_date=as_of_date,
+            holding_days=holding_days,
         )

@@ -116,6 +116,7 @@ FEISHU_RECEIVE_ID_TYPE=chat_id
 python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli watch --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
+python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-date 2026-04-24 --holding-days 3
 python -m client.desktop.firemoney_client.one_to_two_cli backtest --start-date 2026-04-01 --end-date 2026-04-30 --max-trade-days 20
 python -m client.desktop.firemoney_client.one_to_two_cli stability
 python -m client.desktop.firemoney_client.one_to_two_cli doctor

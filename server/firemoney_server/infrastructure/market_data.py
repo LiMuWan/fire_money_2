@@ -8,7 +8,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
-from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
+from server.firemoney_server.domain.one_to_two import (
+    HistoricalPriceBar,
+    OneToTwoMarketRow,
+)
 from shared.contracts import MainlineNewsItem
 
 
@@ -32,6 +35,15 @@ class MarketDataProvider(Protocol):
         symbols: tuple[str, ...],
     ) -> tuple[MainlineNewsItem, ...]:
         """Load normalized mainline news items for continuity review."""
+        ...
+
+    def load_price_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> tuple[HistoricalPriceBar, ...]:
+        """Load normalized daily bars for replay accounting."""
         ...
 
 
@@ -171,6 +183,57 @@ class SampleMarketDataProvider:
             ),
         )
 
+    def load_price_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> tuple[HistoricalPriceBar, ...]:
+        sample_bars = {
+            "600001": (
+                HistoricalPriceBar(
+                    trade_date="2026-04-30",
+                    open_price=10.52,
+                    high_price=10.52,
+                    low_price=10.20,
+                    close_price=10.52,
+                    volume=1200000,
+                    amount=12624000,
+                ),
+                HistoricalPriceBar(
+                    trade_date="2026-05-06",
+                    open_price=10.88,
+                    high_price=11.38,
+                    low_price=10.72,
+                    close_price=11.20,
+                    volume=1800000,
+                    amount=20160000,
+                ),
+                HistoricalPriceBar(
+                    trade_date="2026-05-07",
+                    open_price=11.18,
+                    high_price=11.50,
+                    low_price=10.94,
+                    close_price=11.36,
+                    volume=1500000,
+                    amount=17040000,
+                ),
+                HistoricalPriceBar(
+                    trade_date="2026-05-08",
+                    open_price=11.30,
+                    high_price=11.42,
+                    low_price=10.98,
+                    close_price=11.05,
+                    volume=1300000,
+                    amount=14365000,
+                ),
+            )
+        }
+        bars = sample_bars.get(symbol, ())
+        return tuple(
+            bar for bar in bars if start_date <= bar.trade_date <= end_date
+        )
+
 
 class AkshareMarketDataProvider:
     """AkShare-backed market data provider with local cache and safe failure."""
@@ -263,6 +326,64 @@ class AkshareMarketDataProvider:
         if self._fallback is not None and hasattr(self._fallback, "load_mainline_news"):
             return self._fallback.load_mainline_news(theme, symbols)
         return ()
+
+    def load_price_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> tuple[HistoricalPriceBar, ...]:
+        try:
+            import akshare as ak  # type: ignore
+        except Exception:
+            if self._fallback is not None and hasattr(self._fallback, "load_price_bars"):
+                return self._fallback.load_price_bars(symbol, start_date, end_date)
+            raise MarketDataUnavailable("AkShare historical bars are unavailable")
+
+        try:
+            bars = ak.stock_zh_a_hist(
+                symbol=symbol,
+                period="daily",
+                start_date=start_date.replace("-", ""),
+                end_date=end_date.replace("-", ""),
+                adjust="qfq",
+            )
+            self._cache_payload(
+                start_date,
+                f"stock_zh_a_hist_{symbol}_{end_date}",
+                bars,
+            )
+        except Exception as exc:
+            if self._fallback is not None and hasattr(self._fallback, "load_price_bars"):
+                return self._fallback.load_price_bars(symbol, start_date, end_date)
+            raise MarketDataUnavailable("AkShare historical bars are unavailable") from exc
+
+        records = getattr(bars, "to_dict", lambda *_args, **_kwargs: [])("records")
+        normalized: list[HistoricalPriceBar] = []
+        for item in records:
+            trade_date = self._normalize_date(
+                item.get("日期") or item.get("date") or item.get("trade_date")
+            )
+            if not trade_date:
+                continue
+            open_price = self._first_float(item, ("开盘", "open"))
+            high_price = self._first_float(item, ("最高", "high"))
+            low_price = self._first_float(item, ("最低", "low"))
+            close_price = self._first_float(item, ("收盘", "close"))
+            if min(open_price, high_price, low_price, close_price) <= 0:
+                continue
+            normalized.append(
+                HistoricalPriceBar(
+                    trade_date=trade_date,
+                    open_price=open_price,
+                    high_price=high_price,
+                    low_price=low_price,
+                    close_price=close_price,
+                    volume=self._first_float(item, ("成交量", "volume")),
+                    amount=self._first_float(item, ("成交额", "amount")),
+                )
+            )
+        return tuple(sorted(normalized, key=lambda item: item.trade_date))
 
     def _cached_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...] | None:
         cached = self._row_cache.get(trade_date)
@@ -545,4 +666,20 @@ class AkshareMarketDataProvider:
             value = str(item.get(key, "")).strip()
             if value and value.lower() != "nan":
                 return value
+        return ""
+
+    def _normalize_date(self, value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw or raw.lower() == "nan":
+            return ""
+        if "-" in raw:
+            try:
+                return datetime.strptime(raw[:10], "%Y-%m-%d").date().isoformat()
+            except ValueError:
+                return ""
+        if len(raw) >= 8 and raw[:8].isdigit():
+            try:
+                return datetime.strptime(raw[:8], "%Y%m%d").date().isoformat()
+            except ValueError:
+                return ""
         return ""

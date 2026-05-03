@@ -323,6 +323,46 @@ class OneToTwoBacktestAuditReport:
 
 
 @dataclass(frozen=True)
+class OneToTwoHistoricalReplayTrade:
+    symbol: str
+    name: str
+    entry_date: str
+    exit_date: str
+    entry_price: float
+    exit_price: float
+    quantity: int
+    gross_return_pct: float
+    realized_pnl: float
+    realized_pnl_pct: float
+    holding_trade_days: int
+    exit_reason: str
+    risk_reward_ratio: float
+    max_favorable_pct: float
+    max_adverse_pct: float
+    candidate_score: float
+    position_label: str
+    evidence_date: str
+    data_mode: str
+    notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OneToTwoHistoricalReplayReport:
+    report_id: str
+    as_of_date: str
+    entry_date: str
+    exit_date: str
+    data_mode: str
+    status: str
+    summary: str
+    candidate: OneToTwoCandidate | None
+    trade: OneToTwoHistoricalReplayTrade | None
+    quality_checks: tuple[BacktestDataQualityCheck, ...]
+    no_future_leakage_notes: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
 class OneToTwoDoctorCheck:
     check_id: str
     label: str

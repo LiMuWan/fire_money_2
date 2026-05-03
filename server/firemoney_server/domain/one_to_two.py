@@ -42,6 +42,17 @@ class OneToTwoMarketRow:
     market_temperature: int
 
 
+@dataclass(frozen=True)
+class HistoricalPriceBar:
+    trade_date: str
+    open_price: float
+    high_price: float
+    low_price: float
+    close_price: float
+    volume: float = 0.0
+    amount: float = 0.0
+
+
 class OneToTwoSettings(Protocol):
     min_score: int
     max_position_pct: float

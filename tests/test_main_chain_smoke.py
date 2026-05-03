@@ -17,7 +17,10 @@ from server.firemoney_server.application.beta_rehearsal import (
     run_one_to_two_beta_rehearsal,
 )
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
-from server.firemoney_server.domain.one_to_two import OneToTwoMarketRow
+from server.firemoney_server.domain.one_to_two import (
+    HistoricalPriceBar,
+    OneToTwoMarketRow,
+)
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
 from server.firemoney_server.infrastructure.local_env import load_local_feishu_env
 from server.firemoney_server.infrastructure.market_data import (
@@ -36,6 +39,7 @@ from shared.contracts import (
     NotificationRecord,
     NotificationStatus,
     OneToTwoBacktestAuditReport,
+    OneToTwoHistoricalReplayReport,
     OneToTwoMorningReport,
     OneToTwoBetaRehearsalReport,
     OneToTwoScheduleRun,
@@ -133,9 +137,11 @@ class StaticOneToTwoProvider:
         self,
         rows: tuple[OneToTwoMarketRow, ...],
         news: tuple[MainlineNewsItem, ...] = (),
+        price_bars: tuple[HistoricalPriceBar, ...] = (),
     ) -> None:
         self._rows = rows
         self._news = news
+        self._price_bars = price_bars
 
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         return tuple(
@@ -176,6 +182,18 @@ class StaticOneToTwoProvider:
     ) -> tuple[MainlineNewsItem, ...]:
         return self._news
 
+    def load_price_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> tuple[HistoricalPriceBar, ...]:
+        return tuple(
+            bar
+            for bar in self._price_bars
+            if start_date <= bar.trade_date <= end_date
+        )
+
 
 class FailingOneToTwoProvider:
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
@@ -187,6 +205,14 @@ class FailingOneToTwoProvider:
         symbols: tuple[str, ...],
     ) -> tuple[MainlineNewsItem, ...]:
         raise RuntimeError("news unavailable")
+
+    def load_price_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> tuple[HistoricalPriceBar, ...]:
+        raise RuntimeError("bars unavailable")
 
 
 class FakeFeishuApiServer:
@@ -1734,6 +1760,77 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("样本数：warning", completed.stdout)
             self.assertIn("Point-in-Time", completed.stdout)
             self.assertFalse((root / "paper_trades.json").exists())
+
+    def test_historical_replay_uses_as_of_candidate_and_future_bars_for_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+
+            report = service.run_one_to_two_historical_replay(
+                as_of_date="2026-04-30",
+                holding_days=3,
+            )
+            payload = contract_to_dict(report)
+
+            self.assertIsInstance(report, OneToTwoHistoricalReplayReport)
+            self.assertEqual(report.status, "warning")
+            self.assertEqual(report.as_of_date, "2026-04-30")
+            self.assertIsNotNone(report.candidate)
+            self.assertIsNotNone(report.trade)
+            self.assertEqual(report.candidate.symbol, "600001")
+            self.assertEqual(report.trade.entry_date, "2026-04-30")
+            self.assertEqual(report.trade.exit_reason, "take_profit_first_target")
+            self.assertGreater(report.trade.realized_pnl_pct, 0)
+            self.assertGreater(report.trade.risk_reward_ratio, 1)
+            self.assertTrue(
+                any("后续日线只用于模拟卖点" in item for item in report.no_future_leakage_notes)
+            )
+            checks = {check.check_id: check for check in report.quality_checks}
+            self.assertEqual(checks["no_future_selection"].status, "ready")
+            self.assertEqual(checks["price_bars"].status, "ready")
+            self.assertEqual(checks["daily_bar_sequence"].status, "warning")
+            self.assertEqual(payload["trade"]["exit_reason"], "take_profit_first_target")
+
+    def test_historical_replay_cli_brief_prints_profit_loss_ratio(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "replay",
+                    "--brief",
+                    "--sample-data",
+                    "--trade-date",
+                    "2026-04-30",
+                    "--holding-days",
+                    "3",
+                    "--paper-store",
+                    str(root / "paper_trades.json"),
+                    "--notification-store",
+                    str(root / "notifications.json"),
+                    "--scheduler-state",
+                    str(root / "scheduler_state.json"),
+                    "--scheduler-runs",
+                    str(root / "scheduler_runs.json"),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                check=True,
+                capture_output=True,
+                encoding="utf-8",
+                text=True,
+            )
+
+            self.assertIn("FireMoney 历史逐日回放：warning", completed.stdout)
+            self.assertIn("候选：", completed.stdout)
+            self.assertIn("盈亏比：", completed.stdout)
+            self.assertIn("无未来函数说明", completed.stdout)
+            self.assertIn("后续日线只用于模拟卖点", completed.stdout)
 
     def test_scheduler_runs_due_jobs_once_per_trading_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
