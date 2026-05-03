@@ -26,6 +26,8 @@
     "min_sealed_amount_ratio": 0.08,
     "min_leader_score": 16,
     "min_mainline_score": 14,
+    "min_low_breakout_first_board_count": 15,
+    "min_low_breakout_ready_candidates": 2,
     "board_strategy_enabled": true
   },
   "exclude": {

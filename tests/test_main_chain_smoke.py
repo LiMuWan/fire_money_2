@@ -172,6 +172,7 @@ class StaticOneToTwoProvider:
                 recent_gain_pct=row.recent_gain_pct,
                 theme=row.theme,
                 market_temperature=row.market_temperature,
+                first_board_count=row.first_board_count,
             )
             for row in self._rows
         )
@@ -381,6 +382,27 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertTrue(any("创业板" in blocker for blocker in candidates["300003"].blockers))
             self.assertEqual(one_word.status, "blocked")
             self.assertTrue(any("买不到" in blocker for blocker in one_word.blockers))
+
+    def test_low_breakout_needs_market_width_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_row = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")[0]
+            thin_width_row = replace(
+                base_row,
+                symbol="600008",
+                first_board_count=10,
+            )
+            report = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider((thin_width_row,)),
+            ).build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+            candidate = report.candidates[0]
+
+            self.assertEqual(candidate.status, "blocked")
+            self.assertTrue(any("首板宽度" in blocker for blocker in candidate.blockers))
+            self.assertTrue(any("可执行候选" in blocker for blocker in candidate.blockers))
 
     def test_one_to_two_requires_product_open_confirmation_window(self) -> None:
         base_row = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")[0]
@@ -2586,6 +2608,8 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.strong_take_profit_pct, 0.15)
         self.assertEqual(settings.trailing_stop_pct, 0.06)
         self.assertEqual(settings.mainline_fade_score, 45)
+        self.assertEqual(settings.min_low_breakout_first_board_count, 15)
+        self.assertEqual(settings.min_low_breakout_ready_candidates, 2)
         self.assertIn("创业板", settings.excluded_boards)
 
     def test_preview_file_can_be_generated_without_legacy_surface(self) -> None:

@@ -18,7 +18,8 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-from dataclasses import asdict, dataclass
+from collections import Counter
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from statistics import mean, median
@@ -43,6 +44,8 @@ DEFAULT_TRAILING_STOP_PCT = 0.06
 DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.03
 DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
 DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
+DEFAULT_MIN_LOW_BREAKOUT_FIRST_BOARD_COUNT = 15
+DEFAULT_MIN_LOW_BREAKOUT_READY_CANDIDATES = 2
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,8 @@ class Match:
     recent_gain_pct: float
     ma20_deviation_pct: float
     pressure_distance_pct: float | None
+    first_board_count: int
+    ready_candidate_count: int
     second_day_one_word: bool
     blockers: tuple[str, ...]
     second_board_closed: bool
@@ -156,6 +161,16 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MAX_SIMULATION_TRADE_DAYS,
     )
     parser.add_argument("--sample-preview", type=int, default=30)
+    parser.add_argument(
+        "--min-low-breakout-first-board-count",
+        type=int,
+        default=DEFAULT_MIN_LOW_BREAKOUT_FIRST_BOARD_COUNT,
+    )
+    parser.add_argument(
+        "--min-low-breakout-ready-candidates",
+        type=int,
+        default=DEFAULT_MIN_LOW_BREAKOUT_READY_CANDIDATES,
+    )
     return parser.parse_args()
 
 
@@ -210,7 +225,12 @@ def main() -> int:
             )
         )
 
-    filtered = [item for item in matches if item.score >= args.min_score and not item.blockers]
+    filtered = apply_market_width_gate(
+        matches=matches,
+        min_score=args.min_score,
+        min_low_breakout_first_board_count=args.min_low_breakout_first_board_count,
+        min_low_breakout_ready_candidates=args.min_low_breakout_ready_candidates,
+    )
     result = build_result(
         start_date=start.isoformat(),
         end_date=end.isoformat(),
@@ -232,6 +252,8 @@ def main() -> int:
         discipline_exit_min_gain_pct=args.discipline_exit_min_gain_pct,
         max_holding_trade_days=args.max_holding_trade_days,
         max_simulation_trade_days=args.max_simulation_trade_days,
+        min_low_breakout_first_board_count=args.min_low_breakout_first_board_count,
+        min_low_breakout_ready_candidates=args.min_low_breakout_ready_candidates,
         sample_preview=args.sample_preview,
     )
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -611,6 +633,8 @@ def build_match(
         recent_gain_pct=round(recent_gain, 4),
         ma20_deviation_pct=round(ma20_deviation, 4),
         pressure_distance_pct=round(pressure_distance, 4) if pressure_distance is not None else None,
+        first_board_count=0,
+        ready_candidate_count=0,
         second_day_one_word=second_day_one_word,
         blockers=tuple(blockers),
         second_board_closed=second_close_pct >= LIMIT_UP_THRESHOLD,
@@ -686,6 +710,44 @@ def score_liquidity(estimated_turnover_amount: float, min_turnover_amount: float
     return 0.0
 
 
+def apply_market_width_gate(
+    matches: list[Match],
+    min_score: float,
+    min_low_breakout_first_board_count: int,
+    min_low_breakout_ready_candidates: int,
+) -> list[Match]:
+    first_board_counts = Counter(item.first_board_date for item in matches)
+    base_ready = [
+        replace(
+            item,
+            first_board_count=first_board_counts[item.first_board_date],
+        )
+        for item in matches
+        if item.score >= min_score and not item.blockers
+    ]
+    ready_counts = Counter(item.second_day_date for item in base_ready)
+    filtered: list[Match] = []
+    for item in base_ready:
+        ready_candidate_count = ready_counts[item.second_day_date]
+        enriched = replace(
+            item,
+            ready_candidate_count=ready_candidate_count,
+        )
+        if item.position_label == "low_breakout":
+            if (
+                min_low_breakout_first_board_count > 0
+                and item.first_board_count < min_low_breakout_first_board_count
+            ):
+                continue
+            if (
+                min_low_breakout_ready_candidates > 0
+                and ready_candidate_count < min_low_breakout_ready_candidates
+            ):
+                continue
+        filtered.append(enriched)
+    return filtered
+
+
 def build_product_portfolio(
     filtered_matches: list[Match],
     histories: dict[str, list[DailyBar]],
@@ -738,7 +800,8 @@ def build_product_portfolio(
     one_position_trades = select_one_position_trades(daily_top_trades)
     return {
         "selection_rule": (
-            "候选先过硬拦截；只在次日红盘开且不高于 7% 时确认；"
+            "候选先过硬拦截；低位平台突破必须满足昨日首板宽度和今日可执行候选宽度；"
+            "只在次日红盘开且不高于 7% 时确认；"
             "每天按当时可见的 score/open/position/turnover 排名最多买 1 笔；"
             "已有持仓时不再开新仓，严格 T+1。"
         ),
@@ -913,6 +976,8 @@ def build_result(
     discipline_exit_min_gain_pct: float,
     max_holding_trade_days: int,
     max_simulation_trade_days: int,
+    min_low_breakout_first_board_count: int,
+    min_low_breakout_ready_candidates: int,
     sample_preview: int,
 ) -> dict[str, Any]:
     return {
@@ -931,6 +996,10 @@ def build_result(
             "confirm_open_window": {
                 "min_pct": min_confirm_open_pct,
                 "max_pct": max_confirm_open_pct,
+            },
+            "low_breakout_width_gate": {
+                "min_first_board_count": min_low_breakout_first_board_count,
+                "min_ready_candidates": min_low_breakout_ready_candidates,
             },
             "product_reliability_note": (
                 "The reliability decision should use product_portfolio.one_position_no_overlap, "

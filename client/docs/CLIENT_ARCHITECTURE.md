@@ -32,6 +32,7 @@ client/desktop/firemoney_client/
 
 - One screen answers one job: can this one-to-two setup be observed and simulated safely?
 - Risk, stop loss, position limit, and T+1 warning stay near the candidate and paper position.
+- Low breakout candidates are shown as executable only after service-side market-width confirmation; thin-width setups remain observation records.
 - Feishu delivery is shown as state, not as a blocker for strategy execution.
 - Local schedule status is shown as one-to-two workflow progress, not as a generic job console.
 - The preview and default entry point show only the current one-to-two line.

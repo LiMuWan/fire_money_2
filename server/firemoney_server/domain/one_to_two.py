@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from shared.contracts import (
@@ -40,6 +40,7 @@ class OneToTwoMarketRow:
     recent_gain_pct: float
     theme: str
     market_temperature: int
+    first_board_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,8 @@ class OneToTwoSettings(Protocol):
     min_sealed_amount_ratio: float
     min_leader_score: float
     min_mainline_score: float
+    min_low_breakout_first_board_count: int
+    min_low_breakout_ready_candidates: int
     board_strategy_enabled: bool
     first_take_profit_pct: float
     strong_take_profit_pct: float
@@ -89,8 +92,57 @@ class OneToTwoPolicy:
         rows: tuple[OneToTwoMarketRow, ...],
     ) -> tuple[OneToTwoCandidate, ...]:
         candidates = tuple((row, self._candidate_from_row(row)) for row in rows)
+        base_ready_count = sum(1 for _, candidate in candidates if candidate.status == "ready")
+        candidates = tuple(
+            (
+                row,
+                self._apply_low_breakout_width_gate(
+                    row,
+                    candidate,
+                    base_ready_count=base_ready_count,
+                ),
+            )
+            for row, candidate in candidates
+        )
         ranked = sorted(candidates, key=self._candidate_rank_key, reverse=True)
         return tuple(candidate for _, candidate in ranked)
+
+    def _apply_low_breakout_width_gate(
+        self,
+        row: OneToTwoMarketRow,
+        candidate: OneToTwoCandidate,
+        base_ready_count: int,
+    ) -> OneToTwoCandidate:
+        if candidate.status != "ready":
+            return candidate
+        if not self._is_low_breakout(candidate.position_profile):
+            return candidate
+
+        min_first_board_count = self._settings.min_low_breakout_first_board_count
+        min_ready_candidates = self._settings.min_low_breakout_ready_candidates
+        blockers: list[str] = []
+        if min_first_board_count > 0 and row.first_board_count < min_first_board_count:
+            blockers.append(
+                f"昨日首板宽度 {row.first_board_count} 家不足 {min_first_board_count} 家，低位突破只观察"
+            )
+        if min_ready_candidates > 0 and base_ready_count < min_ready_candidates:
+            blockers.append(
+                f"今日可执行候选 {base_ready_count} 个不足 {min_ready_candidates} 个，低位突破不单点出手"
+            )
+        if not blockers:
+            return candidate
+
+        return replace(
+            candidate,
+            status="blocked",
+            blockers=candidate.blockers + tuple(blockers),
+            warnings=candidate.warnings + ("低位突破必须有市场宽度确认。",),
+            rationale=f"{candidate.name} 是低位平台突破，但市场宽度不足，先观察不买入。",
+            next_action="低位突破宽度闸门未通过，不生成模拟买入。",
+        )
+
+    def _is_low_breakout(self, profile: OneToTwoPositionProfile) -> bool:
+        return profile.low_position_score >= 8 and profile.breakout_score >= 7
 
     def _candidate_rank_key(
         self,

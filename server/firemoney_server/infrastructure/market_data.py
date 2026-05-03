@@ -78,6 +78,35 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.18,
                 theme="AI端侧主线",
                 market_temperature=74,
+                first_board_count=18,
+            ),
+            OneToTwoMarketRow(
+                symbol="600007",
+                name="平台突破候选",
+                trade_date=trade_date,
+                board="主板",
+                is_st=False,
+                is_delisting=False,
+                listing_days=1400,
+                latest_price=12.1,
+                previous_close=11.0,
+                limit_up_price=12.1,
+                first_limit_up_time="10:18",
+                sealed_amount=26000000,
+                turnover_amount=210000000,
+                turnover_rate=5.6,
+                open_pct=0.026,
+                auction_amount=10000000,
+                low_20=10.6,
+                high_60=12.2,
+                pressure_price=13.7,
+                ma_5=11.6,
+                ma_10=11.2,
+                ma_20=10.9,
+                recent_gain_pct=0.16,
+                theme="AI端侧主线",
+                market_temperature=74,
+                first_board_count=18,
             ),
             OneToTwoMarketRow(
                 symbol="600002",
@@ -105,6 +134,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.52,
                 theme="高位加速",
                 market_temperature=74,
+                first_board_count=18,
             ),
             OneToTwoMarketRow(
                 symbol="300003",
@@ -132,6 +162,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.16,
                 theme="非主板",
                 market_temperature=74,
+                first_board_count=18,
             ),
             OneToTwoMarketRow(
                 symbol="600004",
@@ -159,6 +190,7 @@ class SampleMarketDataProvider:
                 recent_gain_pct=0.14,
                 theme="同题材跟风",
                 market_temperature=74,
+                first_board_count=18,
             ),
         )
 
@@ -426,6 +458,13 @@ class AkshareMarketDataProvider:
             or self._market_temperature(records)
             or (55 if records else 0)
         )
+        first_board_count = sum(
+            1
+            for item in records
+            if str(item.get("代码", ""))
+            and self._board_count(item) == 1
+            and self._board(str(item.get("代码", ""))) == "主板"
+        )
         for item in records[:80]:
             symbol = str(item.get("代码", ""))
             name = str(item.get("名称", ""))
@@ -490,6 +529,7 @@ class AkshareMarketDataProvider:
                     recent_gain_pct=history["recent_gain_pct"],
                     theme=self._first_text(item, ("所属行业", "所属概念", "概念", "题材")),
                     market_temperature=market_temperature,
+                    first_board_count=first_board_count,
                 )
             )
         return tuple(rows)
