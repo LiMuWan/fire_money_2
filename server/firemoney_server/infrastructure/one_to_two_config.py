@@ -81,7 +81,7 @@ def load_one_to_two_settings(
         near_pressure_pct=float(parameters["near_pressure_pct"]),
         max_holding_trade_days=int(parameters["max_holding_trade_days"]),
         discipline_exit_min_gain_pct=float(parameters["discipline_exit_min_gain_pct"]),
-        first_take_profit_pct=float(parameters.get("first_take_profit_pct", 0.16)),
+        first_take_profit_pct=float(parameters.get("first_take_profit_pct", 0.28)),
         strong_take_profit_pct=float(parameters.get("strong_take_profit_pct", 0.0825)),
         trailing_stop_pct=float(parameters.get("trailing_stop_pct", 0.001)),
         mainline_fade_score=float(parameters.get("mainline_fade_score", 45)),
