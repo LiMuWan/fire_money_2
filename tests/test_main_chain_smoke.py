@@ -368,7 +368,7 @@ class MainChainSmokeTest(unittest.TestCase):
             ).candidates[0]
 
             self.assertEqual(candidates["600001"].status, "ready")
-            self.assertGreaterEqual(candidates["600001"].score, 70)
+            self.assertGreaterEqual(candidates["600001"].score, 78)
             self.assertEqual(candidates["600001"].position_profile.label, "低位平台突破")
             self.assertGreaterEqual(candidates["600001"].sealing_score, 18)
             self.assertGreaterEqual(candidates["600001"].leader_score, 16)
@@ -2573,6 +2573,7 @@ class MainChainSmokeTest(unittest.TestCase):
         settings = load_one_to_two_settings()
 
         self.assertEqual(payload["strategy_id"], settings.strategy_id)
+        self.assertEqual(settings.min_score, 78)
         self.assertEqual(settings.max_position_pct, 0.08)
         self.assertEqual(settings.max_daily_trades, 1)
         self.assertEqual(settings.max_holding_trade_days, 2)

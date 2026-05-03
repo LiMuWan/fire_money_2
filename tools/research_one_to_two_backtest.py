@@ -33,6 +33,8 @@ TENCENT_KLINE_URL = "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/newfqkl
 MAINBOARD_PREFIXES = ("000", "001", "002", "003", "600", "601", "603", "605")
 LIMIT_UP_THRESHOLD = 0.095
 SECOND_BOARD_TOUCH_THRESHOLD = 0.095
+DEFAULT_MIN_SCORE = 78.0
+DEFAULT_MIN_TURNOVER_AMOUNT = 80_000_000.0
 DEFAULT_POSITION_PCT = 0.08
 DEFAULT_STOP_LOSS_PCT = 0.05
 DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.08
@@ -114,8 +116,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--refresh", action="store_true")
-    parser.add_argument("--min-score", type=float, default=70.0)
-    parser.add_argument("--min-turnover-amount", type=float, default=80_000_000.0)
+    parser.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
+    parser.add_argument("--min-turnover-amount", type=float, default=DEFAULT_MIN_TURNOVER_AMOUNT)
     parser.add_argument("--recent-gain-block-pct", type=float, default=0.45)
     parser.add_argument("--high-deviation-block-pct", type=float, default=0.25)
     parser.add_argument("--near-pressure-pct", type=float, default=0.05)

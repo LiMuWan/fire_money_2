@@ -4,7 +4,7 @@
   "market": "A股主板",
   "description": "只观察主板 10cm 主线首板龙头候选，先做封板纪律确认，再把一进二作为次日确认点。",
   "parameters": {
-    "min_score": 70,
+    "min_score": 78,
     "max_position_pct": 0.08,
     "max_daily_trades": 1,
     "initial_cash": 100000,
