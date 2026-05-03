@@ -37,10 +37,10 @@ SECOND_BOARD_TOUCH_THRESHOLD = 0.095
 DEFAULT_MIN_SCORE = 82.0
 DEFAULT_MIN_TURNOVER_AMOUNT = 80_000_000.0
 DEFAULT_POSITION_PCT = 0.08
-DEFAULT_STOP_LOSS_PCT = 0.0375
+DEFAULT_STOP_LOSS_PCT = 0.0425
 DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.08
 DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.10
-DEFAULT_TRAILING_STOP_PCT = 0.02
+DEFAULT_TRAILING_STOP_PCT = 0.015
 DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.04
 DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
 DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
@@ -855,7 +855,7 @@ def simulate_trade(
     if entry_price <= 0:
         return None
 
-    stop_price = entry_price * (1 - stop_loss_pct)
+    stop_price = round_price_up(entry_price * (1 - stop_loss_pct))
     first_take_profit_price = entry_price * (1 + first_take_profit_pct)
     strong_take_profit_price = entry_price * (1 + strong_take_profit_pct)
     last_index = min(entry_index + max_simulation_trade_days, len(bars) - 1)
@@ -953,6 +953,10 @@ def select_one_position_trades(trades: list[SimulatedTrade]) -> list[SimulatedTr
         selected.append(trade)
         next_available_date = trade.exit_date
     return selected
+
+
+def round_price_up(value: float) -> float:
+    return math.ceil(value * 100 - 1e-9) / 100
 
 
 def build_result(

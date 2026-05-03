@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from typing import Protocol
 
@@ -206,7 +207,7 @@ class OneToTwoPolicy:
             row.latest_price * (1 - self._settings.stop_loss_pct * 1.25),
         )
         percent_stop = row.latest_price * (1 - self._settings.stop_loss_pct)
-        stop_loss = round(max(structure_stop, percent_stop), 2)
+        stop_loss = self._round_price_up(max(structure_stop, percent_stop))
         exit_plan = self._exit_plan(row.latest_price, stop_loss)
         continuity = self._mainline_continuity(
             row,
@@ -521,6 +522,9 @@ class OneToTwoPolicy:
     def _format_pct(self, value: float) -> str:
         text = f"{value:.1%}"
         return text.replace(".0%", "%")
+
+    def _round_price_up(self, value: float) -> float:
+        return math.ceil(value * 100 - 1e-9) / 100
 
     def _mainline_continuity(
         self,
