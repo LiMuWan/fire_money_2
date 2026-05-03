@@ -38,7 +38,7 @@ DEFAULT_MIN_SCORE = 82.0
 DEFAULT_MIN_TURNOVER_AMOUNT = 80_000_000.0
 DEFAULT_POSITION_PCT = 0.08
 DEFAULT_STOP_LOSS_PCT = 0.0425
-DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.12
+DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.16
 DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.0825
 DEFAULT_TRAILING_STOP_PCT = 0.001
 DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.04
@@ -46,6 +46,7 @@ DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
 DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
 DEFAULT_MIN_LOW_BREAKOUT_FIRST_BOARD_COUNT = 45
 DEFAULT_MIN_LOW_BREAKOUT_READY_CANDIDATES = 6
+MIN_COMPLETE_MAINBOARD_UNIVERSE = 2500
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,11 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    universe = load_mainboard_universe()
+    universe = load_mainboard_universe(
+        cache_dir=cache_dir,
+        minimum_count=0 if args.limit else MIN_COMPLETE_MAINBOARD_UNIVERSE,
+    )
+    universe_warnings = list(getattr(load_mainboard_universe, "last_warnings", []))
     if args.limit:
         universe = universe[: args.limit]
     print(f"universe={len(universe)} start={start} end={end}", flush=True)
@@ -238,6 +243,7 @@ def main() -> int:
         loaded_symbol_count=len(histories),
         failed_symbol_count=len(failed),
         failed_symbols=failed[:50],
+        universe_warnings=universe_warnings,
         basic_matches=matches,
         filtered_matches=filtered,
         histories=histories,
@@ -262,13 +268,19 @@ def main() -> int:
     return 0
 
 
-def load_mainboard_universe() -> list[StockMeta]:
+def load_mainboard_universe(
+    cache_dir: Path | None = DEFAULT_CACHE_DIR,
+    minimum_count: int = MIN_COMPLETE_MAINBOARD_UNIVERSE,
+) -> list[StockMeta]:
     try:
         import akshare as ak  # type: ignore
     except Exception as exc:  # pragma: no cover - depends on local environment
         raise SystemExit(f"akshare is required for stock universe loading: {exc}") from exc
 
     stocks: dict[str, StockMeta] = {}
+    warnings: list[str] = []
+    sh_loaded = False
+    sz_loaded = False
 
     try:
         sh_df = ak.stock_info_sh_name_code(symbol="\u4e3b\u677fA\u80a1")
@@ -277,8 +289,11 @@ def load_mainboard_universe() -> list[StockMeta]:
             name = normalize_name(row.get("\u8bc1\u5238\u7b80\u79f0"))
             listing_date = normalize_date_value(row.get("\u4e0a\u5e02\u65e5\u671f"))
             add_stock(stocks, code, name, listing_date)
+        sh_loaded = True
     except Exception as exc:
-        print(f"warning: failed to load Shanghai mainboard universe: {exc}", file=sys.stderr)
+        message = f"failed to load Shanghai mainboard universe: {exc}"
+        warnings.append(message)
+        print(f"warning: {message}", file=sys.stderr)
 
     try:
         sz_df = ak.stock_info_sz_name_code(symbol="A\u80a1\u5217\u8868")
@@ -289,17 +304,51 @@ def load_mainboard_universe() -> list[StockMeta]:
             name = normalize_name(row.get("A\u80a1\u7b80\u79f0"))
             listing_date = normalize_date_value(row.get("A\u80a1\u4e0a\u5e02\u65e5\u671f"))
             add_stock(stocks, code, name, listing_date)
+        sz_loaded = True
     except Exception as exc:
-        print(f"warning: failed to load Shenzhen mainboard universe: {exc}", file=sys.stderr)
+        message = f"failed to load Shenzhen mainboard universe: {exc}"
+        warnings.append(message)
+        print(f"warning: {message}", file=sys.stderr)
 
-    if not stocks:
-        fallback_df = ak.stock_info_a_code_name()
-        for row in fallback_df.to_dict("records"):
-            code = normalize_code(row.get("code"))
-            name = normalize_name(row.get("name"))
-            add_stock(stocks, code, name, None)
+    if not sh_loaded or not sz_loaded or len(stocks) < minimum_count:
+        before_fallback = len(stocks)
+        try:
+            fallback_df = ak.stock_info_a_code_name()
+            for row in fallback_df.to_dict("records"):
+                code = normalize_code(row.get("code"))
+                name = normalize_name(row.get("name"))
+                add_stock(stocks, code, name, None)
+            if len(stocks) > before_fallback:
+                warnings.append(
+                    "filled mainboard universe from AkShare A-code fallback "
+                    f"({before_fallback}->{len(stocks)})"
+                )
+        except Exception as exc:
+            message = f"failed to load AkShare A-code fallback universe: {exc}"
+            warnings.append(message)
+            print(f"warning: {message}", file=sys.stderr)
+
+    if cache_dir is not None and len(stocks) < minimum_count:
+        before_cache = len(stocks)
+        cached_added = add_cached_universe(stocks, cache_dir)
+        if cached_added:
+            warnings.append(
+                "filled mainboard universe from cached history files "
+                f"({before_cache}->{len(stocks)})"
+            )
+
+    load_mainboard_universe.last_warnings = warnings
+    if minimum_count and len(stocks) < minimum_count:
+        raise SystemExit(
+            "mainboard universe is incomplete: "
+            f"loaded {len(stocks)} symbols, expected at least {minimum_count}. "
+            "Retry later, pass --limit for a smoke run, or warm the local history cache."
+        )
 
     return sorted(stocks.values(), key=lambda item: item.code)
+
+
+load_mainboard_universe.last_warnings = []
 
 
 def add_stock(
@@ -313,6 +362,26 @@ def add_stock(
     if not name or is_blocked_name(name):
         return
     stocks[code] = StockMeta(code=code, name=name, listing_date=listing_date)
+
+
+def add_cached_universe(stocks: dict[str, StockMeta], cache_dir: Path) -> int:
+    if not cache_dir.exists():
+        return 0
+    added = 0
+    for cache_file in cache_dir.glob("*.json"):
+        code = normalize_code(cache_file.stem)
+        if code in stocks or not is_mainboard_code(code):
+            continue
+        try:
+            payload = json.loads(cache_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        name = normalize_name(payload.get("name")) or code
+        if is_blocked_name(name):
+            continue
+        stocks[code] = StockMeta(code=code, name=name, listing_date=None)
+        added += 1
+    return added
 
 
 def load_histories(
@@ -963,6 +1032,7 @@ def build_result(
     loaded_symbol_count: int,
     failed_symbol_count: int,
     failed_symbols: list[str],
+    universe_warnings: list[str],
     basic_matches: list[Match],
     filtered_matches: list[Match],
     histories: dict[str, list[DailyBar]],
@@ -1012,6 +1082,7 @@ def build_result(
             "loaded_symbol_count": loaded_symbol_count,
             "failed_symbol_count": failed_symbol_count,
             "failed_symbols_preview": failed_symbols,
+            "universe_warnings": universe_warnings,
         },
         "basic_first_board": summarize_matches(basic_matches),
         "filtered_strategy_candidates": summarize_matches(filtered_matches),

@@ -18,7 +18,7 @@
     "near_pressure_pct": 0.05,
     "max_holding_trade_days": 2,
     "discipline_exit_min_gain_pct": 0.04,
-    "first_take_profit_pct": 0.12,
+    "first_take_profit_pct": 0.16,
     "strong_take_profit_pct": 0.0825,
     "trailing_stop_pct": 0.001,
     "mainline_fade_score": 45,

@@ -884,18 +884,18 @@ class MainChainSmokeTest(unittest.TestCase):
             position = open_trigger.account.positions[0]
             self.assertIsNotNone(candidate.exit_plan)
             self.assertIsNotNone(candidate.mainline_continuity)
-            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.12)
+            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.16)
             self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.0825)
             self.assertGreater(candidate.exit_plan.stop_loss_pct, 0)
             self.assertLessEqual(candidate.exit_plan.stop_loss_pct, 0.0425)
             self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.001)
-            self.assertIn("盈利 12%", candidate.exit_plan.summary)
+            self.assertIn("盈利 16%", candidate.exit_plan.summary)
             self.assertIn("强势达到 8.25%", candidate.exit_plan.summary)
             self.assertIn("0.1%", candidate.exit_plan.summary)
             self.assertGreaterEqual(candidate.mainline_continuity.score, 45)
             self.assertIsNotNone(position.exit_plan)
             self.assertIsNotNone(position.mainline_continuity)
-            self.assertIn("盈利 12%", position.risk_note)
+            self.assertIn("盈利 16%", position.risk_note)
 
     def test_watch_phases_do_not_buy_before_open_trigger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -939,7 +939,7 @@ class MainChainSmokeTest(unittest.TestCase):
             )
             profit_row = _weak_after_two_days_row("2026-05-06")
             profit_row = OneToTwoMarketRow(
-                **(profit_row.__dict__ | {"latest_price": 11.8, "theme": "AI端侧主线"})
+                **(profit_row.__dict__ | {"latest_price": 12.25, "theme": "AI端侧主线"})
             )
             service = _build_service(
                 root,
@@ -1979,6 +1979,24 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertTrue(match.second_day_one_word)
         self.assertIn("second_day_one_word_untradable", match.blockers)
 
+    def test_research_backtest_adds_cached_universe_when_provider_is_partial(self) -> None:
+        module = self._load_research_backtest_module()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = Path(temp_dir)
+            (cache_dir / "000001.json").write_text(
+                json.dumps({"name": "深市主板样本", "rows": []}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            stocks = {
+                "600001": module.StockMeta("600001", "沪市主板样本", "2020-01-01"),
+            }
+
+            added = module.add_cached_universe(stocks, cache_dir)
+
+            self.assertEqual(added, 1)
+            self.assertIn("000001", stocks)
+            self.assertEqual(stocks["000001"].name, "深市主板样本")
+
     def _load_research_backtest_module(self):
         spec = importlib.util.spec_from_file_location(
             "firemoney_research_backtest_for_test",
@@ -2696,7 +2714,7 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.045)
         self.assertEqual(settings.min_confirm_open_pct, 0.0)
         self.assertEqual(settings.max_confirm_open_pct, 0.045)
-        self.assertEqual(settings.first_take_profit_pct, 0.12)
+        self.assertEqual(settings.first_take_profit_pct, 0.16)
         self.assertEqual(settings.strong_take_profit_pct, 0.0825)
         self.assertEqual(settings.stop_loss_pct, 0.0425)
         self.assertEqual(settings.trailing_stop_pct, 0.001)
@@ -2722,7 +2740,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("低位平台突破", html)
             self.assertIn("主线持续性", html)
             self.assertIn("卖点计划", html)
-            self.assertIn("盈利 12%", html)
+            self.assertIn("盈利 16%", html)
             self.assertIn("消息", html)
             self.assertIn("模拟盘与风险", html)
             self.assertIn("飞书通知", html)
