@@ -16,7 +16,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli beta-plan --brief
 python -m client.desktop.firemoney_client.one_to_two_cli beta-rehearsal --trade-date 2026-04-30
 ```
 
-`beta-rehearsal` 会用样例行情和临时账本跑完 `doctor -> morning -> scan -> auction -> open -> risk -> eod -> stability`。返回 `ready` 只代表主线流程、调度和模拟盘闭环能跑通；真实上线测试仍然必须在交易日运行 `beta-check`，确认飞书 `sent` 后再启动 `beta-start --loop --interval-seconds 60`。
+`beta-rehearsal` 会用样例行情和临时账本跑完 `doctor -> morning -> scan -> auction -> open -> risk -> eod -> stability`。返回 `ready` 只代表主线流程、调度和模拟盘闭环能跑通；真实上线测试仍然必须在交易日运行 `beta-check`，确认飞书 `sent` 后再启动 `beta-start --loop --interval-seconds 60 --market-data-timeout-seconds 20`。
 
 再运行回测准入审计，确认数据质量、样本数量和规则版本边界：
 
@@ -80,7 +80,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-
 3. 运行一键 Beta 预检。
 
    ```powershell
-   python -m client.desktop.firemoney_client.one_to_two_cli beta-check
+   python -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
    ```
 
    `beta-check` 会先验证飞书真实送达，再运行严格体检；不触发模拟买入或卖出。返回 `ready` 才能进入值守。HTTP 200 但飞书业务返回码失败也按 `failed` 处理。
@@ -89,7 +89,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-
 
    ```powershell
    python -m client.desktop.firemoney_client.one_to_two_cli feishu-test
-   python -m client.desktop.firemoney_client.one_to_two_cli doctor --beta
+   python -m client.desktop.firemoney_client.one_to_two_cli doctor --beta --market-data-timeout-seconds 20
    ```
 
    `strategy_config`、`trading_day`、`market_data`、`paper_store`、`notification_store`、`feishu`、`scheduler`、`scheduler_state`、`scheduler_runs` 必须全部为 `ready`。Beta 体检会要求当前交易日已有 `feishu-test` 的 `sent` 记录。
@@ -115,10 +115,10 @@ python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-
 ## Beta 值守命令
 
 ```powershell
-python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60
+python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60 --market-data-timeout-seconds 20
 ```
 
-`beta-start` 会先运行严格 `doctor --beta` 门禁；只有策略配置、交易日、行情、本地账本、飞书 sent 记录和调度审计全部 `ready`，才会启动调度。失败时只输出体检报告，不写入调度状态，不产生模拟买入。
+`beta-start` 会先运行严格 `doctor --beta` 门禁；只有策略配置、交易日、行情、本地账本、飞书 sent 记录和调度审计全部 `ready`，才会启动调度。行情体检超过 `--market-data-timeout-seconds` 会快速返回 `blocked`。失败时只输出体检报告，不写入调度状态，不产生模拟买入。
 
 本地调度器会按 08:50 早盘、盘中 `scan/auction/open/risk`、15:10 尾盘推进同一条一进二主线，并用 `.firemoney/scheduler_state.json` 防止同日重复触发，同时把每次调度结果写入 `.firemoney/scheduler_runs.json` 便于复核值守覆盖率。`schedule --beta` 仍可用于工程排查，正式上线测试优先使用 `beta-start`。
 

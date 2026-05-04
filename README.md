@@ -101,8 +101,8 @@ MarketDataProvider/AkShare
 python -m pip install -r requirements.txt
 $env:FEISHU_ENABLED="true"
 $env:FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-python -m client.desktop.firemoney_client.one_to_two_cli beta-check
-python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60
+python -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
+python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60 --market-data-timeout-seconds 20
 ```
 
 应用机器人模式也可以放入 `.firemoney/feishu.env`：
@@ -122,10 +122,10 @@ python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-date 2026-04-24 --holding-days 3
 python -m client.desktop.firemoney_client.one_to_two_cli backtest --start-date 2026-04-01 --end-date 2026-04-30 --max-trade-days 20
 python -m client.desktop.firemoney_client.one_to_two_cli stability
-python -m client.desktop.firemoney_client.one_to_two_cli doctor
+python -m client.desktop.firemoney_client.one_to_two_cli doctor --market-data-timeout-seconds 20
 python -m client.desktop.firemoney_client.one_to_two_cli feishu-test --no-notify
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli beta-start
+python -m client.desktop.firemoney_client.one_to_two_cli beta-start --market-data-timeout-seconds 20
 python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 20
 python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 20
 ```
@@ -143,10 +143,10 @@ python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli schedule --trade-date 2026-04-30 --at 09:31 --sample-data --no-notify --paper-store .firemoney/tmp-paper.json --scheduler-state .firemoney/tmp-scheduler.json
-python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60
+python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60 --market-data-timeout-seconds 20
 ```
 
-`beta-start` 会先运行严格 `doctor --beta` 门禁；只有策略配置、交易日、行情、本地账本、飞书 sent 记录和调度审计全部 ready，才会启动本次调度。失败时只输出体检报告，不写入调度状态，不产生模拟买入。
+`beta-start` 会先运行严格 `doctor --beta` 门禁；只有策略配置、交易日、行情、本地账本、飞书 sent 记录和调度审计全部 ready，才会启动本次调度。行情体检超过 `--market-data-timeout-seconds` 会快速返回 blocked，不写入调度状态，不产生模拟买入。
 
 本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
 

@@ -231,6 +231,12 @@ class CountingOneToTwoProvider(StaticOneToTwoProvider):
         return super().load_one_to_two_rows(trade_date)
 
 
+class SlowOneToTwoProvider(StaticOneToTwoProvider):
+    def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        threading.Event().wait(1.0)
+        return super().load_one_to_two_rows(trade_date)
+
+
 class FakeFeishuApiServer:
     def __init__(self) -> None:
         self.requests: list[tuple[str, dict[str, str], dict[str, object]]] = []
@@ -825,6 +831,25 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(checks["market_data"].status, "blocked")
             self.assertEqual(service._paper_store.load().positions, ())
             self.assertEqual(service._paper_store.load().events, ())
+
+    def test_doctor_report_blocks_when_market_data_times_out(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SlowOneToTwoProvider(
+                    SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")
+                ),
+            )
+
+            report = service.build_one_to_two_doctor_report(
+                trade_date="2026-05-01",
+                market_data_timeout_seconds=0.01,
+            )
+            checks = {check.check_id: check for check in report.checks}
+
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(checks["market_data"].status, "blocked")
+            self.assertIn("超过 0 秒未返回", checks["market_data"].detail)
 
     def test_doctor_report_explains_missing_akshare_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

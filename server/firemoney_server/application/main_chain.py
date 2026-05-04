@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+from queue import Empty, Queue
+from threading import Thread
 from datetime import date, timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -611,6 +613,7 @@ class MainChainService:
         trade_date: str | None = None,
         beta: bool = False,
         skip_market_data: bool = False,
+        market_data_timeout_seconds: float = 45.0,
     ) -> OneToTwoDoctorReport:
         """Check whether the one-to-two loop is ready to run locally."""
 
@@ -623,7 +626,10 @@ class MainChainService:
             (
                 self._doctor_market_data_plan_check(trade_context.trade_date)
                 if skip_market_data
-                else self._doctor_market_data_check(trade_context.trade_date)
+                else self._doctor_market_data_check(
+                    trade_context.trade_date,
+                    timeout_seconds=market_data_timeout_seconds,
+                )
             ),
             self._doctor_paper_store_check(),
             self._doctor_notification_store_check(),
@@ -1468,7 +1474,11 @@ class MainChainService:
             ),
         )
 
-    def _doctor_market_data_check(self, trade_date: str) -> OneToTwoDoctorCheck:
+    def _doctor_market_data_check(
+        self,
+        trade_date: str,
+        timeout_seconds: float,
+    ) -> OneToTwoDoctorCheck:
         if importlib.util.find_spec("akshare") is None and isinstance(
             self._market_data_provider,
             AkshareMarketDataProvider,
@@ -1481,7 +1491,10 @@ class MainChainService:
                 next_action="运行 python -m pip install -r requirements.txt 后重新执行 doctor。",
             )
         try:
-            rows = self._market_data_provider.load_one_to_two_rows(trade_date)
+            rows = self._load_market_rows_for_doctor(
+                trade_date,
+                timeout_seconds=timeout_seconds,
+            )
         except Exception as exc:
             return OneToTwoDoctorCheck(
                 check_id="market_data",
@@ -1501,6 +1514,38 @@ class MainChainService:
                 else "数据可读但没有候选，盘前继续观察或换交易日验证。"
             ),
         )
+
+    def _load_market_rows_for_doctor(
+        self,
+        trade_date: str,
+        timeout_seconds: float,
+    ):
+        result_queue: Queue[tuple[str, object]] = Queue(maxsize=1)
+
+        def load_rows() -> None:
+            try:
+                result_queue.put(
+                    (
+                        "ready",
+                        self._market_data_provider.load_one_to_two_rows(trade_date),
+                    )
+                )
+            except Exception as exc:
+                result_queue.put(("blocked", exc))
+
+        worker = Thread(target=load_rows, daemon=True)
+        worker.start()
+        try:
+            status, payload = result_queue.get(timeout=max(0.1, timeout_seconds))
+        except Empty as exc:
+            raise TimeoutError(
+                f"AkShare 行情体检超过 {timeout_seconds:.0f} 秒未返回"
+            ) from exc
+        if status == "blocked":
+            if isinstance(payload, Exception):
+                raise payload
+            raise RuntimeError(str(payload))
+        return payload
 
     def _doctor_market_data_plan_check(self, trade_date: str) -> OneToTwoDoctorCheck:
         return OneToTwoDoctorCheck(

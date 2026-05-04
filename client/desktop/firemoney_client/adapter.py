@@ -61,10 +61,12 @@ class LocalMainChainAdapter:
         self,
         trade_date: str | None = None,
         beta: bool = False,
+        market_data_timeout_seconds: float = 45.0,
     ) -> OneToTwoDoctorReport:
         return self._service.build_one_to_two_doctor_report(
             trade_date=trade_date,
             beta=beta,
+            market_data_timeout_seconds=market_data_timeout_seconds,
         )
 
     def send_one_to_two_feishu_test(

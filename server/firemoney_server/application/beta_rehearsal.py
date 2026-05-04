@@ -180,8 +180,8 @@ def build_one_to_two_beta_launch_plan(
     launch_date = requested_context.next_trade_date
     launch_commands = (
         f"python -m client.desktop.firemoney_client.one_to_two_cli beta-rehearsal --trade-date {requested_context.trade_date}",
-        f"python -m client.desktop.firemoney_client.one_to_two_cli beta-check --trade-date {launch_date}",
-        f"python -m client.desktop.firemoney_client.one_to_two_cli beta-start --trade-date {launch_date} --loop --interval-seconds 60",
+        f"python -m client.desktop.firemoney_client.one_to_two_cli beta-check --trade-date {launch_date} --market-data-timeout-seconds 20",
+        f"python -m client.desktop.firemoney_client.one_to_two_cli beta-start --trade-date {launch_date} --loop --interval-seconds 60 --market-data-timeout-seconds 20",
         "python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 20",
         "python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 20",
     )

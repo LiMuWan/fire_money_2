@@ -97,6 +97,12 @@ def main() -> None:
     )
     parser.add_argument("--interval-seconds", type=int, default=60)
     parser.add_argument(
+        "--market-data-timeout-seconds",
+        type=float,
+        default=20.0,
+        help="Maximum seconds for doctor/beta market data readiness checks.",
+    )
+    parser.add_argument(
         "--phase",
         choices=("scan", "auction", "open", "risk"),
         default="scan",
@@ -203,6 +209,7 @@ def main() -> None:
         result = adapter.build_one_to_two_doctor_report(
             trade_date=args.trade_date,
             beta=args.beta,
+            market_data_timeout_seconds=args.market_data_timeout_seconds,
         )
     elif args.mode == "beta-check":
         if args.no_notify:
@@ -227,6 +234,7 @@ def main() -> None:
         readiness = adapter.build_one_to_two_doctor_report(
             trade_date=args.trade_date,
             beta=True,
+            market_data_timeout_seconds=args.market_data_timeout_seconds,
         )
         if readiness.status != "ready":
             print(json.dumps(contract_to_dict(readiness), ensure_ascii=False, indent=2))
@@ -291,6 +299,7 @@ def main() -> None:
             readiness = adapter.build_one_to_two_doctor_report(
                 trade_date=args.trade_date,
                 beta=True,
+                market_data_timeout_seconds=args.market_data_timeout_seconds,
             )
             if readiness.status != "ready":
                 print(json.dumps(contract_to_dict(readiness), ensure_ascii=False, indent=2))
