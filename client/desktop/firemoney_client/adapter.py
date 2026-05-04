@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from server.firemoney_server import MainChainService
 from shared.contracts import (
+    LimitUpBoardShadowReport,
     NotificationRecord,
     NotificationStatus,
     OneToTwoBetaReadinessReport,
@@ -131,4 +132,14 @@ class LocalMainChainAdapter:
         return self._service.run_one_to_two_historical_replay(
             as_of_date=as_of_date,
             holding_days=holding_days,
+        )
+
+    def build_limit_up_board_shadow_report(
+        self,
+        as_of_date: str | None = None,
+        cache_dir: str | None = None,
+    ) -> LimitUpBoardShadowReport:
+        return self._service.build_limit_up_board_shadow_report(
+            as_of_date=as_of_date,
+            cache_dir=cache_dir,
         )

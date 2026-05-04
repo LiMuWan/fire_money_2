@@ -35,6 +35,9 @@ from server.firemoney_server.infrastructure.trading_calendar import (
 from shared.contracts import (
     BacktestDataQualityCheck,
     FeishuNotificationResult,
+    LimitUpBoardShadowCandidate,
+    LimitUpBoardShadowReport,
+    LimitUpBoardShadowTrade,
     MainlineContinuity,
     MainlineNewsItem,
     NotificationStatus,
@@ -54,6 +57,7 @@ from shared.contracts import (
     PaperAccount,
     TradingDayContext,
 )
+from tools import research_limit_up_board_profit_matrix as board_matrix
 
 
 class MainChainService:
@@ -1022,6 +1026,226 @@ class MainChainService:
             quality_checks=quality_checks,
             no_future_leakage_notes=no_future_notes,
             next_action=next_action,
+        )
+
+    def build_limit_up_board_shadow_report(
+        self,
+        as_of_date: str | None = None,
+        cache_dir: str | Path | None = None,
+    ) -> LimitUpBoardShadowReport:
+        """Build a shadow report for the limit-up board validation line."""
+
+        trade_context = self._trading_calendar.resolve(
+            as_of_date or self._default_trade_date()
+        )
+        as_of = trade_context.trade_date
+        cache_path = Path(cache_dir) if cache_dir else board_matrix.DEFAULT_CACHE_DIR
+        data_mode = f"cached_daily:{cache_path}"
+        no_future_notes = (
+            f"封板影子线选股只读取 {as_of} 当日及以前的本地日线缓存。",
+            "候选确定后，后续日线只用于卖点回放和盈亏计算，不参与排名。",
+            "同一日线同时碰到 5% 止盈和 6% 止损时，按保守止损优先。",
+        )
+        limitations = (
+            "日线缓存不能证明封单强度、开板次数、排队可成交或真实滑点。",
+            "当前入口只做 shadow 验证，不写入一进二模拟盘，不代表实盘交易建议。",
+            "封板线进入模拟盘前必须接入分钟线/Tick、封单和主线消息持续性。",
+        )
+        quality_checks: list[BacktestDataQualityCheck] = [
+            BacktestDataQualityCheck(
+                check_id="runtime_boundary",
+                label="运行边界",
+                status="ready",
+                detail="封板验证线以 shadow 模式运行，不污染当前一进二模拟盘。",
+                next_action="继续和一进二 Beta 并行观察，不直接替代主线。",
+            )
+        ]
+        try:
+            universe, histories = board_matrix.load_cached_research_data(
+                cache_path,
+                board_matrix.sm.parse_iso_date(as_of),
+                board_matrix.sm.parse_iso_date(as_of),
+            )
+        except Exception as exc:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="cached_daily_data",
+                    label="历史缓存",
+                    status="blocked",
+                    detail=f"封板影子线无法读取本地历史缓存：{exc}",
+                    next_action="先运行封板利润矩阵或修复 .firemoney/research_cache/one_to_two_daily。",
+                )
+            )
+            return LimitUpBoardShadowReport(
+                report_id=f"limit-up-board-shadow-{as_of}-blocked",
+                as_of_date=as_of,
+                status="blocked",
+                summary="封板影子线被阻断：本地历史缓存不可用。",
+                candidate=None,
+                trade=None,
+                quality_checks=tuple(quality_checks),
+                no_future_leakage_notes=no_future_notes,
+                limitations=limitations,
+                next_action="先补齐历史缓存，再运行 board-shadow。",
+            )
+
+        candidates = board_matrix.build_board_candidates(
+            universe,
+            histories,
+            board_matrix.sm.parse_iso_date(as_of),
+            board_matrix.sm.parse_iso_date(as_of),
+        )
+        entry_case = board_matrix.EntryCase(
+            case_id="shadow_sealed_gain35_ma",
+            require_first_board=False,
+            min_turnover_amount=80_000_000.0,
+            max_recent_gain_pct=0.35,
+            max_ma20_deviation_pct=0.35,
+            min_volume_ratio_20=1.0,
+            require_ma_bullish=True,
+            min_position_percentile_60=0.0,
+        )
+        exit_case = board_matrix.ExitCase(
+            case_id="shadow_stop6_target5_hold1",
+            stop_loss_pct=0.06,
+            take_profit_pct=0.05,
+            max_hold_days=1,
+            weak_next_open_exit_pct=None,
+        )
+        filtered = [
+            item for item in candidates if board_matrix.entry_case_allows(entry_case, item)
+        ]
+        daily_candidates = board_matrix.select_daily_top_candidates(filtered, "score")
+        if not daily_candidates:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="candidate",
+                    label="封板候选",
+                    status="blocked",
+                    detail=f"{as_of} 没有符合封板验证线的候选。",
+                    next_action="保持空仓观察，不生成影子买入。",
+                )
+            )
+            return LimitUpBoardShadowReport(
+                report_id=f"limit-up-board-shadow-{as_of}-empty",
+                as_of_date=as_of,
+                status="blocked",
+                summary="封板影子线无交易：当日没有合格候选。",
+                candidate=None,
+                trade=None,
+                quality_checks=tuple(quality_checks),
+                no_future_leakage_notes=no_future_notes,
+                limitations=limitations,
+                next_action="继续观察下一交易日，或只做历史区间回测。",
+            )
+        selected = daily_candidates[0]
+        quality_checks.append(
+            BacktestDataQualityCheck(
+                check_id="candidate",
+                label="封板候选",
+                status="ready",
+                detail=f"{as_of} 选出 {selected.name}({selected.symbol})，rank={selected.rank_score:.2f}。",
+                next_action="后续只用 T+1 日线回放卖点，不回灌选股。",
+            )
+        )
+        trade = board_matrix.simulate_board_trade(
+            selected,
+            histories[selected.symbol],
+            exit_case,
+            roundtrip_cost_pct=0.0015,
+        )
+        shadow_candidate = self._to_board_shadow_candidate(selected, exit_case)
+        if trade is None:
+            quality_checks.append(
+                BacktestDataQualityCheck(
+                    check_id="exit_replay",
+                    label="卖点回放",
+                    status="blocked",
+                    detail=f"{selected.symbol} 缺少 T+1 日线，无法回放卖点。",
+                    next_action="换更早的历史日期，或补齐后续日线缓存。",
+                )
+            )
+            return LimitUpBoardShadowReport(
+                report_id=f"limit-up-board-shadow-{as_of}-{selected.symbol}",
+                as_of_date=as_of,
+                status="blocked",
+                summary="封板影子线候选已生成，但卖点回放缺少后续日线。",
+                candidate=shadow_candidate,
+                trade=None,
+                quality_checks=tuple(quality_checks),
+                no_future_leakage_notes=no_future_notes,
+                limitations=limitations,
+                next_action="补齐 T+1 日线后重新运行 board-shadow。",
+            )
+        quality_checks.append(
+            BacktestDataQualityCheck(
+                check_id="exit_replay",
+                label="卖点回放",
+                status="ready",
+                detail=f"{trade.exit_date} 按 {trade.reason} 卖出，收益 {trade.net_return_pct:.2%}。",
+                next_action="把影子结果与一进二 Beta 当日结果并行复盘。",
+            )
+        )
+        warning = any(item.status == "warning" for item in quality_checks)
+        status = "warning" if warning else "ready"
+        shadow_trade = LimitUpBoardShadowTrade(
+            symbol=trade.symbol,
+            name=trade.name,
+            entry_date=trade.entry_date,
+            exit_date=trade.exit_date,
+            entry_price=trade.entry_price,
+            exit_price=trade.exit_price,
+            gross_return_pct=trade.gross_return_pct,
+            realized_pnl_pct=trade.net_return_pct,
+            holding_trade_days=trade.hold_days,
+            exit_reason=trade.reason,
+            data_mode=data_mode,
+        )
+        return LimitUpBoardShadowReport(
+            report_id=f"limit-up-board-shadow-{as_of}-{selected.symbol}",
+            as_of_date=as_of,
+            status=status,
+            summary=(
+                f"封板影子线：{selected.name}({selected.symbol}) "
+                f"{trade.entry_date} 打板价 {trade.entry_price:.2f}，"
+                f"{trade.exit_date} {trade.reason}，收益 {trade.net_return_pct:.2%}。"
+            ),
+            candidate=shadow_candidate,
+            trade=shadow_trade,
+            quality_checks=tuple(quality_checks),
+            no_future_leakage_notes=no_future_notes,
+            limitations=limitations,
+            next_action="继续并行跟踪 30/50/100 笔 shadow 样本，再决定是否升级为模拟盘主线。",
+        )
+
+    @staticmethod
+    def _to_board_shadow_candidate(
+        candidate: board_matrix.BoardCandidate,
+        exit_case: board_matrix.ExitCase,
+    ) -> LimitUpBoardShadowCandidate:
+        stop_loss = round(candidate.entry_price * (1 - exit_case.stop_loss_pct), 2)
+        take_profit = round(candidate.entry_price * (1 + exit_case.take_profit_pct), 2)
+        risk_notes = (
+            "仍缺封单强度、开板次数和排队可成交验证。",
+            "日线同日碰止盈止损时按止损优先。",
+            "shadow 模式不写入当前一进二模拟盘。",
+        )
+        return LimitUpBoardShadowCandidate(
+            symbol=candidate.symbol,
+            name=candidate.name,
+            board_date=candidate.board_date,
+            entry_price=candidate.entry_price,
+            stop_loss=stop_loss,
+            take_profit_price=take_profit,
+            rank_score=candidate.rank_score,
+            estimated_turnover_amount=candidate.estimated_turnover_amount,
+            volume_ratio_20=candidate.volume_ratio_20,
+            recent_gain_pct=candidate.recent_gain_pct,
+            ma20_deviation_pct=candidate.ma20_deviation_pct,
+            first_board=candidate.first_board,
+            ma_bullish=candidate.ma_bullish,
+            risk_notes=risk_notes,
+            next_action="仅做影子验证；若后续补齐可成交数据，再进入模拟盘。",
         )
 
     def _replay_trade_dates(self, entry_date: str, holding_days: int) -> list[str]:

@@ -368,6 +368,54 @@ class OneToTwoHistoricalReplayReport:
 
 
 @dataclass(frozen=True)
+class LimitUpBoardShadowCandidate:
+    symbol: str
+    name: str
+    board_date: str
+    entry_price: float
+    stop_loss: float
+    take_profit_price: float
+    rank_score: float
+    estimated_turnover_amount: float
+    volume_ratio_20: float
+    recent_gain_pct: float
+    ma20_deviation_pct: float
+    first_board: bool
+    ma_bullish: bool
+    risk_notes: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class LimitUpBoardShadowTrade:
+    symbol: str
+    name: str
+    entry_date: str
+    exit_date: str
+    entry_price: float
+    exit_price: float
+    gross_return_pct: float
+    realized_pnl_pct: float
+    holding_trade_days: int
+    exit_reason: str
+    data_mode: str
+
+
+@dataclass(frozen=True)
+class LimitUpBoardShadowReport:
+    report_id: str
+    as_of_date: str
+    status: str
+    summary: str
+    candidate: LimitUpBoardShadowCandidate | None
+    trade: LimitUpBoardShadowTrade | None
+    quality_checks: tuple[BacktestDataQualityCheck, ...]
+    no_future_leakage_notes: tuple[str, ...]
+    limitations: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
 class OneToTwoDoctorCheck:
     check_id: str
     label: str

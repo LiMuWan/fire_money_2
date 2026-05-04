@@ -2,6 +2,9 @@
 
 from .trading import (
     FeishuNotificationResult,
+    LimitUpBoardShadowCandidate,
+    LimitUpBoardShadowReport,
+    LimitUpBoardShadowTrade,
     NotificationRecord,
     NotificationStatus,
     MainlineContinuity,
@@ -36,6 +39,9 @@ from .trading import (
 
 __all__ = [
     "FeishuNotificationResult",
+    "LimitUpBoardShadowCandidate",
+    "LimitUpBoardShadowReport",
+    "LimitUpBoardShadowTrade",
     "NotificationRecord",
     "NotificationStatus",
     "MainlineContinuity",

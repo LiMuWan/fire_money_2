@@ -37,6 +37,7 @@ def main() -> None:
             "backtest",
             "backtest-audit",
             "replay",
+            "board-shadow",
             "stability",
             "doctor",
             "beta-check",
@@ -62,6 +63,11 @@ def main() -> None:
     )
     parser.add_argument("--at", default=None, help="schedule mode clock time, HH:MM.")
     parser.add_argument("--paper-store", default=None, help="Optional paper ledger path.")
+    parser.add_argument(
+        "--cache-dir",
+        default=None,
+        help="Optional research daily-bar cache path for board-shadow.",
+    )
     parser.add_argument(
         "--notification-store",
         default=None,
@@ -203,6 +209,11 @@ def main() -> None:
             as_of_date=args.trade_date,
             holding_days=args.holding_days,
         )
+    elif args.mode == "board-shadow":
+        result = adapter.build_limit_up_board_shadow_report(
+            as_of_date=args.trade_date,
+            cache_dir=args.cache_dir,
+        )
     elif args.mode == "stability":
         result = adapter.build_one_to_two_stability_report()
     elif args.mode == "doctor":
@@ -334,6 +345,9 @@ def main() -> None:
     if args.brief and args.mode == "replay":
         print(_format_historical_replay_brief(result))
         return
+    if args.brief and args.mode == "board-shadow":
+        print(_format_board_shadow_brief(result))
+        return
     print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
 
 
@@ -426,6 +440,49 @@ def _format_historical_replay_brief(report) -> str:
         f"- {check.label}：{check.status}，{check.detail}"
         for check in report.quality_checks
     )
+    lines.append(f"下一步：{report.next_action}")
+    return "\n".join(lines)
+
+
+def _format_board_shadow_brief(report) -> str:
+    lines = [
+        f"FireMoney 封板影子线：{report.status}",
+        f"观察日：{report.as_of_date}",
+        report.summary,
+    ]
+    if report.candidate:
+        lines.extend(
+            [
+                (
+                    f"候选：{report.candidate.name}({report.candidate.symbol}) "
+                    f"rank={report.candidate.rank_score:.2f}"
+                ),
+                (
+                    f"买点：{report.candidate.entry_price:.2f}，"
+                    f"止损：{report.candidate.stop_loss:.2f}，"
+                    f"止盈：{report.candidate.take_profit_price:.2f}"
+                ),
+                (
+                    f"成交额：{report.candidate.estimated_turnover_amount:.0f}，"
+                    f"量比20：{report.candidate.volume_ratio_20:.2f}，"
+                    f"近20日涨幅：{report.candidate.recent_gain_pct:.2%}"
+                ),
+            ]
+        )
+    if report.trade:
+        lines.append(
+            f"回放：{report.trade.exit_date} {report.trade.exit_reason} "
+            f"{report.trade.realized_pnl_pct:.2%}"
+        )
+    else:
+        lines.append("回放：未生成")
+    lines.append("质量检查：")
+    lines.extend(
+        f"- {check.label}：{check.status}，{check.detail}"
+        for check in report.quality_checks
+    )
+    lines.append("限制：")
+    lines.extend(f"- {item}" for item in report.limitations)
     lines.append(f"下一步：{report.next_action}")
     return "\n".join(lines)
 

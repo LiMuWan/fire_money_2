@@ -37,6 +37,7 @@ from server.firemoney_server.infrastructure.scheduler_state import SchedulerStat
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
     FeishuNotificationResult,
+    LimitUpBoardShadowReport,
     MainlineNewsItem,
     NotificationRecord,
     NotificationStatus,
@@ -237,6 +238,16 @@ class SlowOneToTwoProvider(StaticOneToTwoProvider):
         return super().load_one_to_two_rows(trade_date)
 
 
+def _board_shadow_bars(module):
+    return [
+        module.sm.DailyBar("2026-04-01", 9.0, 9.09, 9.1, 8.95, 10000)
+        for _ in range(80)
+    ] + [
+        module.sm.DailyBar("2026-04-29", 9.3, 10.0, 10.0, 9.2, 100000),
+        module.sm.DailyBar("2026-04-30", 10.0, 10.5, 10.6, 9.8, 100000),
+    ]
+
+
 class FakeFeishuApiServer:
     def __init__(self) -> None:
         self.requests: list[tuple[str, dict[str, str], dict[str, object]]] = []
@@ -327,6 +338,55 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertGreaterEqual(payload["candidates"][0]["mainline_score"], 14)
             self.assertGreaterEqual(payload["candidates"][0]["leader_score"], 16)
             self.assertIn("龙头候选", payload["candidates"][0]["leader_label"])
+
+    def test_limit_up_board_shadow_report_is_json_friendly(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        stock = module.sm.StockMeta("600001", "shadow board", None)
+        bars = _board_shadow_bars(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            with patch(
+                "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
+                return_value=([stock], {"600001": bars}),
+            ):
+                report = service.build_limit_up_board_shadow_report(
+                    as_of_date="2026-04-29"
+                )
+            payload = contract_to_dict(report)
+
+            self.assertIsInstance(report, LimitUpBoardShadowReport)
+            self.assertEqual(report.status, "ready")
+            self.assertEqual(report.candidate.symbol, "600001")
+            self.assertEqual(report.trade.exit_reason, "take_profit")
+            self.assertEqual(payload["candidate"]["take_profit_price"], 10.5)
+            self.assertIn("shadow", payload["limitations"][1])
+
+    def test_limit_up_board_shadow_does_not_mutate_one_to_two_paper_ledger(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        stock = module.sm.StockMeta("600001", "shadow board", None)
+        bars = _board_shadow_bars(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            with patch(
+                "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
+                return_value=([stock], {"600001": bars}),
+            ):
+                report = service.build_limit_up_board_shadow_report(
+                    as_of_date="2026-04-29"
+                )
+            account = PaperTradeStore(root / "paper_trades.json").load()
+
+            self.assertEqual(report.status, "ready")
+            self.assertEqual(account.positions, ())
+            self.assertEqual(account.events, ())
+            self.assertEqual(account.closed_trades, ())
 
     def test_weekend_request_uses_previous_trading_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2032,6 +2092,28 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("样本数：warning", completed.stdout)
             self.assertIn("Point-in-Time", completed.stdout)
             self.assertFalse((root / "paper_trades.json").exists())
+
+    def test_board_shadow_cli_brief_prints_shadow_boundary(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "client.desktop.firemoney_client.one_to_two_cli",
+                "board-shadow",
+                "--trade-date",
+                "2026-04-29",
+                "--brief",
+            ],
+            cwd=Path.cwd(),
+            text=True,
+            capture_output=True,
+            timeout=90,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("FireMoney 封板影子线", completed.stdout)
+        self.assertIn("shadow", completed.stdout)
 
     def test_historical_replay_uses_as_of_candidate_and_future_bars_for_exit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
