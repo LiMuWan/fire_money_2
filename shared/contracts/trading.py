@@ -402,6 +402,27 @@ class LimitUpBoardShadowTrade:
 
 
 @dataclass(frozen=True)
+class LimitUpBoardShadowSample:
+    sample_id: str
+    as_of_date: str
+    status: str
+    symbol: str
+    name: str
+    entry_price: float
+    stop_loss: float
+    take_profit_price: float
+    rank_score: float
+    exit_date: str
+    exit_price: float
+    realized_pnl_pct: float
+    holding_trade_days: int
+    exit_reason: str
+    success: bool
+    created_at: str
+    limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class LimitUpBoardShadowReport:
     report_id: str
     as_of_date: str
@@ -412,6 +433,23 @@ class LimitUpBoardShadowReport:
     quality_checks: tuple[BacktestDataQualityCheck, ...]
     no_future_leakage_notes: tuple[str, ...]
     limitations: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class LimitUpBoardShadowStabilityReport:
+    report_id: str
+    sample_count: int
+    sample_stage: str
+    next_milestone: int
+    success_rate: float
+    average_return_pct: float
+    max_drawdown: float
+    exit_reason_distribution: dict[str, int]
+    recent_samples: tuple[LimitUpBoardShadowSample, ...]
+    status: str
+    summary: str
+    strategy_boundary_suggestion: str
     next_action: str
 
 

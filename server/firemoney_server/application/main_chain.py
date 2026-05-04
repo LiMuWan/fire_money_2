@@ -16,6 +16,9 @@ from server.firemoney_server.domain.one_to_two import (
     OneToTwoPolicy,
 )
 from server.firemoney_server.infrastructure.feishu_notifier import FeishuNotifier
+from server.firemoney_server.infrastructure.board_shadow_store import (
+    LimitUpBoardShadowStore,
+)
 from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
     MarketDataProvider,
@@ -37,6 +40,8 @@ from shared.contracts import (
     FeishuNotificationResult,
     LimitUpBoardShadowCandidate,
     LimitUpBoardShadowReport,
+    LimitUpBoardShadowSample,
+    LimitUpBoardShadowStabilityReport,
     LimitUpBoardShadowTrade,
     MainlineContinuity,
     MainlineNewsItem,
@@ -73,6 +78,7 @@ class MainChainService:
         scheduler_state_store: SchedulerStateStore | None = None,
         scheduler_run_store: SchedulerRunStore | None = None,
         trading_calendar: TradingCalendar | None = None,
+        board_shadow_store: LimitUpBoardShadowStore | None = None,
     ) -> None:
         self._one_to_two_settings = one_to_two_settings or load_one_to_two_settings()
         self._one_to_two_policy = OneToTwoPolicy(self._one_to_two_settings)
@@ -87,6 +93,7 @@ class MainChainService:
         self._scheduler_state_store = scheduler_state_store or SchedulerStateStore()
         self._scheduler_run_store = scheduler_run_store or SchedulerRunStore()
         self._trading_calendar = trading_calendar or AkshareTradingCalendar()
+        self._board_shadow_store = board_shadow_store or LimitUpBoardShadowStore()
 
     def resolve_trading_day(self, trade_date: str | None = None) -> TradingDayContext:
         """Resolve a requested date with the same calendar used by workflows."""
@@ -1217,6 +1224,38 @@ class MainChainService:
             limitations=limitations,
             next_action="继续并行跟踪 30/50/100 笔 shadow 样本，再决定是否升级为模拟盘主线。",
         )
+
+    def record_limit_up_board_shadow_sample(
+        self,
+        as_of_date: str | None = None,
+        cache_dir: str | Path | None = None,
+    ) -> LimitUpBoardShadowReport:
+        """Build and persist one limit-up board shadow sample when tradable."""
+
+        report = self.build_limit_up_board_shadow_report(
+            as_of_date=as_of_date,
+            cache_dir=cache_dir,
+        )
+        sample = self._board_shadow_store.append_report(report)
+        if sample is None:
+            return report
+        return LimitUpBoardShadowReport(
+            report_id=report.report_id,
+            as_of_date=report.as_of_date,
+            status=report.status,
+            summary=f"{report.summary} 已记录 shadow 样本 {sample.sample_id}。",
+            candidate=report.candidate,
+            trade=report.trade,
+            quality_checks=report.quality_checks,
+            no_future_leakage_notes=report.no_future_leakage_notes,
+            limitations=report.limitations,
+            next_action="运行 board-shadow-stability 查看累计胜率和阶段门槛。",
+        )
+
+    def build_limit_up_board_shadow_stability_report(
+        self,
+    ) -> LimitUpBoardShadowStabilityReport:
+        return self._board_shadow_store.build_stability_report()
 
     @staticmethod
     def _to_board_shadow_candidate(

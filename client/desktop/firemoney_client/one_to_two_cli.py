@@ -15,6 +15,9 @@ from server.firemoney_server.application.beta_rehearsal import (
     run_one_to_two_beta_rehearsal,
 )
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
+from server.firemoney_server.infrastructure.board_shadow_store import (
+    LimitUpBoardShadowStore,
+)
 from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
     SampleMarketDataProvider,
@@ -38,6 +41,8 @@ def main() -> None:
             "backtest-audit",
             "replay",
             "board-shadow",
+            "board-shadow-record",
+            "board-shadow-stability",
             "stability",
             "doctor",
             "beta-check",
@@ -67,6 +72,11 @@ def main() -> None:
         "--cache-dir",
         default=None,
         help="Optional research daily-bar cache path for board-shadow.",
+    )
+    parser.add_argument(
+        "--board-shadow-store",
+        default=None,
+        help="Optional limit-up board shadow sample store path.",
     )
     parser.add_argument(
         "--notification-store",
@@ -174,6 +184,11 @@ def main() -> None:
         notification_store=notification_store,
         scheduler_state_store=scheduler_state_store,
         scheduler_run_store=scheduler_run_store,
+        board_shadow_store=(
+            LimitUpBoardShadowStore(args.board_shadow_store)
+            if args.board_shadow_store
+            else None
+        ),
     )
     adapter = LocalMainChainAdapter(service)
     if args.mode == "morning":
@@ -214,6 +229,13 @@ def main() -> None:
             as_of_date=args.trade_date,
             cache_dir=args.cache_dir,
         )
+    elif args.mode == "board-shadow-record":
+        result = adapter.record_limit_up_board_shadow_sample(
+            as_of_date=args.trade_date,
+            cache_dir=args.cache_dir,
+        )
+    elif args.mode == "board-shadow-stability":
+        result = adapter.build_limit_up_board_shadow_stability_report()
     elif args.mode == "stability":
         result = adapter.build_one_to_two_stability_report()
     elif args.mode == "doctor":
@@ -345,8 +367,11 @@ def main() -> None:
     if args.brief and args.mode == "replay":
         print(_format_historical_replay_brief(result))
         return
-    if args.brief and args.mode == "board-shadow":
+    if args.brief and args.mode in {"board-shadow", "board-shadow-record"}:
         print(_format_board_shadow_brief(result))
+        return
+    if args.brief and args.mode == "board-shadow-stability":
+        print(_format_board_shadow_stability_brief(result))
         return
     print(json.dumps(contract_to_dict(result), ensure_ascii=False, indent=2))
 
@@ -483,6 +508,32 @@ def _format_board_shadow_brief(report) -> str:
     )
     lines.append("限制：")
     lines.extend(f"- {item}" for item in report.limitations)
+    lines.append(f"下一步：{report.next_action}")
+    return "\n".join(lines)
+
+
+def _format_board_shadow_stability_brief(report) -> str:
+    lines = [
+        f"FireMoney 封板影子线稳定性：{report.status}",
+        f"样本数：{report.sample_count}",
+        f"阶段：{report.sample_stage}，下一门槛：{report.next_milestone or '复核'}",
+        f"胜率：{report.success_rate:.2%}",
+        f"平均收益：{report.average_return_pct:.2%}",
+        f"最大回撤：{report.max_drawdown:.2%}",
+        f"边界建议：{report.strategy_boundary_suggestion}",
+    ]
+    if report.exit_reason_distribution:
+        lines.append("退出原因：")
+        lines.extend(
+            f"- {reason}: {count}"
+            for reason, count in report.exit_reason_distribution.items()
+        )
+    if report.recent_samples:
+        lines.append("最近样本：")
+        lines.extend(
+            f"- {sample.as_of_date} {sample.symbol} {sample.realized_pnl_pct:.2%} {sample.exit_reason}"
+            for sample in report.recent_samples[:5]
+        )
     lines.append(f"下一步：{report.next_action}")
     return "\n".join(lines)
 

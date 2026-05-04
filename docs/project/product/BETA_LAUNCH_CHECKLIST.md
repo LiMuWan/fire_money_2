@@ -54,6 +54,8 @@ python -B tools\research_limit_up_board_profit_matrix.py --start-date 2024-01-01
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli board-shadow --trade-date 2026-04-29 --brief
+python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-record --trade-date 2026-04-29 --brief
+python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-stability --brief
 ```
 
 单点检查某个历史交易日“当时介入、后面盈亏比”：

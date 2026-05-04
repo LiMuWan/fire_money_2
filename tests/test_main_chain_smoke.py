@@ -19,6 +19,9 @@ from server.firemoney_server.application.beta_rehearsal import (
     run_one_to_two_beta_rehearsal,
 )
 from server.firemoney_server.application.one_to_two_scheduler import OneToTwoScheduler
+from server.firemoney_server.infrastructure.board_shadow_store import (
+    LimitUpBoardShadowStore,
+)
 from server.firemoney_server.domain.one_to_two import (
     HistoricalPriceBar,
     OneToTwoMarketRow,
@@ -60,6 +63,7 @@ def _build_service(
     notification_store: NotificationRecordStore | None = None,
     scheduler_state_store: SchedulerStateStore | None = None,
     scheduler_run_store: SchedulerRunStore | None = None,
+    board_shadow_store: LimitUpBoardShadowStore | None = None,
     trading_calendar=None,
 ) -> MainChainService:
     return MainChainService(
@@ -71,6 +75,8 @@ def _build_service(
         or SchedulerStateStore(root / "scheduler_state.json"),
         scheduler_run_store=scheduler_run_store
         or SchedulerRunStore(root / "scheduler_runs.json"),
+        board_shadow_store=board_shadow_store
+        or LimitUpBoardShadowStore(root / "board_shadow_samples.json"),
         trading_calendar=trading_calendar or WeekdayTradingCalendar(),
     )
 
@@ -387,6 +393,39 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(account.positions, ())
             self.assertEqual(account.events, ())
             self.assertEqual(account.closed_trades, ())
+
+    def test_limit_up_board_shadow_record_builds_isolated_stability(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        stock = module.sm.StockMeta("600001", "shadow board", None)
+        bars = _board_shadow_bars(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                board_shadow_store=LimitUpBoardShadowStore(
+                    root / "board_shadow_samples.json",
+                    created_at_provider=lambda: "20260501090000",
+                ),
+            )
+            with patch(
+                "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
+                return_value=([stock], {"600001": bars}),
+            ):
+                first_report = service.record_limit_up_board_shadow_sample(
+                    as_of_date="2026-04-29"
+                )
+                second_report = service.record_limit_up_board_shadow_sample(
+                    as_of_date="2026-04-29"
+                )
+            stability = service.build_limit_up_board_shadow_stability_report()
+            payload = contract_to_dict(stability)
+
+            self.assertIn("board-shadow-2026-04-29-600001", first_report.summary)
+            self.assertIn("board-shadow-2026-04-29-600001", second_report.summary)
+            self.assertEqual(stability.sample_count, 1)
+            self.assertEqual(stability.success_rate, 1.0)
+            self.assertEqual(payload["recent_samples"][0]["created_at"], "20260501090000")
 
     def test_weekend_request_uses_previous_trading_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2114,6 +2153,29 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("FireMoney 封板影子线", completed.stdout)
         self.assertIn("shadow", completed.stdout)
+
+    def test_board_shadow_stability_cli_brief_uses_isolated_store(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "client.desktop.firemoney_client.one_to_two_cli",
+                    "board-shadow-stability",
+                    "--board-shadow-store",
+                    str(Path(temp_dir) / "board_shadow_samples.json"),
+                    "--brief",
+                ],
+                cwd=Path.cwd(),
+                text=True,
+                capture_output=True,
+                timeout=90,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn("FireMoney 封板影子线稳定性", completed.stdout)
+            self.assertIn("样本数：0", completed.stdout)
 
     def test_historical_replay_uses_as_of_candidate_and_future_bars_for_exit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

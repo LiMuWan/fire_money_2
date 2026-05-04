@@ -112,7 +112,7 @@ FireMoney 当前只服务一条核心链路：
 
 2026-05-04 继续为封板打板验证线新增利润矩阵：只读本地历史缓存，入口和排名只使用封板当天可见字段，并强制训练期（2024-2025）和验证期（2026）都为正才进入榜单。当前最稳候选为：非一字封板、成交额不低于 8000 万、均线多头、近 20 日涨幅不高于 35%、按封板日可见强度分排序，每天最多一只；卖点为次日 5% 止盈、6% 止损、最多持有 1 个交易日，同一日线同时碰止盈止损按止损优先。2024-01-01 到 2026-05-03 的日线代理为 272 笔，胜率 66.54%，单笔平均收益 2.34%，8% 仓位复合约 66.10%，最大回撤约 3.41%；训练期约 +52.41%，2026 验证期约 +8.98%；分年看，2024 约 +18.75%，2025 约 +28.35%，2026 约 +8.98%。这比当前一进二默认线更强，但仍不直接转实盘：下一步必须把封单强度、开板次数、成交队列、分时滑点和主线消息持续性接入模拟盘验证。
 
-同日新增 `board-shadow` 影子入口：它把上述封板规则接到产品 CLI，但只读本地历史缓存并输出候选/卖点回放报告，不写入当前一进二模拟盘，也不发交易指令。这个入口用于每天并行比较“如果今天做封板线会怎样”，等积累 30/50/100 笔 shadow 样本并补齐可成交数据后，再决定是否升级为模拟盘主线。
+同日新增 `board-shadow` 影子入口：它把上述封板规则接到产品 CLI，但只读本地历史缓存并输出候选/卖点回放报告，不写入当前一进二模拟盘，也不发交易指令。随后补上独立 `board-shadow-record` / `board-shadow-stability` 样本账本，记录到 `.firemoney/board_shadow_samples.json`，和一进二 `paper_trades.json` 完全隔离。这个入口用于每天并行比较“如果今天做封板线会怎样”，等积累 30/50/100 笔 shadow 样本并补齐可成交数据后，再决定是否升级为模拟盘主线。
 
 推荐研究命令：
 
@@ -122,6 +122,8 @@ python -B tools\research_one_to_two_profit_matrix.py --start-date 2024-01-01 --e
 python -B tools\research_strategy_matrix_backtest.py --start-date 2024-01-01 --end-date 2026-05-03 --output exports\strategy_matrix_backtest_2024_to_now.json
 python -B tools\research_limit_up_board_profit_matrix.py --start-date 2024-01-01 --end-date 2026-05-03 --top 20 --output exports\limit_up_board_profit_matrix_2024_to_now.json
 python -m client.desktop.firemoney_client.one_to_two_cli board-shadow --trade-date 2026-04-29 --brief
+python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-record --trade-date 2026-04-29 --brief
+python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-stability --brief
 ```
 
 ## 历史逐日回放
