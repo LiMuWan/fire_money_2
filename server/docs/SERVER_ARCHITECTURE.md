@@ -55,10 +55,10 @@ MarketDataProvider/AkShare
 - Market data enters through `MarketDataProvider`; AkShare fields are normalized into project-owned DTOs before domain scoring.
 - AkShare raw snapshots are cached under `.firemoney/market_data/`.
 - If market data is unavailable, the service returns a blocked morning report and no paper buy can be generated.
-- Hard blockers include ST, delisting, new stock, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, open confirmation above 4.5%, and one-word unreachable boards.
+- Hard blockers include ST, delisting, new stock, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, generic mid-position setups, open confirmation above 3.5%, and one-word unreachable boards.
 - Low breakout setups must pass a market-width gate before paper buying: yesterday's mainboard first-board count must reach the configured floor and the same-morning executable candidate pool must have at least the configured count. Otherwise the setup stays blocked for observation.
 - Same-day stop loss breaches create warning events only; T+1 sell events are allowed only after the position rolls to the next day.
-- Sell discipline uses 4.25%/structure stop, 32% first take profit, and 0.10% trailing protection after an 8.25% strong move is reached.
+- Sell discipline uses 4%/structure stop, 12% first take profit, and 2% trailing protection after a 10% strong move is reached.
 - Positions that have lasted at least `max_holding_trade_days` and still have not reached `discipline_exit_min_gain_pct` are closed through a discipline exit during `risk`.
 - Trading dates are resolved before market data and paper trading. Closed dates use the previous A-share trading day so weekends and holidays do not generate false scans.
 - `watch` supports `scan`, `auction`, `open`, and `risk` phases. Only the `open` phase can create a paper buy; `risk` handles stop-warning and T+1 sell events.

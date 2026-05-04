@@ -27,6 +27,7 @@ class OneToTwoStrategySettings:
     min_confirm_open_pct: float
     max_confirm_open_pct: float
     min_turnover_amount: float
+    liquidity_score_amount: float
     market_temperature_floor: int
     high_deviation_block_pct: float
     recent_gain_block_pct: float
@@ -43,6 +44,8 @@ class OneToTwoStrategySettings:
     min_mainline_score: float
     min_low_breakout_first_board_count: int
     min_low_breakout_ready_candidates: int
+    allowed_position_labels: tuple[str, ...]
+    selection_rank: str
     board_strategy_enabled: bool
     excluded_boards: tuple[str, ...]
     exclude_st: bool
@@ -75,6 +78,12 @@ def load_one_to_two_settings(
         min_confirm_open_pct=float(parameters.get("min_confirm_open_pct", 0.0)),
         max_confirm_open_pct=float(parameters.get("max_confirm_open_pct", 0.07)),
         min_turnover_amount=float(parameters["min_turnover_amount"]),
+        liquidity_score_amount=float(
+            parameters.get(
+                "liquidity_score_amount",
+                parameters["min_turnover_amount"],
+            )
+        ),
         market_temperature_floor=int(parameters["market_temperature_floor"]),
         high_deviation_block_pct=float(parameters["high_deviation_block_pct"]),
         recent_gain_block_pct=float(parameters["recent_gain_block_pct"]),
@@ -95,6 +104,10 @@ def load_one_to_two_settings(
         min_low_breakout_ready_candidates=int(
             parameters.get("min_low_breakout_ready_candidates", 0)
         ),
+        allowed_position_labels=tuple(
+            str(item) for item in parameters.get("allowed_position_labels", ())
+        ),
+        selection_rank=str(parameters.get("selection_rank", "default")),
         board_strategy_enabled=bool(parameters.get("board_strategy_enabled", True)),
         excluded_boards=tuple(str(item) for item in exclude["boards"]),
         exclude_st=bool(exclude["st"]),

@@ -62,6 +62,7 @@ class OneToTwoSettings(Protocol):
     min_confirm_open_pct: float
     max_confirm_open_pct: float
     min_turnover_amount: float
+    liquidity_score_amount: float
     market_temperature_floor: int
     high_deviation_block_pct: float
     recent_gain_block_pct: float
@@ -71,6 +72,8 @@ class OneToTwoSettings(Protocol):
     min_mainline_score: float
     min_low_breakout_first_board_count: int
     min_low_breakout_ready_candidates: int
+    allowed_position_labels: tuple[str, ...]
+    selection_rank: str
     board_strategy_enabled: bool
     first_take_profit_pct: float
     strong_take_profit_pct: float
@@ -148,8 +151,10 @@ class OneToTwoPolicy:
     def _candidate_rank_key(
         self,
         item: tuple[OneToTwoMarketRow, OneToTwoCandidate],
-    ) -> tuple[float, int, int, float, float]:
+    ) -> tuple[float, ...]:
         row, candidate = item
+        if self._settings.selection_rank == "turnover":
+            return self._turnover_rank_key(row, candidate)
         open_confirm_bonus = (
             1
             if self._settings.min_confirm_open_pct
@@ -170,6 +175,27 @@ class OneToTwoPolicy:
             row.open_pct,
             row.turnover_amount,
         )
+
+    def _turnover_rank_key(
+        self,
+        row: OneToTwoMarketRow,
+        candidate: OneToTwoCandidate,
+    ) -> tuple[float, ...]:
+        return (
+            candidate.score,
+            row.turnover_amount,
+            self._position_rank(candidate.position_profile),
+            -abs(row.open_pct - 0.025),
+        )
+
+    def _position_rank(self, profile: OneToTwoPositionProfile) -> float:
+        if profile.low_position_score >= 8 and profile.breakout_score >= 7:
+            return 3.0
+        if profile.breakout_score >= 7:
+            return 2.0
+        if profile.low_position_score >= 8:
+            return 1.0
+        return 0.0
 
     def _candidate_from_row(self, row: OneToTwoMarketRow) -> OneToTwoCandidate:
         blockers = self._blockers(row)
@@ -289,11 +315,17 @@ class OneToTwoPolicy:
             if 0 <= pressure_distance <= self._settings.near_pressure_pct:
                 blockers.append("上方压力位过近")
         position_profile = self._position_profile(row)
+        if not self._position_label_allowed(position_profile.label):
+            blockers.append("位置一般，不符合低位/突破一进二核心买点")
         if self._mainline_score(row, position_profile) < self._settings.min_mainline_score:
             blockers.append("主线首板强度不足，先不进入模拟盘")
         if self._leader_score(row, position_profile) < self._settings.min_leader_score:
             blockers.append("龙头候选辨识度不足，避免普通跟风票")
         return tuple(blockers)
+
+    def _position_label_allowed(self, label: str) -> bool:
+        allowed = self._settings.allowed_position_labels
+        return not allowed or label in allowed
 
     def _warnings(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
         warnings: list[str] = ["严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出"]
@@ -343,7 +375,7 @@ class OneToTwoPolicy:
         )
         pressure_score = 5.0 if pressure_distance > 0.08 else 2.0
         ma_score = 3.0 if row.ma_5 >= row.ma_10 >= row.ma_20 else 1.0
-        volume_score = 2.0 if row.turnover_amount >= self._settings.min_turnover_amount * 2 else 1.0
+        volume_score = 2.0 if row.turnover_amount >= self._settings.liquidity_score_amount * 2 else 1.0
         total = low_score + breakout_score + pressure_score + ma_score + volume_score
         label = (
             "低位平台突破"
@@ -385,9 +417,9 @@ class OneToTwoPolicy:
         return 6.0
 
     def _liquidity_score(self, row: OneToTwoMarketRow) -> float:
-        if row.turnover_amount >= self._settings.min_turnover_amount * 3:
+        if row.turnover_amount >= self._settings.liquidity_score_amount * 3:
             return 15.0
-        if row.turnover_amount >= self._settings.min_turnover_amount:
+        if row.turnover_amount >= self._settings.liquidity_score_amount:
             return 10.0
         return 0.0
 

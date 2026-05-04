@@ -35,17 +35,22 @@ MAINBOARD_PREFIXES = ("000", "001", "002", "003", "600", "601", "603", "605")
 LIMIT_UP_THRESHOLD = 0.095
 SECOND_BOARD_TOUCH_THRESHOLD = 0.095
 DEFAULT_MIN_SCORE = 82.0
-DEFAULT_MIN_TURNOVER_AMOUNT = 80_000_000.0
+DEFAULT_MIN_TURNOVER_AMOUNT = 200_000_000.0
+DEFAULT_LIQUIDITY_SCORE_AMOUNT = 80_000_000.0
 DEFAULT_POSITION_PCT = 0.08
-DEFAULT_STOP_LOSS_PCT = 0.0425
-DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.32
-DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.0825
-DEFAULT_TRAILING_STOP_PCT = 0.001
+DEFAULT_STOP_LOSS_PCT = 0.04
+DEFAULT_FIRST_TAKE_PROFIT_PCT = 0.12
+DEFAULT_STRONG_TAKE_PROFIT_PCT = 0.10
+DEFAULT_TRAILING_STOP_PCT = 0.02
 DEFAULT_DISCIPLINE_EXIT_MIN_GAIN_PCT = 0.04
 DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
 DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
 DEFAULT_MIN_LOW_BREAKOUT_FIRST_BOARD_COUNT = 45
 DEFAULT_MIN_LOW_BREAKOUT_READY_CANDIDATES = 6
+DEFAULT_MIN_CONFIRM_OPEN_PCT = 0.0
+DEFAULT_MAX_CONFIRM_OPEN_PCT = 0.035
+DEFAULT_ALLOWED_POSITION_LABELS = "low_breakout,breakout,low_position"
+DEFAULT_SELECTION_RANK = "turnover"
 MIN_COMPLETE_MAINBOARD_UNIVERSE = 2500
 
 
@@ -124,11 +129,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
     parser.add_argument("--min-turnover-amount", type=float, default=DEFAULT_MIN_TURNOVER_AMOUNT)
+    parser.add_argument("--liquidity-score-amount", type=float, default=DEFAULT_LIQUIDITY_SCORE_AMOUNT)
     parser.add_argument("--recent-gain-block-pct", type=float, default=0.45)
     parser.add_argument("--high-deviation-block-pct", type=float, default=0.25)
     parser.add_argument("--near-pressure-pct", type=float, default=0.05)
-    parser.add_argument("--min-confirm-open-pct", type=float, default=0.0)
-    parser.add_argument("--max-confirm-open-pct", type=float, default=0.045)
+    parser.add_argument("--min-confirm-open-pct", type=float, default=DEFAULT_MIN_CONFIRM_OPEN_PCT)
+    parser.add_argument("--max-confirm-open-pct", type=float, default=DEFAULT_MAX_CONFIRM_OPEN_PCT)
+    parser.add_argument(
+        "--allowed-position-labels",
+        default=DEFAULT_ALLOWED_POSITION_LABELS,
+        help="Comma-separated position labels; empty means all labels.",
+    )
+    parser.add_argument(
+        "--selection-rank",
+        choices=("default", "low-first", "open-sweet", "turnover", "pressure"),
+        default=DEFAULT_SELECTION_RANK,
+    )
     parser.add_argument("--position-pct", type=float, default=DEFAULT_POSITION_PCT)
     parser.add_argument("--stop-loss-pct", type=float, default=DEFAULT_STOP_LOSS_PCT)
     parser.add_argument(
@@ -181,6 +197,9 @@ def main() -> int:
     end = parse_iso_date(args.end_date)
     if end < start:
         raise SystemExit("--end-date must be on or after --start-date")
+    allowed_position_labels = parse_allowed_position_labels(
+        args.allowed_position_labels
+    )
 
     cache_dir = Path(args.cache_dir)
     output_path = Path(args.output)
@@ -222,6 +241,7 @@ def main() -> int:
                 start_date=start,
                 end_date=end,
                 min_turnover_amount=args.min_turnover_amount,
+                liquidity_score_amount=args.liquidity_score_amount,
                 recent_gain_block_pct=args.recent_gain_block_pct,
                 high_deviation_block_pct=args.high_deviation_block_pct,
                 near_pressure_pct=args.near_pressure_pct,
@@ -233,6 +253,7 @@ def main() -> int:
     filtered = apply_market_width_gate(
         matches=matches,
         min_score=args.min_score,
+        allowed_position_labels=allowed_position_labels,
         min_low_breakout_first_board_count=args.min_low_breakout_first_board_count,
         min_low_breakout_ready_candidates=args.min_low_breakout_ready_candidates,
     )
@@ -248,8 +269,12 @@ def main() -> int:
         filtered_matches=filtered,
         histories=histories,
         min_score=args.min_score,
+        min_turnover_amount=args.min_turnover_amount,
+        liquidity_score_amount=args.liquidity_score_amount,
         min_confirm_open_pct=args.min_confirm_open_pct,
         max_confirm_open_pct=args.max_confirm_open_pct,
+        allowed_position_labels=allowed_position_labels,
+        selection_rank=args.selection_rank,
         position_pct=args.position_pct,
         stop_loss_pct=args.stop_loss_pct,
         first_take_profit_pct=args.first_take_profit_pct,
@@ -551,6 +576,7 @@ def analyze_symbol(
     start_date: date,
     end_date: date,
     min_turnover_amount: float,
+    liquidity_score_amount: float,
     recent_gain_block_pct: float,
     high_deviation_block_pct: float,
     near_pressure_pct: float,
@@ -586,6 +612,7 @@ def analyze_symbol(
             next_bar=next_bar,
             first_pct=first_pct,
             min_turnover_amount=min_turnover_amount,
+            liquidity_score_amount=liquidity_score_amount,
             recent_gain_block_pct=recent_gain_block_pct,
             high_deviation_block_pct=high_deviation_block_pct,
             near_pressure_pct=near_pressure_pct,
@@ -603,6 +630,7 @@ def build_match(
     next_bar: DailyBar,
     first_pct: float,
     min_turnover_amount: float,
+    liquidity_score_amount: float,
     recent_gain_block_pct: float,
     high_deviation_block_pct: float,
     near_pressure_pct: float,
@@ -652,10 +680,10 @@ def build_match(
         ma10=ma10,
         ma20=ma20,
         estimated_turnover_amount=estimated_turnover_amount,
-        min_turnover_amount=min_turnover_amount,
+        liquidity_score_amount=liquidity_score_amount,
     )
     theme_market_score = 9.0
-    liquidity_score = score_liquidity(estimated_turnover_amount, min_turnover_amount)
+    liquidity_score = score_liquidity(estimated_turnover_amount, liquidity_score_amount)
     score = round(
         first_board_score
         + open_strength_score
@@ -751,13 +779,13 @@ def score_position(
     ma10: float,
     ma20: float,
     estimated_turnover_amount: float,
-    min_turnover_amount: float,
+    liquidity_score_amount: float,
 ) -> tuple[float, str]:
     low_score = 8.0 if current.close <= low20 * 1.25 else 4.0
     breakout_score = 7.0 if current.close >= previous_high60 * 0.98 else 3.0
     pressure_score = 5.0 if pressure_distance is None or pressure_distance > 0.08 else 2.0
     ma_score = 3.0 if ma5 >= ma10 >= ma20 else 1.0
-    volume_score = 2.0 if estimated_turnover_amount >= min_turnover_amount * 2 else 1.0
+    volume_score = 2.0 if estimated_turnover_amount >= liquidity_score_amount * 2 else 1.0
     label = "low_breakout" if low_score >= 8 and breakout_score >= 7 else ""
     if not label and breakout_score >= 7:
         label = "breakout"
@@ -779,6 +807,7 @@ def score_liquidity(estimated_turnover_amount: float, min_turnover_amount: float
 def apply_market_width_gate(
     matches: list[Match],
     min_score: float,
+    allowed_position_labels: frozenset[str],
     min_low_breakout_first_board_count: int,
     min_low_breakout_ready_candidates: int,
 ) -> list[Match]:
@@ -789,7 +818,12 @@ def apply_market_width_gate(
             first_board_count=first_board_counts[item.first_board_date],
         )
         for item in matches
-        if item.score >= min_score and not item.blockers
+        if item.score >= min_score
+        and not item.blockers
+        and (
+            not allowed_position_labels
+            or item.position_label in allowed_position_labels
+        )
     ]
     ready_counts = Counter(item.second_day_date for item in base_ready)
     filtered: list[Match] = []
@@ -817,6 +851,7 @@ def apply_market_width_gate(
 def build_product_portfolio(
     filtered_matches: list[Match],
     histories: dict[str, list[DailyBar]],
+    selection_rank: str,
     position_pct: float,
     stop_loss_pct: float,
     first_take_profit_pct: float,
@@ -844,7 +879,7 @@ def build_product_portfolio(
         )
         if trade is not None
     ]
-    daily_top_matches = select_daily_top_matches(filtered_matches)
+    daily_top_matches = select_daily_top_matches(filtered_matches, selection_rank)
     daily_top_trades = [
         trade
         for trade in (
@@ -872,6 +907,7 @@ def build_product_portfolio(
             "已有持仓时不再开新仓，严格 T+1。"
         ),
         "ranking_no_future_fields": True,
+        "selection_rank": selection_rank,
         "position_pct": position_pct,
         "exit_discipline": {
             "stop_loss_pct": stop_loss_pct,
@@ -1001,12 +1037,16 @@ def simulate_trade(
     )
 
 
-def select_daily_top_matches(matches: list[Match]) -> list[Match]:
+def select_daily_top_matches(
+    matches: list[Match],
+    selection_rank: str = DEFAULT_SELECTION_RANK,
+) -> list[Match]:
     by_date: dict[str, list[Match]] = {}
     for item in matches:
         by_date.setdefault(item.second_day_date, []).append(item)
+    rank_key = selection_rank_key_for(selection_rank)
     return [
-        sorted(items, key=selection_rank_key, reverse=True)[0]
+        sorted(items, key=rank_key, reverse=True)[0]
         for _, items in sorted(by_date.items())
     ]
 
@@ -1019,6 +1059,72 @@ def selection_rank_key(match: Match) -> tuple[float, int, int, float, float]:
         open_confirm_bonus,
         position_bonus,
         match.second_open_pct,
+        match.estimated_turnover_amount,
+    )
+
+
+def selection_rank_key_for(selection_rank: str):
+    if selection_rank == "low-first":
+        return low_first_selection_rank_key
+    if selection_rank == "open-sweet":
+        return open_sweet_selection_rank_key
+    if selection_rank == "turnover":
+        return turnover_selection_rank_key
+    if selection_rank == "pressure":
+        return pressure_selection_rank_key
+    return selection_rank_key
+
+
+def low_first_selection_rank_key(
+    match: Match,
+) -> tuple[int, float, float, float]:
+    label_rank = {
+        "low_breakout": 3,
+        "low_position": 2,
+        "breakout": 1,
+    }.get(match.position_label, 0)
+    return (
+        label_rank,
+        match.score,
+        -abs(match.second_open_pct - 0.025),
+        match.estimated_turnover_amount,
+    )
+
+
+def open_sweet_selection_rank_key(
+    match: Match,
+) -> tuple[int, float, float, float]:
+    sweet_open = 1 if 0.01 <= match.second_open_pct <= 0.035 else 0
+    return (
+        sweet_open,
+        match.score,
+        -abs(match.second_open_pct - 0.022),
+        match.estimated_turnover_amount,
+    )
+
+
+def turnover_selection_rank_key(
+    match: Match,
+) -> tuple[float, float, float]:
+    return (
+        match.score,
+        match.estimated_turnover_amount,
+        -abs(match.second_open_pct - 0.025),
+    )
+
+
+def pressure_selection_rank_key(
+    match: Match,
+) -> tuple[float, float, float, float]:
+    pressure_distance = (
+        match.pressure_distance_pct
+        if match.pressure_distance_pct is not None
+        else 9.0
+    )
+    return (
+        match.score,
+        min(pressure_distance, 1.0),
+        -abs(match.second_open_pct - 0.025),
         match.estimated_turnover_amount,
     )
 
@@ -1044,6 +1150,27 @@ def conservative_downside_exit_price(open_price: float, trigger_price: float) ->
     return trigger_price
 
 
+def parse_allowed_position_labels(value: str) -> frozenset[str]:
+    labels = frozenset(
+        item.strip()
+        for item in value.split(",")
+        if item.strip()
+    )
+    valid_labels = {
+        "low_breakout",
+        "breakout",
+        "low_position",
+        "extended_or_mid",
+    }
+    unknown = sorted(labels - valid_labels)
+    if unknown:
+        raise SystemExit(
+            "--allowed-position-labels contains unknown label(s): "
+            + ", ".join(unknown)
+        )
+    return labels
+
+
 def build_result(
     start_date: str,
     end_date: str,
@@ -1056,8 +1183,12 @@ def build_result(
     filtered_matches: list[Match],
     histories: dict[str, list[DailyBar]],
     min_score: float,
+    min_turnover_amount: float,
+    liquidity_score_amount: float,
     min_confirm_open_pct: float,
     max_confirm_open_pct: float,
+    allowed_position_labels: frozenset[str],
+    selection_rank: str,
     position_pct: float,
     stop_loss_pct: float,
     first_take_profit_pct: float,
@@ -1083,6 +1214,8 @@ def build_result(
                 "turnover amount is estimated from Tencent volume_hands * 100 * close",
             ],
             "min_score": min_score,
+            "min_turnover_amount": min_turnover_amount,
+            "liquidity_score_amount": liquidity_score_amount,
             "confirm_open_window": {
                 "min_pct": min_confirm_open_pct,
                 "max_pct": max_confirm_open_pct,
@@ -1091,6 +1224,8 @@ def build_result(
                 "min_first_board_count": min_low_breakout_first_board_count,
                 "min_ready_candidates": min_low_breakout_ready_candidates,
             },
+            "allowed_position_labels": sorted(allowed_position_labels),
+            "selection_rank": selection_rank,
             "product_reliability_note": (
                 "The reliability decision should use product_portfolio.one_position_no_overlap, "
                 "not all filtered candidates."
@@ -1113,6 +1248,7 @@ def build_result(
         "product_portfolio": build_product_portfolio(
             filtered_matches=filtered_matches,
             histories=histories,
+            selection_rank=selection_rank,
             position_pct=position_pct,
             stop_loss_pct=stop_loss_pct,
             first_take_profit_pct=first_take_profit_pct,

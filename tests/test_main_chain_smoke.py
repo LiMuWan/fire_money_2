@@ -88,7 +88,7 @@ def _risk_break_row(trade_date: str) -> OneToTwoMarketRow:
         limit_up_price=10.52,
         first_limit_up_time="10:05",
         sealed_amount=32000000,
-        turnover_amount=180000000,
+        turnover_amount=220000000,
         turnover_rate=6.2,
         open_pct=0.03,
         auction_amount=12000000,
@@ -118,7 +118,7 @@ def _weak_after_two_days_row(trade_date: str) -> OneToTwoMarketRow:
         limit_up_price=11.57,
         first_limit_up_time="10:05",
         sealed_amount=32000000,
-        turnover_amount=180000000,
+        turnover_amount=220000000,
         turnover_rate=6.2,
         open_pct=0.01,
         auction_amount=12000000,
@@ -431,7 +431,21 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(candidates["600005"].status, "blocked")
             self.assertTrue(any("红盘开" in blocker for blocker in candidates["600005"].blockers))
             self.assertEqual(candidates["600006"].status, "blocked")
-            self.assertTrue(any("高开超过 4.5%" in blocker for blocker in candidates["600006"].blockers))
+            self.assertTrue(any("高开超过 3.5%" in blocker for blocker in candidates["600006"].blockers))
+
+    def test_one_to_two_uses_turnover_rank_for_daily_core_pick(self) -> None:
+        base_rows = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            watch = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider(base_rows[:6]),
+            ).run_one_to_two_watch(
+                trade_date="2026-05-01",
+                phase="open",
+                notify=False,
+            )
+
+            self.assertEqual(watch.account.positions[0].symbol, "600001")
 
     def test_weak_sealed_board_is_blocked_for_mainline_leader_candidate(self) -> None:
         weak_row = OneToTwoMarketRow(
@@ -884,18 +898,18 @@ class MainChainSmokeTest(unittest.TestCase):
             position = open_trigger.account.positions[0]
             self.assertIsNotNone(candidate.exit_plan)
             self.assertIsNotNone(candidate.mainline_continuity)
-            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.32)
-            self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.0825)
+            self.assertEqual(candidate.exit_plan.first_take_profit_pct, 0.12)
+            self.assertEqual(candidate.exit_plan.strong_take_profit_pct, 0.1)
             self.assertGreater(candidate.exit_plan.stop_loss_pct, 0)
-            self.assertLessEqual(candidate.exit_plan.stop_loss_pct, 0.0425)
-            self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.001)
-            self.assertIn("盈利 32%", candidate.exit_plan.summary)
-            self.assertIn("强势达到 8.25%", candidate.exit_plan.summary)
-            self.assertIn("0.1%", candidate.exit_plan.summary)
+            self.assertLessEqual(candidate.exit_plan.stop_loss_pct, 0.04)
+            self.assertEqual(candidate.exit_plan.trailing_stop_pct, 0.02)
+            self.assertIn("盈利 12%", candidate.exit_plan.summary)
+            self.assertIn("强势达到 10%", candidate.exit_plan.summary)
+            self.assertIn("2%", candidate.exit_plan.summary)
             self.assertGreaterEqual(candidate.mainline_continuity.score, 45)
             self.assertIsNotNone(position.exit_plan)
             self.assertIsNotNone(position.mainline_continuity)
-            self.assertIn("盈利 32%", position.risk_note)
+            self.assertIn("盈利 12%", position.risk_note)
 
     def test_watch_phases_do_not_buy_before_open_trigger(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1950,6 +1964,56 @@ class MainChainSmokeTest(unittest.TestCase):
             module.selection_rank_key(strong_future),
             module.selection_rank_key(weak_future),
         )
+        self.assertEqual(
+            module.low_first_selection_rank_key(strong_future),
+            module.low_first_selection_rank_key(weak_future),
+        )
+        self.assertEqual(
+            module.open_sweet_selection_rank_key(strong_future),
+            module.open_sweet_selection_rank_key(weak_future),
+        )
+
+    def test_research_backtest_can_filter_position_labels(self) -> None:
+        module = self._load_research_backtest_module()
+        base = {
+            "symbol": "600001",
+            "name": "主线首板候选",
+            "first_board_date": "2026-04-29",
+            "second_day_date": "2026-04-30",
+            "first_board_pct": 0.1,
+            "second_close_pct": 0.02,
+            "second_open_pct": 0.02,
+            "second_high_pct": 0.04,
+            "buy_open_to_close_pct": 0.0,
+            "score": 90.0,
+            "estimated_turnover_amount": 300000000.0,
+            "recent_gain_pct": 0.12,
+            "ma20_deviation_pct": 0.14,
+            "pressure_distance_pct": None,
+            "first_board_count": 60,
+            "ready_candidate_count": 8,
+            "second_day_one_word": False,
+            "blockers": (),
+            "second_board_closed": False,
+            "second_board_touched": False,
+            "buy_day_positive": True,
+        }
+        low_breakout = module.Match(**(base | {"position_label": "low_breakout"}))
+        breakout = module.Match(
+            **(base | {"symbol": "600002", "position_label": "breakout"})
+        )
+
+        filtered = module.apply_market_width_gate(
+            matches=[low_breakout, breakout],
+            min_score=80,
+            allowed_position_labels=module.parse_allowed_position_labels(
+                "low_breakout"
+            ),
+            min_low_breakout_first_board_count=0,
+            min_low_breakout_ready_candidates=0,
+        )
+
+        self.assertEqual(tuple(item.symbol for item in filtered), ("600001",))
 
     def test_research_backtest_blocks_one_word_by_open_without_future_low(self) -> None:
         module = self._load_research_backtest_module()
@@ -1969,6 +2033,7 @@ class MainChainSmokeTest(unittest.TestCase):
             next_bar=bars[-1],
             first_pct=0.1,
             min_turnover_amount=1,
+            liquidity_score_amount=1,
             recent_gain_block_pct=0.45,
             high_deviation_block_pct=1,
             near_pressure_pct=0,
@@ -2761,16 +2826,20 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.max_holding_trade_days, 2)
         self.assertEqual(settings.discipline_exit_min_gain_pct, 0.04)
         self.assertEqual(payload["parameters"]["min_confirm_open_pct"], 0.0)
-        self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.045)
+        self.assertEqual(payload["parameters"]["max_confirm_open_pct"], 0.035)
         self.assertEqual(settings.min_confirm_open_pct, 0.0)
-        self.assertEqual(settings.max_confirm_open_pct, 0.045)
-        self.assertEqual(settings.first_take_profit_pct, 0.32)
-        self.assertEqual(settings.strong_take_profit_pct, 0.0825)
-        self.assertEqual(settings.stop_loss_pct, 0.0425)
-        self.assertEqual(settings.trailing_stop_pct, 0.001)
+        self.assertEqual(settings.max_confirm_open_pct, 0.035)
+        self.assertEqual(settings.min_turnover_amount, 200000000)
+        self.assertEqual(settings.liquidity_score_amount, 80000000)
+        self.assertEqual(settings.first_take_profit_pct, 0.12)
+        self.assertEqual(settings.strong_take_profit_pct, 0.1)
+        self.assertEqual(settings.stop_loss_pct, 0.04)
+        self.assertEqual(settings.trailing_stop_pct, 0.02)
         self.assertEqual(settings.mainline_fade_score, 45)
         self.assertEqual(settings.min_low_breakout_first_board_count, 45)
         self.assertEqual(settings.min_low_breakout_ready_candidates, 6)
+        self.assertEqual(settings.allowed_position_labels, ("低位平台突破", "平台突破", "低位启动"))
+        self.assertEqual(settings.selection_rank, "turnover")
         self.assertIn("创业板", settings.excluded_boards)
 
     def test_preview_file_can_be_generated_without_legacy_surface(self) -> None:
@@ -2790,7 +2859,7 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("低位平台突破", html)
             self.assertIn("主线持续性", html)
             self.assertIn("卖点计划", html)
-            self.assertIn("盈利 32%", html)
+            self.assertIn("盈利 12%", html)
             self.assertIn("消息", html)
             self.assertIn("模拟盘与风险", html)
             self.assertIn("飞书通知", html)
