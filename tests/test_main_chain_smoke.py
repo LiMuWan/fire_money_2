@@ -174,6 +174,9 @@ class StaticOneToTwoProvider:
                 theme=row.theme,
                 market_temperature=row.market_temperature,
                 first_board_count=row.first_board_count,
+                volume_ratio_5=row.volume_ratio_5,
+                rsi_14=row.rsi_14,
+                position_percentile_60=row.position_percentile_60,
             )
             for row in self._rows
         )
@@ -432,6 +435,43 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertTrue(any("红盘开" in blocker for blocker in candidates["600005"].blockers))
             self.assertEqual(candidates["600006"].status, "blocked")
             self.assertTrue(any("高开超过 3.5%" in blocker for blocker in candidates["600006"].blockers))
+
+    def test_one_to_two_requires_continuity_and_position_confirmation(self) -> None:
+        base_row = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")[0]
+        weak_volume_row = replace(
+            base_row,
+            symbol="600021",
+            volume_ratio_5=0.8,
+        )
+        hot_rsi_row = replace(
+            base_row,
+            symbol="600022",
+            rsi_14=91.0,
+        )
+        weak_position_row = replace(
+            base_row,
+            symbol="600023",
+            position_percentile_60=0.42,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider(
+                    (weak_volume_row, hot_rsi_row, weak_position_row)
+                ),
+            ).build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+
+            candidates = {candidate.symbol: candidate for candidate in report.candidates}
+            self.assertEqual(candidates["600021"].status, "blocked")
+            self.assertTrue(any("量比不足" in blocker for blocker in candidates["600021"].blockers))
+            self.assertEqual(candidates["600022"].status, "blocked")
+            self.assertTrue(any("RSI 过热" in blocker for blocker in candidates["600022"].blockers))
+            self.assertEqual(candidates["600023"].status, "blocked")
+            self.assertTrue(any("60 日位置" in blocker for blocker in candidates["600023"].blockers))
 
     def test_one_to_two_uses_turnover_rank_for_daily_core_pick(self) -> None:
         base_rows = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")
@@ -1966,6 +2006,9 @@ class MainChainSmokeTest(unittest.TestCase):
             "recent_gain_pct": 0.12,
             "ma20_deviation_pct": 0.14,
             "pressure_distance_pct": None,
+            "volume_ratio_5": 1.5,
+            "rsi_14": 65.0,
+            "position_percentile_60": 0.75,
             "first_board_count": 60,
             "ready_candidate_count": 8,
             "second_day_one_word": False,
@@ -2020,6 +2063,9 @@ class MainChainSmokeTest(unittest.TestCase):
             "recent_gain_pct": 0.12,
             "ma20_deviation_pct": 0.14,
             "pressure_distance_pct": None,
+            "volume_ratio_5": 1.5,
+            "rsi_14": 65.0,
+            "position_percentile_60": 0.75,
             "first_board_count": 60,
             "ready_candidate_count": 8,
             "second_day_one_word": False,
@@ -2065,6 +2111,9 @@ class MainChainSmokeTest(unittest.TestCase):
                 recent_gain_pct=0.12,
                 ma20_deviation_pct=0.14,
                 pressure_distance_pct=None,
+                volume_ratio_5=1.5,
+                rsi_14=65.0,
+                position_percentile_60=0.75,
                 first_board_count=60,
                 ready_candidate_count=0,
                 second_day_one_word=False,
@@ -2113,6 +2162,10 @@ class MainChainSmokeTest(unittest.TestCase):
             near_pressure_pct=0,
             min_confirm_open_pct=0,
             max_confirm_open_pct=0.2,
+            min_volume_ratio_5=0,
+            min_rsi_14=0,
+            max_rsi_14=100,
+            min_position_percentile_60=0,
         )
 
         self.assertTrue(match.second_day_one_word)
@@ -2136,6 +2189,9 @@ class MainChainSmokeTest(unittest.TestCase):
             recent_gain_pct=0.12,
             ma20_deviation_pct=0.14,
             pressure_distance_pct=None,
+            volume_ratio_5=1.5,
+            rsi_14=65.0,
+            position_percentile_60=0.75,
             first_board_count=60,
             ready_candidate_count=8,
             second_day_one_word=False,
@@ -2913,6 +2969,10 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.min_low_breakout_first_board_count, 45)
         self.assertEqual(settings.min_low_breakout_ready_candidates, 6)
         self.assertEqual(settings.max_ready_candidates, 18)
+        self.assertEqual(settings.min_volume_ratio_5, 1.0)
+        self.assertEqual(settings.min_rsi_14, 55)
+        self.assertEqual(settings.max_rsi_14, 85)
+        self.assertEqual(settings.min_position_percentile_60, 0.55)
         self.assertEqual(settings.allowed_position_labels, ("低位平台突破", "平台突破", "低位启动"))
         self.assertEqual(settings.selection_rank, "turnover")
         self.assertIn("创业板", settings.excluded_boards)

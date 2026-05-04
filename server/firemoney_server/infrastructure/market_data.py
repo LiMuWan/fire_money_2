@@ -79,6 +79,9 @@ class SampleMarketDataProvider:
                 theme="AI端侧主线",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=1.6,
+                rsi_14=68.0,
+                position_percentile_60=0.78,
             ),
             OneToTwoMarketRow(
                 symbol="600007",
@@ -107,6 +110,9 @@ class SampleMarketDataProvider:
                 theme="AI端侧主线",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=1.4,
+                rsi_14=66.0,
+                position_percentile_60=0.72,
             ),
             OneToTwoMarketRow(
                 symbol="600008",
@@ -135,6 +141,9 @@ class SampleMarketDataProvider:
                 theme="AI端侧主线",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=1.5,
+                rsi_14=67.0,
+                position_percentile_60=0.74,
             ),
             OneToTwoMarketRow(
                 symbol="600009",
@@ -163,6 +172,9 @@ class SampleMarketDataProvider:
                 theme="AI端侧主线",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=1.3,
+                rsi_14=64.0,
+                position_percentile_60=0.7,
             ),
             OneToTwoMarketRow(
                 symbol="600010",
@@ -191,6 +203,9 @@ class SampleMarketDataProvider:
                 theme="AI端侧主线",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=1.7,
+                rsi_14=70.0,
+                position_percentile_60=0.8,
             ),
             OneToTwoMarketRow(
                 symbol="600011",
@@ -219,6 +234,9 @@ class SampleMarketDataProvider:
                 theme="AI端侧主线",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=1.8,
+                rsi_14=72.0,
+                position_percentile_60=0.82,
             ),
             OneToTwoMarketRow(
                 symbol="600002",
@@ -247,6 +265,9 @@ class SampleMarketDataProvider:
                 theme="高位加速",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=2.5,
+                rsi_14=91.0,
+                position_percentile_60=0.96,
             ),
             OneToTwoMarketRow(
                 symbol="300003",
@@ -275,6 +296,9 @@ class SampleMarketDataProvider:
                 theme="非主板",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=1.5,
+                rsi_14=65.0,
+                position_percentile_60=0.75,
             ),
             OneToTwoMarketRow(
                 symbol="600004",
@@ -303,6 +327,9 @@ class SampleMarketDataProvider:
                 theme="同题材跟风",
                 market_temperature=74,
                 first_board_count=45,
+                volume_ratio_5=0.8,
+                rsi_14=52.0,
+                position_percentile_60=0.5,
             ),
         )
 
@@ -642,6 +669,9 @@ class AkshareMarketDataProvider:
                     theme=self._first_text(item, ("所属行业", "所属概念", "概念", "题材")),
                     market_temperature=market_temperature,
                     first_board_count=first_board_count,
+                    volume_ratio_5=history["volume_ratio_5"],
+                    rsi_14=history["rsi_14"],
+                    position_percentile_60=history["position_percentile_60"],
                 )
             )
         return tuple(rows)
@@ -684,6 +714,9 @@ class AkshareMarketDataProvider:
                     recent_gain_pct=0.12,
                     theme="AkShare 实时候选",
                     market_temperature=65,
+                    volume_ratio_5=1.5,
+                    rsi_14=65.0,
+                    position_percentile_60=0.75,
                 )
             )
         return tuple(rows)
@@ -707,6 +740,9 @@ class AkshareMarketDataProvider:
             "ma_10": latest * 0.96,
             "ma_20": latest * 0.94,
             "recent_gain_pct": 0.12,
+            "volume_ratio_5": 1.5,
+            "rsi_14": 65.0,
+            "position_percentile_60": 0.75,
         }
         try:
             end = datetime.strptime(trade_date.replace("-", ""), "%Y%m%d")
@@ -725,26 +761,59 @@ class AkshareMarketDataProvider:
         closes = [self._float(item.get("收盘")) for item in records if self._float(item.get("收盘")) > 0]
         lows = [self._float(item.get("最低")) for item in records if self._float(item.get("最低")) > 0]
         highs = [self._float(item.get("最高")) for item in records if self._float(item.get("最高")) > 0]
+        volumes = [self._first_float(item, ("成交量", "成交量(手)")) for item in records]
         if not closes:
             self._history_cache[cache_key] = fallback
             return fallback
         pressure_candidates = [price for price in highs[-60:-1] if price > latest]
         base_close = closes[-20] if len(closes) >= 20 and closes[-20] else closes[0]
+        recent_volumes = [item for item in volumes[-6:-1] if item > 0]
+        volume_ratio_5 = (
+            volumes[-1] / (sum(recent_volumes) / len(recent_volumes))
+            if volumes and volumes[-1] > 0 and recent_volumes
+            else fallback["volume_ratio_5"]
+        )
+        high_60 = max(highs[-60:]) if highs else fallback["high_60"]
+        low_60 = min(lows[-60:]) if lows else latest * 0.85
+        position_range_60 = high_60 - low_60
         profile = {
             "low_20": min(lows[-20:]) if lows else fallback["low_20"],
-            "high_60": max(highs[-60:]) if highs else fallback["high_60"],
+            "high_60": high_60,
             "pressure_price": (
                 min(pressure_candidates)
                 if pressure_candidates
-                else max(max(highs[-60:]) if highs else latest, latest * 1.12)
+                else max(high_60, latest * 1.12)
             ),
             "ma_5": sum(closes[-5:]) / min(len(closes), 5),
             "ma_10": sum(closes[-10:]) / min(len(closes), 10),
             "ma_20": sum(closes[-20:]) / min(len(closes), 20),
             "recent_gain_pct": (closes[-1] - base_close) / base_close if base_close else 0.0,
+            "volume_ratio_5": volume_ratio_5,
+            "rsi_14": self._rsi(closes[-15:]) if len(closes) >= 15 else fallback["rsi_14"],
+            "position_percentile_60": (
+                (closes[-1] - low_60) / position_range_60
+                if position_range_60 > 0
+                else fallback["position_percentile_60"]
+            ),
         }
         self._history_cache[cache_key] = profile
         return profile
+
+    def _rsi(self, closes: list[float]) -> float:
+        if len(closes) < 2:
+            return 65.0
+        gains: list[float] = []
+        losses: list[float] = []
+        for previous, current in zip(closes, closes[1:]):
+            change = current - previous
+            gains.append(max(change, 0.0))
+            losses.append(max(-change, 0.0))
+        average_gain = sum(gains) / len(gains)
+        average_loss = sum(losses) / len(losses)
+        if average_loss <= 0:
+            return 100.0
+        rs = average_gain / average_loss
+        return 100 - (100 / (1 + rs))
 
     def _market_temperature(self, records: Any) -> int:
         changes = [self._float(item.get("涨跌幅")) for item in records]

@@ -48,6 +48,10 @@ DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
 DEFAULT_MIN_LOW_BREAKOUT_FIRST_BOARD_COUNT = 45
 DEFAULT_MIN_LOW_BREAKOUT_READY_CANDIDATES = 6
 DEFAULT_MAX_READY_CANDIDATES = 18
+DEFAULT_MIN_VOLUME_RATIO_5 = 1.0
+DEFAULT_MIN_RSI_14 = 55.0
+DEFAULT_MAX_RSI_14 = 85.0
+DEFAULT_MIN_POSITION_PERCENTILE_60 = 0.55
 DEFAULT_MIN_CONFIRM_OPEN_PCT = 0.0
 DEFAULT_MAX_CONFIRM_OPEN_PCT = 0.035
 DEFAULT_ALLOWED_POSITION_LABELS = "low_breakout,breakout,low_position"
@@ -89,6 +93,9 @@ class Match:
     recent_gain_pct: float
     ma20_deviation_pct: float
     pressure_distance_pct: float | None
+    volume_ratio_5: float
+    rsi_14: float
+    position_percentile_60: float
     first_board_count: int
     ready_candidate_count: int
     second_day_one_word: bool
@@ -194,6 +201,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_MAX_READY_CANDIDATES,
     )
+    parser.add_argument("--min-volume-ratio-5", type=float, default=DEFAULT_MIN_VOLUME_RATIO_5)
+    parser.add_argument("--min-rsi-14", type=float, default=DEFAULT_MIN_RSI_14)
+    parser.add_argument("--max-rsi-14", type=float, default=DEFAULT_MAX_RSI_14)
+    parser.add_argument(
+        "--min-position-percentile-60",
+        type=float,
+        default=DEFAULT_MIN_POSITION_PERCENTILE_60,
+    )
     return parser.parse_args()
 
 
@@ -253,6 +268,10 @@ def main() -> int:
                 near_pressure_pct=args.near_pressure_pct,
                 min_confirm_open_pct=args.min_confirm_open_pct,
                 max_confirm_open_pct=args.max_confirm_open_pct,
+                min_volume_ratio_5=args.min_volume_ratio_5,
+                min_rsi_14=args.min_rsi_14,
+                max_rsi_14=args.max_rsi_14,
+                min_position_percentile_60=args.min_position_percentile_60,
             )
         )
 
@@ -293,6 +312,10 @@ def main() -> int:
         min_low_breakout_first_board_count=args.min_low_breakout_first_board_count,
         min_low_breakout_ready_candidates=args.min_low_breakout_ready_candidates,
         max_ready_candidates=args.max_ready_candidates,
+        min_volume_ratio_5=args.min_volume_ratio_5,
+        min_rsi_14=args.min_rsi_14,
+        max_rsi_14=args.max_rsi_14,
+        min_position_percentile_60=args.min_position_percentile_60,
         sample_preview=args.sample_preview,
     )
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -590,6 +613,10 @@ def analyze_symbol(
     near_pressure_pct: float,
     min_confirm_open_pct: float,
     max_confirm_open_pct: float,
+    min_volume_ratio_5: float,
+    min_rsi_14: float,
+    max_rsi_14: float,
+    min_position_percentile_60: float,
 ) -> list[Match]:
     result: list[Match] = []
     if len(bars) < 65:
@@ -626,6 +653,10 @@ def analyze_symbol(
             near_pressure_pct=near_pressure_pct,
             min_confirm_open_pct=min_confirm_open_pct,
             max_confirm_open_pct=max_confirm_open_pct,
+            min_volume_ratio_5=min_volume_ratio_5,
+            min_rsi_14=min_rsi_14,
+            max_rsi_14=max_rsi_14,
+            min_position_percentile_60=min_position_percentile_60,
         )
         result.append(match)
     return result
@@ -644,6 +675,10 @@ def build_match(
     near_pressure_pct: float,
     min_confirm_open_pct: float,
     max_confirm_open_pct: float,
+    min_volume_ratio_5: float,
+    min_rsi_14: float,
+    max_rsi_14: float,
+    min_position_percentile_60: float,
 ) -> Match:
     current = bars[index]
     previous = bars[index - 1]
@@ -651,6 +686,7 @@ def build_match(
     prior20 = bars[index - 20 : index]
     prior60 = bars[index - 60 : index]
     prior5 = bars[index - 5 : index]
+    lookback60 = bars[index - 59 : index + 1]
 
     ma5 = average_close(bars[index - 4 : index + 1])
     ma10 = average_close(bars[index - 9 : index + 1])
@@ -665,6 +701,14 @@ def build_match(
     ma20_deviation = pct_change(current.close, ma20)
     estimated_turnover_amount = current.volume_hands * 100 * current.close
     volume_ratio = current.volume_hands / max(average_volume(prior5), 1.0)
+    rsi14 = rsi([item.close for item in bars[index - 14 : index + 1]])
+    low60 = min(item.low for item in lookback60)
+    high60 = max(item.high for item in lookback60)
+    position_percentile_60 = (
+        (current.close - low60) / (high60 - low60)
+        if high60 > low60
+        else 0.75
+    )
 
     second_close_pct = pct_change(next_bar.close, current.close)
     second_open_pct = pct_change(next_bar.open, current.close)
@@ -714,6 +758,14 @@ def build_match(
         blockers.append("ma20_deviation_too_high")
     if pressure_distance is not None and 0 <= pressure_distance <= near_pressure_pct:
         blockers.append("near_left_pressure")
+    if volume_ratio < min_volume_ratio_5:
+        blockers.append("volume_ratio_5_too_low")
+    if rsi14 < min_rsi_14:
+        blockers.append("rsi14_too_cold")
+    if rsi14 > max_rsi_14:
+        blockers.append("rsi14_too_hot")
+    if position_percentile_60 < min_position_percentile_60:
+        blockers.append("position_percentile_60_too_low")
     if second_day_one_word:
         blockers.append("second_day_one_word_untradable")
     if not math.isfinite(score):
@@ -735,6 +787,9 @@ def build_match(
         recent_gain_pct=round(recent_gain, 4),
         ma20_deviation_pct=round(ma20_deviation, 4),
         pressure_distance_pct=round(pressure_distance, 4) if pressure_distance is not None else None,
+        volume_ratio_5=round(volume_ratio, 4),
+        rsi_14=round(rsi14, 4),
+        position_percentile_60=round(position_percentile_60, 4),
         first_board_count=0,
         ready_candidate_count=0,
         second_day_one_word=second_day_one_word,
@@ -913,7 +968,9 @@ def build_product_portfolio(
     return {
         "selection_rule": (
             "候选先过硬拦截；低位平台突破必须满足昨日首板宽度和今日可执行候选宽度；"
-            "只在次日红盘开且不高于 4.5% 时确认；"
+            "候选池过宽则只观察；首板量比、RSI 区间和 60 日位置分位必须确认持续性；"
+            "只在次日红盘开且不高于 3.5% 时确认；"
+            "资金风格只用成交额代理标注，不作为真实席位结论；"
             "每天按当时可见的 score/open/position/turnover 排名最多买 1 笔；"
             "已有持仓时不再开新仓，严格 T+1。"
         ),
@@ -1211,6 +1268,10 @@ def build_result(
     min_low_breakout_first_board_count: int,
     min_low_breakout_ready_candidates: int,
     max_ready_candidates: int,
+    min_volume_ratio_5: float,
+    min_rsi_14: float,
+    max_rsi_14: float,
+    min_position_percentile_60: float,
     sample_preview: int,
 ) -> dict[str, Any]:
     return {
@@ -1237,6 +1298,18 @@ def build_result(
                 "min_ready_candidates": min_low_breakout_ready_candidates,
             },
             "max_ready_candidates": max_ready_candidates,
+            "continuity_confirmation": {
+                "min_volume_ratio_5": min_volume_ratio_5,
+                "rsi_14_range": {
+                    "min": min_rsi_14,
+                    "max": max_rsi_14,
+                },
+                "min_position_percentile_60": min_position_percentile_60,
+                "capital_style_note": (
+                    "capital style is a turnover proxy only; real hot-money/institution "
+                    "attribution needs point-in-time seat or fund-flow data"
+                ),
+            },
             "allowed_position_labels": sorted(allowed_position_labels),
             "selection_rank": selection_rank,
             "product_reliability_note": (
@@ -1478,6 +1551,23 @@ def average_close(bars: list[DailyBar]) -> float:
 
 def average_volume(bars: list[DailyBar]) -> float:
     return mean(item.volume_hands for item in bars) if bars else 0.0
+
+
+def rsi(closes: list[float]) -> float:
+    if len(closes) < 2:
+        return 65.0
+    gains: list[float] = []
+    losses: list[float] = []
+    for previous, current in zip(closes, closes[1:]):
+        change = current - previous
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+    avg_gain = sum(gains) / len(gains)
+    avg_loss = sum(losses) / len(losses)
+    if avg_loss <= 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
 
 
 def pct_change(value: float, base: float) -> float:

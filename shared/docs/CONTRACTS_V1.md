@@ -68,6 +68,12 @@ Key fields:
 - `volume_score`
 - `summary`
 - `risk_notes`
+- `volume_ratio`
+- `rsi_14`
+- `position_percentile_60`
+- `capital_style_label`
+
+`capital_style_label` is a product-owned proxy derived from visible turnover size. It is not real hot-money/institution attribution unless a later data adapter provides point-in-time seat or fund-flow evidence.
 
 ### `PaperAccount`, `PaperPosition`, `PaperTradeEvent`, `PaperTradeRecord`
 

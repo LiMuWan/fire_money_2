@@ -55,7 +55,8 @@ MarketDataProvider/AkShare
 - Market data enters through `MarketDataProvider`; AkShare fields are normalized into project-owned DTOs before domain scoring.
 - AkShare raw snapshots are cached under `.firemoney/market_data/`.
 - If market data is unavailable, the service returns a blocked morning report and no paper buy can be generated.
-- Hard blockers include ST, delisting, new stock, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, generic mid-position setups, over-wide executable candidate pools, open confirmation above 3.5%, and one-word unreachable boards.
+- Hard blockers include ST, delisting, new stock, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, weak volume-ratio continuity, RSI over-cold/over-hot setups, low 60-day position percentile, generic mid-position setups, over-wide executable candidate pools, open confirmation above 3.5%, and one-word unreachable boards.
+- The domain exposes volume ratio, RSI(14), 60-day position percentile, and a capital-style proxy on `OneToTwoPositionProfile`; the capital style is a turnover proxy only and must not be presented as real hot-money/institution seat attribution until PIT seat or fund-flow data is integrated.
 - Low breakout setups must pass a market-width gate before paper buying: yesterday's mainboard first-board count must reach the configured floor and the same-morning executable candidate pool must have at least the configured count. If the executable pool exceeds the configured ceiling, the day is treated as too scattered and stays blocked for observation.
 - Same-day stop loss breaches create warning events only; T+1 sell events are allowed only after the position rolls to the next day.
 - Sell discipline uses 4%/structure stop, 12% first take profit, and 2% trailing protection after a 10% strong move is reached.

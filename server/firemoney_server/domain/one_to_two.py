@@ -42,6 +42,9 @@ class OneToTwoMarketRow:
     theme: str
     market_temperature: int
     first_board_count: int = 0
+    volume_ratio_5: float = 1.5
+    rsi_14: float = 65.0
+    position_percentile_60: float = 0.75
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,10 @@ class OneToTwoSettings(Protocol):
     min_sealed_amount_ratio: float
     min_leader_score: float
     min_mainline_score: float
+    min_volume_ratio_5: float
+    min_rsi_14: float
+    max_rsi_14: float
+    min_position_percentile_60: float
     min_low_breakout_first_board_count: int
     min_low_breakout_ready_candidates: int
     max_ready_candidates: int
@@ -330,6 +337,14 @@ class OneToTwoPolicy:
             pressure_distance = (row.pressure_price - row.latest_price) / row.latest_price
             if 0 <= pressure_distance <= self._settings.near_pressure_pct:
                 blockers.append("上方压力位过近")
+        if row.volume_ratio_5 < self._settings.min_volume_ratio_5:
+            blockers.append("首板量比不足，持续性承接未确认")
+        if row.rsi_14 < self._settings.min_rsi_14:
+            blockers.append("RSI 过冷，更像弱反抽而不是主线承接")
+        if row.rsi_14 > self._settings.max_rsi_14:
+            blockers.append("RSI 过热，短线追高风险偏高")
+        if row.position_percentile_60 < self._settings.min_position_percentile_60:
+            blockers.append("60 日位置分位过低，突破持续性不足")
         position_profile = self._position_profile(row)
         if not self._position_label_allowed(position_profile.label):
             blockers.append("位置一般，不符合低位/突破一进二核心买点")
@@ -355,6 +370,7 @@ class OneToTwoPolicy:
             sealed_ratio = row.sealed_amount / row.turnover_amount
             if sealed_ratio < self._settings.min_sealed_amount_ratio * 1.5:
                 warnings.append("封板资金刚过线，盘中炸板风险需要重点盯")
+        warnings.append(f"资金风格代理：{self._capital_style_label(row)}")
         return tuple(warnings)
 
     def _first_board_score(self, row: OneToTwoMarketRow) -> float:
@@ -407,6 +423,14 @@ class OneToTwoPolicy:
             risk_notes.append("上方压力较近")
         if ma_score < 3:
             risk_notes.append("均线结构尚未完全多头")
+        if row.volume_ratio_5 < self._settings.min_volume_ratio_5:
+            risk_notes.append("量比不足，持续性待确认")
+        if row.rsi_14 > self._settings.max_rsi_14:
+            risk_notes.append("RSI 过热")
+        elif row.rsi_14 < self._settings.min_rsi_14:
+            risk_notes.append("RSI 过冷")
+        if row.position_percentile_60 < self._settings.min_position_percentile_60:
+            risk_notes.append("60 日位置分位偏低")
         return OneToTwoPositionProfile(
             label=label,
             low_position_score=low_score,
@@ -416,6 +440,10 @@ class OneToTwoPolicy:
             volume_score=volume_score,
             summary=f"{label}，位置结构 {total:.0f}/25",
             risk_notes=tuple(risk_notes),
+            volume_ratio=round(row.volume_ratio_5, 2),
+            rsi_14=round(row.rsi_14, 2),
+            position_percentile_60=round(row.position_percentile_60, 4),
+            capital_style_label=self._capital_style_label(row),
         )
 
     def _position_score(self, profile: OneToTwoPositionProfile) -> float:
@@ -532,9 +560,22 @@ class OneToTwoPolicy:
             tags.append("主线强度高")
         if profile.low_position_score >= 8 and profile.breakout_score >= 7:
             tags.append("低位突破")
+        if row.volume_ratio_5 >= self._settings.min_volume_ratio_5:
+            tags.append("量比确认")
+        if self._settings.min_rsi_14 <= row.rsi_14 <= self._settings.max_rsi_14:
+            tags.append("RSI 区间")
+        if row.position_percentile_60 >= self._settings.min_position_percentile_60:
+            tags.append("60日位置达标")
         if row.open_pct >= self._settings.max_confirm_open_pct:
             tags.append("高开谨慎")
         return tuple(tags)
+
+    def _capital_style_label(self, row: OneToTwoMarketRow) -> str:
+        if row.turnover_amount >= 1_200_000_000:
+            return "机构/大票风格代理"
+        if row.turnover_amount >= 500_000_000:
+            return "游资+机构共同代理"
+        return "游资弹性代理"
 
     def _exit_plan(self, entry_price: float, stop_loss: float) -> OneToTwoExitPlan:
         first_take_profit_price = round(
@@ -634,6 +675,8 @@ class OneToTwoPolicy:
         sealed_ratio = row.sealed_amount / row.turnover_amount if row.turnover_amount else 0.0
         return (
             f"封板资金占比 {sealed_ratio:.1%}；只做非一字、封板确认后的主线首板候选，"
+            f"量比 {row.volume_ratio_5:.2f}、RSI {row.rsi_14:.1f}、"
+            f"60日位置 {row.position_percentile_60:.0%}、{self._capital_style_label(row)}；"
             f"次日一进二只作为确认点，模拟盘严格 T+1；{exit_plan.summary}"
         )
 

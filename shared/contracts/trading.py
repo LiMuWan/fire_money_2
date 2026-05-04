@@ -65,6 +65,10 @@ class OneToTwoPositionProfile:
     volume_score: float
     summary: str
     risk_notes: tuple[str, ...]
+    volume_ratio: float = 1.5
+    rsi_14: float = 65.0
+    position_percentile_60: float = 0.75
+    capital_style_label: str = ""
 
 
 @dataclass(frozen=True)

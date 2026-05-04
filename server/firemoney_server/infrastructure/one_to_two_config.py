@@ -42,6 +42,10 @@ class OneToTwoStrategySettings:
     min_sealed_amount_ratio: float
     min_leader_score: float
     min_mainline_score: float
+    min_volume_ratio_5: float
+    min_rsi_14: float
+    max_rsi_14: float
+    min_position_percentile_60: float
     min_low_breakout_first_board_count: int
     min_low_breakout_ready_candidates: int
     max_ready_candidates: int
@@ -99,6 +103,12 @@ def load_one_to_two_settings(
         min_sealed_amount_ratio=float(parameters.get("min_sealed_amount_ratio", 0.08)),
         min_leader_score=float(parameters.get("min_leader_score", 16)),
         min_mainline_score=float(parameters.get("min_mainline_score", 14)),
+        min_volume_ratio_5=float(parameters.get("min_volume_ratio_5", 1.0)),
+        min_rsi_14=float(parameters.get("min_rsi_14", 55)),
+        max_rsi_14=float(parameters.get("max_rsi_14", 85)),
+        min_position_percentile_60=float(
+            parameters.get("min_position_percentile_60", 0.55)
+        ),
         min_low_breakout_first_board_count=int(
             parameters.get("min_low_breakout_first_board_count", 0)
         ),
