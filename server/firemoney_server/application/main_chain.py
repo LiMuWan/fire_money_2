@@ -1418,6 +1418,10 @@ class MainChainService:
         settings = self._one_to_two_settings
         valid = (
             settings.min_score > 0
+            and (
+                settings.max_execution_score <= 0
+                or settings.max_execution_score > settings.min_score
+            )
             and settings.initial_cash > 0
             and 0 < settings.max_position_pct <= 1
             and settings.max_daily_trades >= 1
@@ -1429,6 +1433,8 @@ class MainChainService:
             status="ready" if valid else "blocked",
             detail=(
                 f"min_score={settings.min_score:g}, "
+                f"execution_score={settings.min_score:g}-"
+                f"{settings.max_execution_score:g}, "
                 f"initial_cash={settings.initial_cash:.2f}, "
                 f"max_position_pct={settings.max_position_pct:.0%}, "
                 f"max_daily_trades={settings.max_daily_trades}, "

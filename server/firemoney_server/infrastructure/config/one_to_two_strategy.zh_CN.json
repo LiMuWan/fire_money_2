@@ -5,6 +5,7 @@
   "description": "只观察主板 10cm 主线首板龙头候选，先做封板纪律确认，再把一进二作为次日确认点。",
   "parameters": {
     "min_score": 82,
+    "max_execution_score": 90,
     "max_position_pct": 0.08,
     "max_daily_trades": 1,
     "initial_cash": 100000,

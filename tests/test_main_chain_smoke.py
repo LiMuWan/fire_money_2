@@ -403,6 +403,44 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(one_word.status, "blocked")
             self.assertTrue(any("买不到" in blocker for blocker in one_word.blockers))
 
+    def test_one_to_two_overheated_execution_score_is_watch_only(self) -> None:
+        base_row = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")[0]
+        overheated_row = replace(
+            base_row,
+            symbol="600099",
+            first_limit_up_time="09:35",
+            sealed_amount=120000000,
+            turnover_amount=900000000,
+            turnover_rate=8.0,
+            open_pct=0.031,
+            auction_amount=60000000,
+            low_20=base_row.latest_price * 0.95,
+            high_60=base_row.latest_price * 0.98,
+            pressure_price=base_row.latest_price * 1.18,
+            ma_5=base_row.latest_price * 0.99,
+            ma_10=base_row.latest_price * 0.97,
+            ma_20=base_row.latest_price * 0.95,
+            recent_gain_pct=0.18,
+            market_temperature=82,
+            first_board_count=45,
+            volume_ratio_5=2.0,
+            rsi_14=72.0,
+            position_percentile_60=0.78,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            candidate = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider((overheated_row,)),
+            ).build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            ).candidates[0]
+
+            self.assertEqual(candidate.status, "watch_only")
+            self.assertGreaterEqual(candidate.score, 90)
+            self.assertTrue(any("过热阈值" in warning for warning in candidate.warnings))
+
     def test_low_breakout_needs_market_width_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             base_row = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")[0]
@@ -511,8 +549,10 @@ class MainChainSmokeTest(unittest.TestCase):
                 symbol=f"600{i:03d}",
                 name=f"过热候选{i}",
                 first_board_count=80,
+                sealed_amount=20000000,
                 turnover_amount=220000000 + i * 1000000,
                 open_pct=0.02,
+                auction_amount=7000000,
             )
             for i in range(1, 21)
         )
@@ -2117,6 +2157,7 @@ class MainChainSmokeTest(unittest.TestCase):
         filtered = module.apply_market_width_gate(
             matches=[low_breakout, breakout],
             min_score=80,
+            max_score=0,
             allowed_position_labels=module.parse_allowed_position_labels(
                 "low_breakout"
             ),
@@ -2163,6 +2204,7 @@ class MainChainSmokeTest(unittest.TestCase):
         filtered = module.apply_market_width_gate(
             matches=matches,
             min_score=80,
+            max_score=0,
             allowed_position_labels=module.parse_allowed_position_labels(
                 "breakout"
             ),
@@ -3020,6 +3062,7 @@ class MainChainSmokeTest(unittest.TestCase):
 
         self.assertEqual(payload["strategy_id"], settings.strategy_id)
         self.assertEqual(settings.min_score, 82)
+        self.assertEqual(settings.max_execution_score, 90)
         self.assertEqual(settings.max_position_pct, 0.08)
         self.assertEqual(settings.max_daily_trades, 1)
         self.assertEqual(settings.max_holding_trade_days, 2)

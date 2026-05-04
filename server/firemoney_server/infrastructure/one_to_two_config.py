@@ -20,6 +20,7 @@ class OneToTwoStrategySettings:
     market: str
     description: str
     min_score: float
+    max_execution_score: float
     max_position_pct: float
     max_daily_trades: int
     initial_cash: float
@@ -76,6 +77,12 @@ def load_one_to_two_settings(
         market=str(payload["market"]),
         description=str(payload["description"]),
         min_score=float(parameters["min_score"]),
+        max_execution_score=float(
+            parameters.get(
+                "max_execution_score",
+                parameters.get("max_score", 90),
+            )
+        ),
         max_position_pct=float(parameters["max_position_pct"]),
         max_daily_trades=int(parameters["max_daily_trades"]),
         initial_cash=float(parameters["initial_cash"]),

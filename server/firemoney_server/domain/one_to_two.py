@@ -60,6 +60,7 @@ class HistoricalPriceBar:
 
 class OneToTwoSettings(Protocol):
     min_score: int
+    max_execution_score: float
     max_position_pct: float
     stop_loss_pct: float
     min_confirm_open_pct: float
@@ -231,6 +232,13 @@ class OneToTwoPolicy:
         mainline_score = self._mainline_score(row, position_profile)
         sealing_score = self._sealing_score(row)
         leader_score = self._leader_score(row, position_profile)
+        execution_score = self._execution_score(
+            first_board_score=first_board_score,
+            auction_score=auction_score,
+            position_profile=position_profile,
+            theme_score=theme_score,
+            liquidity_score=liquidity_score,
+        )
         score = round(
             min(
                 100.0,
@@ -247,7 +255,7 @@ class OneToTwoPolicy:
             "blocked"
             if blockers
             else "ready"
-            if score >= self._settings.min_score
+            if self._is_executable_score(execution_score)
             else "watch_only"
         )
         entry_price = round(row.latest_price, 2)
@@ -282,8 +290,13 @@ class OneToTwoPolicy:
             liquidity_score=round(liquidity_score, 2),
             position_profile=position_profile,
             blockers=blockers,
-            warnings=warnings,
-            rationale=self._rationale(row, position_profile, blockers),
+            warnings=self._candidate_warnings(warnings, execution_score),
+            rationale=self._rationale(
+                row,
+                position_profile,
+                blockers,
+                execution_score,
+            ),
             next_action=self._next_action(status),
             mainline_score=round(mainline_score, 2),
             sealing_score=round(sealing_score, 2),
@@ -300,6 +313,42 @@ class OneToTwoPolicy:
             exit_plan=exit_plan,
             mainline_continuity=continuity,
         )
+
+    def _execution_score(
+        self,
+        first_board_score: float,
+        auction_score: float,
+        position_profile: OneToTwoPositionProfile,
+        theme_score: float,
+        liquidity_score: float,
+    ) -> float:
+        return round(
+            first_board_score
+            + auction_score
+            + self._position_score(position_profile)
+            + theme_score
+            + liquidity_score,
+            2,
+        )
+
+    def _is_executable_score(self, score: float) -> bool:
+        if score < self._settings.min_score:
+            return False
+        max_score = getattr(self._settings, "max_execution_score", 0)
+        return max_score <= 0 or score < max_score
+
+    def _candidate_warnings(
+        self,
+        warnings: tuple[str, ...],
+        score: float,
+    ) -> tuple[str, ...]:
+        if score >= self._settings.min_score and not self._is_executable_score(score):
+            return warnings + (
+                f"执行分 {score:g} 达到过热阈值 "
+                f"{self._settings.max_execution_score:g}，"
+                "一致性过强时先观察，避免拥挤接力。",
+            )
+        return warnings
 
     def _blockers(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
         blockers: list[str] = []
@@ -685,9 +734,15 @@ class OneToTwoPolicy:
         row: OneToTwoMarketRow,
         profile: OneToTwoPositionProfile,
         blockers: tuple[str, ...],
+        score: float,
     ) -> str:
         if blockers:
             return f"{row.name} 被拦截：{blockers[0]}"
+        if score >= self._settings.min_score and not self._is_executable_score(score):
+            return (
+                f"{row.name} 执行分 {score:g} 已达到过热区间，"
+                "本轮回测显示先过滤拥挤高分票能改善收益和回撤。"
+            )
         return (
             f"{row.name} 属于{profile.label}，封板纪律、主线强度和龙头候选辨识度进入观察。"
         )

@@ -32,6 +32,8 @@ python -m client.desktop.firemoney_client.one_to_two_cli backtest-audit --brief 
 python -B tools\research_one_to_two_backtest.py --start-date 2024-01-01 --end-date 2026-05-03 --workers 12 --output exports\one_to_two_backtest_2024_to_now.json
 ```
 
+当前默认研究口径包含 `min_score=82`、`max_execution_score=90`、0%-3.5% 次日开盘确认、单票 8%、每天最多 1 笔、严格 T+1。`max_execution_score=90` 是 2026-05-04 利润矩阵筛出的过热执行分拦截：执行侧分数过高不再模拟买入，避免一致性拥挤接力。2024-01-01 到 2026-05-03 的正式日线回测为 156 笔，胜率 48.08%，8% 仓位复合约 22.22%，最大回撤约 3.28%。这只用于 Beta 准入判断，不等同实盘盈利承诺。
+
 单点检查某个历史交易日“当时介入、后面盈亏比”：
 
 ```powershell

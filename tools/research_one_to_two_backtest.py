@@ -56,6 +56,7 @@ DEFAULT_MIN_CONFIRM_OPEN_PCT = 0.0
 DEFAULT_MAX_CONFIRM_OPEN_PCT = 0.035
 DEFAULT_ALLOWED_POSITION_LABELS = "low_breakout,breakout,low_position"
 DEFAULT_SELECTION_RANK = "turnover"
+DEFAULT_MAX_SCORE = 90.0
 MIN_COMPLETE_MAINBOARD_UNIVERSE = 2500
 
 
@@ -136,6 +137,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
+    parser.add_argument(
+        "--max-score",
+        type=float,
+        default=DEFAULT_MAX_SCORE,
+        help="Exclude overheated candidates with score >= this value; 0 disables.",
+    )
     parser.add_argument("--min-turnover-amount", type=float, default=DEFAULT_MIN_TURNOVER_AMOUNT)
     parser.add_argument("--liquidity-score-amount", type=float, default=DEFAULT_LIQUIDITY_SCORE_AMOUNT)
     parser.add_argument("--recent-gain-block-pct", type=float, default=0.45)
@@ -278,6 +285,7 @@ def main() -> int:
     filtered = apply_market_width_gate(
         matches=matches,
         min_score=args.min_score,
+        max_score=args.max_score,
         allowed_position_labels=allowed_position_labels,
         min_low_breakout_first_board_count=args.min_low_breakout_first_board_count,
         min_low_breakout_ready_candidates=args.min_low_breakout_ready_candidates,
@@ -295,6 +303,7 @@ def main() -> int:
         filtered_matches=filtered,
         histories=histories,
         min_score=args.min_score,
+        max_score=args.max_score,
         min_turnover_amount=args.min_turnover_amount,
         liquidity_score_amount=args.liquidity_score_amount,
         min_confirm_open_pct=args.min_confirm_open_pct,
@@ -870,6 +879,7 @@ def score_liquidity(estimated_turnover_amount: float, min_turnover_amount: float
 def apply_market_width_gate(
     matches: list[Match],
     min_score: float,
+    max_score: float,
     allowed_position_labels: frozenset[str],
     min_low_breakout_first_board_count: int,
     min_low_breakout_ready_candidates: int,
@@ -883,6 +893,7 @@ def apply_market_width_gate(
         )
         for item in matches
         if item.score >= min_score
+        and (max_score <= 0 or item.score < max_score)
         and not item.blockers
         and (
             not allowed_position_labels
@@ -1251,6 +1262,7 @@ def build_result(
     filtered_matches: list[Match],
     histories: dict[str, list[DailyBar]],
     min_score: float,
+    max_score: float,
     min_turnover_amount: float,
     liquidity_score_amount: float,
     min_confirm_open_pct: float,
@@ -1287,6 +1299,7 @@ def build_result(
                 "turnover amount is estimated from Tencent volume_hands * 100 * close",
             ],
             "min_score": min_score,
+            "max_score": max_score if max_score > 0 else None,
             "min_turnover_amount": min_turnover_amount,
             "liquidity_score_amount": liquidity_score_amount,
             "confirm_open_window": {
