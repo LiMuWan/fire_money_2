@@ -221,6 +221,16 @@ class FailingOneToTwoProvider:
         raise RuntimeError("bars unavailable")
 
 
+class CountingOneToTwoProvider(StaticOneToTwoProvider):
+    def __init__(self, rows: tuple[OneToTwoMarketRow, ...]) -> None:
+        super().__init__(rows)
+        self.row_load_count = 0
+
+    def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        self.row_load_count += 1
+        return super().load_one_to_two_rows(trade_date)
+
+
 class FakeFeishuApiServer:
     def __init__(self) -> None:
         self.requests: list[tuple[str, dict[str, str], dict[str, object]]] = []
@@ -2603,6 +2613,40 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("beta-plan-2026-05-03", payload["report_id"])
             self.assertIn("beta-check --trade-date 2026-05-06", payload["launch_commands"][1])
             self.assertIn("beta-start --trade-date 2026-05-06", payload["launch_commands"][2])
+
+    def test_beta_launch_plan_does_not_block_on_live_market_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            provider = CountingOneToTwoProvider(
+                SampleMarketDataProvider().load_one_to_two_rows("2026-04-30")
+            )
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=provider,
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FEISHU_ENABLED": "true",
+                    "FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test-token",
+                },
+                clear=True,
+            ):
+                report = build_one_to_two_beta_launch_plan(
+                    trade_date="2026-05-03",
+                    service=service,
+                    trading_calendar=WeekdayTradingCalendar(),
+                )
+            payload = contract_to_dict(report)
+
+            self.assertEqual(payload["status"], "ready")
+            self.assertEqual(provider.row_load_count, 0)
+            market_check = next(
+                check
+                for check in payload["doctor_report"]["checks"]
+                if check["check_id"] == "market_data"
+            )
+            self.assertIn("计划模式", market_check["detail"])
 
     def test_beta_plan_cli_is_read_only_and_returns_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

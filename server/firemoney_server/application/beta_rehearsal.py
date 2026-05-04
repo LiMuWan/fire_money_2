@@ -158,10 +158,12 @@ def build_one_to_two_beta_launch_plan(
     doctor_report = live_service.build_one_to_two_doctor_report(
         trade_date=requested_context.trade_date,
         beta=False,
+        skip_market_data=True,
     )
     beta_doctor_report = live_service.build_one_to_two_doctor_report(
         trade_date=requested_context.next_trade_date,
         beta=True,
+        skip_market_data=True,
     )
     blockers = tuple(
         f"{check.label}: {check.detail}"

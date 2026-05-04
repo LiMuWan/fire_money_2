@@ -610,6 +610,7 @@ class MainChainService:
         self,
         trade_date: str | None = None,
         beta: bool = False,
+        skip_market_data: bool = False,
     ) -> OneToTwoDoctorReport:
         """Check whether the one-to-two loop is ready to run locally."""
 
@@ -619,7 +620,11 @@ class MainChainService:
         checks = (
             self._doctor_strategy_check(),
             self._doctor_trading_day_check(trade_context, beta=beta),
-            self._doctor_market_data_check(trade_context.trade_date),
+            (
+                self._doctor_market_data_plan_check(trade_context.trade_date)
+                if skip_market_data
+                else self._doctor_market_data_check(trade_context.trade_date)
+            ),
             self._doctor_paper_store_check(),
             self._doctor_notification_store_check(),
             self._doctor_scheduler_state_store_check(),
@@ -1495,6 +1500,18 @@ class MainChainService:
                 if rows
                 else "数据可读但没有候选，盘前继续观察或换交易日验证。"
             ),
+        )
+
+    def _doctor_market_data_plan_check(self, trade_date: str) -> OneToTwoDoctorCheck:
+        return OneToTwoDoctorCheck(
+            check_id="market_data",
+            label="行情源",
+            status="ready",
+            detail=(
+                f"{trade_date} 计划模式未读取实时行情；"
+                "真实行情门禁由 beta-check 和 beta-start 执行。"
+            ),
+            next_action="盘前运行 beta-check，确认 AkShare 可读且飞书 sent 后再启动 beta-start。",
         )
 
     def _doctor_paper_store_check(self) -> OneToTwoDoctorCheck:
