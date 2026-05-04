@@ -434,6 +434,7 @@ class LimitUpBoardShadowReport:
     no_future_leakage_notes: tuple[str, ...]
     limitations: tuple[str, ...]
     next_action: str
+    notification: FeishuNotificationResult | None = None
 
 
 @dataclass(frozen=True)

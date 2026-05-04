@@ -427,6 +427,39 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(stability.success_rate, 1.0)
             self.assertEqual(payload["recent_samples"][0]["created_at"], "20260501090000")
 
+    def test_limit_up_board_shadow_record_notifies_without_touching_paper_ledger(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        stock = module.sm.StockMeta("600001", "shadow board", None)
+        bars = _board_shadow_bars(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                board_shadow_store=LimitUpBoardShadowStore(
+                    root / "board_shadow_samples.json",
+                    created_at_provider=lambda: "20260501090000",
+                ),
+                notification_store=NotificationRecordStore(root / "notifications.json"),
+            )
+            with patch(
+                "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
+                return_value=([stock], {"600001": bars}),
+            ):
+                report = service.record_limit_up_board_shadow_sample(
+                    as_of_date="2026-04-29",
+                    notify=False,
+                )
+            account = PaperTradeStore(root / "paper_trades.json").load()
+            records = NotificationRecordStore(root / "notifications.json").load()
+
+            self.assertEqual(report.notification.status, NotificationStatus.PREPARED)
+            self.assertEqual(records[0].workflow, "board-shadow:record")
+            self.assertIn("不写入一进二模拟盘", records[0].message)
+            self.assertEqual(account.positions, ())
+            self.assertEqual(account.events, ())
+            self.assertEqual(account.closed_trades, ())
+
     def test_weekend_request_uses_previous_trading_day(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report = _build_service(
@@ -2775,7 +2808,15 @@ class MainChainSmokeTest(unittest.TestCase):
                 notify=False,
             )
 
-            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(result.executed_count, 2)
+            self.assertEqual(
+                {
+                    task.task_id
+                    for task in result.tasks
+                    if task.status == "completed"
+                },
+                {"eod", "board-shadow-record"},
+            )
             self.assertEqual(
                 {task.task_id for task in result.tasks if task.status == "expired"},
                 {
@@ -2790,6 +2831,56 @@ class MainChainSmokeTest(unittest.TestCase):
                 },
             )
             account = PaperTradeStore(root / "paper_trades.json").load()
+            self.assertEqual(account.positions, ())
+            self.assertFalse(
+                any(event.event_type.value == "paper_buy" for event in account.events)
+            )
+
+    def test_scheduler_records_board_shadow_after_eod_without_paper_trade(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        stock = module.sm.StockMeta("600001", "shadow board", None)
+        bars = _board_shadow_bars(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = _build_service(
+                root,
+                market_data_provider=SampleMarketDataProvider(),
+                board_shadow_store=LimitUpBoardShadowStore(
+                    root / "board_shadow_samples.json",
+                    created_at_provider=lambda: "20260501152000",
+                ),
+            )
+            scheduler = OneToTwoScheduler(
+                service=service,
+                state_store=SchedulerStateStore(root / "scheduler_state.json"),
+            )
+
+            with patch(
+                "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
+                return_value=([stock], {"600001": bars}),
+            ):
+                result = scheduler.run_due(
+                    trade_date="2026-04-30",
+                    at_time="15:20",
+                    notify=False,
+                )
+            account = PaperTradeStore(root / "paper_trades.json").load()
+            shadow_stability = service.build_limit_up_board_shadow_stability_report()
+            notifications = NotificationRecordStore(root / "notifications.json").load()
+
+            self.assertEqual(result.executed_count, 2)
+            self.assertTrue(
+                any(
+                    task.task_id == "board-shadow-record"
+                    and task.status == "completed"
+                    for task in result.tasks
+                )
+            )
+            self.assertEqual(shadow_stability.sample_count, 1)
+            self.assertEqual(shadow_stability.recent_samples[0].as_of_date, "2026-04-29")
+            self.assertTrue(
+                any(record.workflow == "board-shadow:record" for record in notifications)
+            )
             self.assertEqual(account.positions, ())
             self.assertFalse(
                 any(event.event_type.value == "paper_buy" for event in account.events)
@@ -2992,9 +3083,9 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertIsInstance(report, OneToTwoBetaRehearsalReport)
         self.assertEqual(payload["status"], "ready")
         self.assertEqual(payload["trade_date"], "2026-04-30")
-        self.assertEqual(len(payload["schedule_runs"]), 9)
-        self.assertEqual(sum(run["executed_count"] for run in payload["schedule_runs"]), 9)
-        self.assertEqual(payload["notification_record_count"], 9)
+        self.assertEqual(len(payload["schedule_runs"]), 10)
+        self.assertEqual(sum(run["executed_count"] for run in payload["schedule_runs"]), 10)
+        self.assertEqual(payload["notification_record_count"], 10)
         self.assertGreaterEqual(payload["paper_event_count"], 3)
         self.assertIn(payload["doctor_report"]["status"], {"ready", "warning"})
         self.assertFalse(
@@ -3407,6 +3498,8 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIsInstance(report, OneToTwoMorningReport)
             self.assertFalse(hasattr(adapter, "load_snapshot"))
             self.assertFalse(hasattr(adapter, "export_trade_archives"))
+            self.assertTrue(hasattr(adapter, "build_limit_up_board_shadow_report"))
+            self.assertTrue(hasattr(adapter, "record_limit_up_board_shadow_sample"))
 
     def test_one_to_two_config_is_json_and_defaults_to_single_core_line(self) -> None:
         config_path = Path(
@@ -3488,12 +3581,15 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("beta-rehearsal", html)
             self.assertIn("beta-check", html)
             self.assertIn("beta-start", html)
+            self.assertIn("board-shadow-record", html)
             self.assertIn("主线首板策略配置", html)
             self.assertIn("行情源", html)
             self.assertIn("飞书通知", html)
             self.assertIn("本地调度", html)
             self.assertIn("09:31", html)
-            self.assertIn("watch / open", html)
+            self.assertIn("盘中值守 / open", html)
+            self.assertIn("15:20", html)
+            self.assertIn("board-shadow-record / 封板影子记录", html)
             self.assertIn("已执行", html)
             self.assertIn("尾盘测评", html)
             self.assertIn("稳定性观察", html)

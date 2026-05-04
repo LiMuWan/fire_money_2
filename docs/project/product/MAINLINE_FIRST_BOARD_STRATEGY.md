@@ -137,3 +137,5 @@ python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-
 回放纪律固定为：先用 `trade-date` 当天可见的一进二候选池和策略配置选股；候选确定后，才读取后续日线做 T+1、止损、第一止盈、强势回撤和最长持仓退出结算。后续价格只用于计算卖点、收益率、最大顺风/逆风和盈亏比，不参与候选评分。
 
 第一版使用日线高低收做执行近似；如果同一根日线同时碰到止损和止盈，按保守止损优先处理。真实长期评价仍需要更干净的 Point-in-Time 快照、退市样本、复权校验、分钟线/Tick、滑点和手续费。
+
+2026-05-05 起，15:20 调度会自动运行 `board-shadow-record`，用当日已可见的 T+1 日线记录上一交易日 shadow 样本，并发送飞书复盘；该任务只写 `.firemoney/board_shadow_samples.json` 和通知归档，不写一进二 `.firemoney/paper_trades.json`。

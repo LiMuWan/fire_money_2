@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+from dataclasses import replace
 from queue import Empty, Queue
 from threading import Thread
 from datetime import date, timedelta
@@ -1229,6 +1230,7 @@ class MainChainService:
         self,
         as_of_date: str | None = None,
         cache_dir: str | Path | None = None,
+        notify: bool = False,
     ) -> LimitUpBoardShadowReport:
         """Build and persist one limit-up board shadow sample when tradable."""
 
@@ -1237,25 +1239,47 @@ class MainChainService:
             cache_dir=cache_dir,
         )
         sample = self._board_shadow_store.append_report(report)
+        stability = self.build_limit_up_board_shadow_stability_report()
+        notification = self._notify_or_prepare(
+            notify=notify,
+            title="FireMoney 封板影子线复盘",
+            message=self._board_shadow_notification_message(
+                report=report,
+                stability_report=stability,
+                sample_recorded=sample is not None,
+            ),
+        )
+        self._record_notification("board-shadow:record", report.as_of_date, notification)
         if sample is None:
-            return report
-        return LimitUpBoardShadowReport(
-            report_id=report.report_id,
-            as_of_date=report.as_of_date,
-            status=report.status,
+            return replace(report, notification=notification)
+        return replace(
+            report,
             summary=f"{report.summary} 已记录 shadow 样本 {sample.sample_id}。",
-            candidate=report.candidate,
-            trade=report.trade,
-            quality_checks=report.quality_checks,
-            no_future_leakage_notes=report.no_future_leakage_notes,
-            limitations=report.limitations,
             next_action="运行 board-shadow-stability 查看累计胜率和阶段门槛。",
+            notification=notification,
         )
 
     def build_limit_up_board_shadow_stability_report(
         self,
     ) -> LimitUpBoardShadowStabilityReport:
         return self._board_shadow_store.build_stability_report()
+
+    def run_scheduled_limit_up_board_shadow_record(
+        self,
+        trade_date: str | None = None,
+        cache_dir: str | Path | None = None,
+        notify: bool = True,
+    ) -> LimitUpBoardShadowReport:
+        """Record the previous trading day's board-shadow sample after T+1 data exists."""
+
+        trade_context = self._trading_calendar.resolve(
+            trade_date or self._default_trade_date()
+        )
+        return self.record_limit_up_board_shadow_sample(
+            as_of_date=trade_context.previous_trade_date,
+            cache_dir=cache_dir,
+            notify=notify,
+        )
 
     @staticmethod
     def _to_board_shadow_candidate(
@@ -2293,6 +2317,62 @@ class MainChainService:
         else:
             lines.append("当前无持仓，等待下一交易日重新扫描主线首板候选池。")
         lines.append("复盘纪律：尾盘只归档和评估边界，不改变当日交易。")
+        return "\n".join(lines)
+
+    def _board_shadow_notification_message(
+        self,
+        report: LimitUpBoardShadowReport,
+        stability_report: LimitUpBoardShadowStabilityReport,
+        sample_recorded: bool,
+    ) -> str:
+        lines = [
+            f"观察日：{report.as_of_date}",
+            f"状态：{report.status}",
+            f"样本记录：{'已写入独立 shadow 账本' if sample_recorded else '未写入，保持观察'}",
+            report.summary,
+        ]
+        if report.candidate:
+            candidate = report.candidate
+            lines.extend(
+                [
+                    f"候选：{candidate.name}({candidate.symbol}) rank={candidate.rank_score:.2f}",
+                    (
+                        f"封板价 {candidate.entry_price:.2f}，止损 "
+                        f"{candidate.stop_loss:.2f}，止盈 {candidate.take_profit_price:.2f}"
+                    ),
+                    (
+                        f"成交额约 {candidate.estimated_turnover_amount:.0f}，"
+                        f"20日量比 {candidate.volume_ratio_20:.2f}，"
+                        f"近20日涨幅 {candidate.recent_gain_pct:.2%}"
+                    ),
+                ]
+            )
+        if report.trade:
+            trade = report.trade
+            lines.append(
+                f"回放卖点：{trade.exit_date} {trade.exit_reason}，收益 {trade.realized_pnl_pct:.2%}"
+            )
+        else:
+            lines.append("回放卖点：未生成闭环交易，不能进入样本统计。")
+        lines.extend(
+            [
+                (
+                    "累计 shadow："
+                    f"{stability_report.sample_count} 笔，胜率 "
+                    f"{stability_report.success_rate:.2%}，平均收益 "
+                    f"{stability_report.average_return_pct:.2%}，最大回撤 "
+                    f"{stability_report.max_drawdown:.2%}"
+                ),
+                f"阶段门槛：{stability_report.sample_stage}，下一门槛 {stability_report.next_milestone or '滚动复核'}",
+                "边界：封板影子线只做验证，不写入一进二模拟盘，不代表实盘交易指令。",
+            ]
+        )
+        if report.quality_checks:
+            first_check = report.quality_checks[-1]
+            lines.append(f"质量检查：{first_check.label} {first_check.status}，{first_check.detail}")
+        if report.limitations:
+            lines.append(f"限制：{report.limitations[0]}")
+        lines.append("下一步：继续积累 30/50/100 笔样本，并补齐封单、开板、滑点和主线消息持续性。")
         return "\n".join(lines)
 
     def _default_trade_date(self) -> str:

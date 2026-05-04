@@ -149,10 +149,12 @@ class LocalMainChainAdapter:
         self,
         as_of_date: str | None = None,
         cache_dir: str | None = None,
+        notify: bool = False,
     ) -> LimitUpBoardShadowReport:
         return self._service.record_limit_up_board_shadow_sample(
             as_of_date=as_of_date,
             cache_dir=cache_dir,
+            notify=notify,
         )
 
     def build_limit_up_board_shadow_stability_report(

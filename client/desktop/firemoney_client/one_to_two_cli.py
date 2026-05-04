@@ -233,6 +233,7 @@ def main() -> None:
         result = adapter.record_limit_up_board_shadow_sample(
             as_of_date=args.trade_date,
             cache_dir=args.cache_dir,
+            notify=not args.no_notify,
         )
     elif args.mode == "board-shadow-stability":
         result = adapter.build_limit_up_board_shadow_stability_report()

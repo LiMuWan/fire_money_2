@@ -33,6 +33,13 @@ DEFAULT_ONE_TO_TWO_SCHEDULE: tuple[ScheduledOneToTwoJob, ...] = (
     ScheduledOneToTwoJob("watch-risk-1400", "watch", "14:00", "risk", "14:49"),
     ScheduledOneToTwoJob("watch-risk-1450", "watch", "14:50", "risk", "15:00"),
     ScheduledOneToTwoJob("eod", "eod", "15:10", expires_at="16:00"),
+    ScheduledOneToTwoJob(
+        "board-shadow-record",
+        "board-shadow-record",
+        "15:20",
+        "shadow",
+        "16:00",
+    ),
 )
 
 
@@ -155,6 +162,11 @@ class OneToTwoScheduler:
             )
         if job.mode == "eod":
             return self._service.build_one_to_two_end_of_day_review(
+                trade_date=trade_date,
+                notify=notify,
+            )
+        if job.mode == "board-shadow-record":
+            return self._service.run_scheduled_limit_up_board_shadow_record(
                 trade_date=trade_date,
                 notify=notify,
             )

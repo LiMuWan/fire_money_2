@@ -146,7 +146,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --int
 
 `beta-start` 会先运行严格 `doctor --beta` 门禁；只有策略配置、交易日、行情、本地账本、飞书 sent 记录和调度审计全部 `ready`，才会启动调度。行情体检超过 `--market-data-timeout-seconds` 会快速返回 `blocked`。失败时只输出体检报告，不写入调度状态，不产生模拟买入。
 
-本地调度器会按 08:50 早盘、盘中 `scan/auction/open/risk`、15:10 尾盘推进同一条一进二主线，并用 `.firemoney/scheduler_state.json` 防止同日重复触发，同时把每次调度结果写入 `.firemoney/scheduler_runs.json` 便于复核值守覆盖率。`schedule --beta` 仍可用于工程排查，正式上线测试优先使用 `beta-start`。
+本地调度器会按 08:50 早盘、盘中 `scan/auction/open/risk`、15:10 尾盘推进同一条一进二主线，并在 15:20 自动执行 `board-shadow-record`：用当日已经可见的 T+1 日线，记录上一交易日封板影子线样本到 `.firemoney/board_shadow_samples.json`，同时发飞书 shadow 复盘。这个 shadow 任务只做验证，不写入 `.firemoney/paper_trades.json`，不代表实盘交易指令。调度器会用 `.firemoney/scheduler_state.json` 防止同日重复触发，同时把每次调度结果写入 `.firemoney/scheduler_runs.json` 便于复核值守覆盖率。`schedule --beta` 仍可用于工程排查，正式上线测试优先使用 `beta-start`。
 
 Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到飞书。
 

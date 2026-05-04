@@ -10,6 +10,9 @@ from server.firemoney_server.application.one_to_two_scheduler import (
     DEFAULT_ONE_TO_TWO_SCHEDULE,
     OneToTwoScheduler,
 )
+from server.firemoney_server.infrastructure.board_shadow_store import (
+    LimitUpBoardShadowStore,
+)
 from server.firemoney_server.infrastructure.market_data import (
     MarketDataProvider,
     SampleMarketDataProvider,
@@ -39,6 +42,7 @@ REHEARSAL_TIMES: tuple[str, ...] = (
     "14:00",
     "14:50",
     "15:10",
+    "15:20",
 )
 
 
@@ -74,6 +78,7 @@ def run_one_to_two_beta_rehearsal(
             scheduler_state_store=scheduler_state_store,
             scheduler_run_store=scheduler_run_store,
             trading_calendar=calendar,
+            board_shadow_store=LimitUpBoardShadowStore(root / "board_shadow_samples.json"),
         )
         doctor_report = service.build_one_to_two_doctor_report(
             trade_date=requested_context.trade_date,

@@ -158,7 +158,7 @@ def build_preview(output_path: str | Path) -> Path:
             state_store=SchedulerStateStore(preview_root / "scheduler_state.json"),
         ).run_due(
             trade_date=PREVIEW_TRADE_DATE,
-            at_time="09:31",
+            at_time="15:20",
             notify=False,
         )
         target.write_text(

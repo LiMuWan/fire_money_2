@@ -181,14 +181,21 @@ def _render_schedule_run(schedule_run: OneToTwoScheduleRun) -> str:
         "failed": "失败",
         "expired": "已过期",
     }
+    mode_labels = {
+        "morning": "早盘判断",
+        "watch": "盘中值守",
+        "eod": "尾盘复盘",
+        "board-shadow-record": "board-shadow-record / 封板影子记录",
+    }
     items = []
     for task in schedule_run.tasks:
         phase = f" / {_text(task.phase)}" if task.phase else ""
+        mode_label = mode_labels.get(task.mode, task.mode)
         items.append(
             f"""
             <li class="schedule-item" data-status="{_text(task.status)}">
               <span class="schedule-time">{_text(task.scheduled_time)}</span>
-              <span class="schedule-name">{_text(task.mode)}{phase}</span>
+              <span class="schedule-name">{_text(mode_label)}{phase}</span>
               <span class="schedule-status">{_text(labels.get(task.status, task.status))}</span>
             </li>
             """
