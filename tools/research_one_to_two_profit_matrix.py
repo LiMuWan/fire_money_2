@@ -203,7 +203,7 @@ def baseline_case() -> dict[str, Any]:
     return {
         "entry": {
             "min_score": 82,
-            "max_score": None,
+            "max_score": 90,
             "min_open": 0,
             "max_open": 0.035,
             "min_turnover": 200_000_000,
@@ -242,8 +242,9 @@ def build_entry_cases(wide: bool = False) -> list[dict[str, Any]]:
             {"min_turnover": 300_000_000},
             {"min_turnover": 300_000_000, "max_turnover": 800_000_000},
             {"min_turnover": 300_000_000, "max_turnover": 1_200_000_000},
+            {"max_score": None},
             {"max_score": 88},
-            {"max_score": 90},
+            {"max_score": 92},
             {"min_score": 80},
             {"min_score": 84},
             {"min_open": 0.005, "max_open": 0.035},
@@ -273,7 +274,7 @@ def build_entry_cases(wide: bool = False) -> list[dict[str, Any]]:
 
     for min_turnover in (200_000_000, 300_000_000):
         for max_turnover in (None, 800_000_000, 1_200_000_000):
-            for max_score in (None, 88, 90):
+            for max_score in (None, 88, 90, 92):
                 for min_score in (80, 82, 84):
                     for min_open, max_open in (
                         (0, 0.035),

@@ -2215,6 +2215,20 @@ class MainChainSmokeTest(unittest.TestCase):
 
         self.assertEqual(filtered, [])
 
+    def test_profit_matrix_baseline_matches_product_score_gate(self) -> None:
+        module = self._load_profit_matrix_module()
+
+        baseline = module.baseline_case()
+        focused_cases = module.build_entry_cases(wide=False)
+        focused_max_scores = {case["max_score"] for case in focused_cases}
+
+        self.assertEqual(baseline["entry"]["min_score"], 82)
+        self.assertEqual(baseline["entry"]["max_score"], 90)
+        self.assertIn(None, focused_max_scores)
+        self.assertIn(88, focused_max_scores)
+        self.assertIn(90, focused_max_scores)
+        self.assertIn(92, focused_max_scores)
+
     def test_research_backtest_blocks_one_word_by_open_without_future_low(self) -> None:
         module = self._load_research_backtest_module()
         bars = [
@@ -2323,6 +2337,18 @@ class MainChainSmokeTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location(
             "firemoney_research_backtest_for_test",
             Path("tools/research_one_to_two_backtest.py"),
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def _load_profit_matrix_module(self):
+        spec = importlib.util.spec_from_file_location(
+            "firemoney_profit_matrix_for_test",
+            Path("tools/research_one_to_two_profit_matrix.py"),
         )
         self.assertIsNotNone(spec)
         self.assertIsNotNone(spec.loader)
