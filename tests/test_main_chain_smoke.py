@@ -2229,6 +2229,92 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertIn(90, focused_max_scores)
         self.assertIn(92, focused_max_scores)
 
+    def test_strategy_matrix_one_position_uses_visible_rank_and_overlap_gate(
+        self,
+    ) -> None:
+        module = self._load_strategy_matrix_module()
+
+        high_rank_loser = module.Trade(
+            strategy_id="sealed",
+            strategy_name="sealed",
+            symbol="600001",
+            name="visible high rank",
+            signal_date="2026-04-30",
+            entry_date="2026-04-30",
+            exit_date="2026-05-06",
+            entry_price=10.0,
+            exit_price=9.0,
+            gross_return_pct=-0.1,
+            net_return_pct=-0.1,
+            hold_days=2,
+            reason="test",
+            rank_score=10.0,
+            rank_turnover_amount=100.0,
+        )
+        low_rank_future_winner = module.Trade(
+            strategy_id="sealed",
+            strategy_name="sealed",
+            symbol="600002",
+            name="future winner",
+            signal_date="2026-04-30",
+            entry_date="2026-04-30",
+            exit_date="2026-05-06",
+            entry_price=10.0,
+            exit_price=12.0,
+            gross_return_pct=0.2,
+            net_return_pct=0.2,
+            hold_days=2,
+            reason="test",
+            rank_score=1.0,
+            rank_turnover_amount=999.0,
+        )
+        overlapping_trade = module.Trade(
+            strategy_id="sealed",
+            strategy_name="sealed",
+            symbol="600003",
+            name="overlap",
+            signal_date="2026-05-05",
+            entry_date="2026-05-05",
+            exit_date="2026-05-07",
+            entry_price=10.0,
+            exit_price=11.0,
+            gross_return_pct=0.1,
+            net_return_pct=0.1,
+            hold_days=2,
+            reason="test",
+            rank_score=20.0,
+            rank_turnover_amount=100.0,
+        )
+        later_trade = module.Trade(
+            strategy_id="sealed",
+            strategy_name="sealed",
+            symbol="600004",
+            name="later",
+            signal_date="2026-05-07",
+            entry_date="2026-05-07",
+            exit_date="2026-05-08",
+            entry_price=10.0,
+            exit_price=12.0,
+            gross_return_pct=0.2,
+            net_return_pct=0.2,
+            hold_days=1,
+            reason="test",
+            rank_score=5.0,
+            rank_turnover_amount=100.0,
+        )
+
+        daily_top = module.select_daily_top_trades(
+            [low_rank_future_winner, high_rank_loser, overlapping_trade, later_trade]
+        )
+        selected = module.select_one_position_trades(daily_top)
+        summary = module.summarize_position_trades(selected, position_pct=0.08)
+
+        self.assertEqual([item.symbol for item in daily_top], ["600001", "600003", "600004"])
+        self.assertEqual([item.symbol for item in selected], ["600001", "600004"])
+        self.assertEqual(summary["sample_count"], 2)
+        self.assertEqual(summary["win_count"], 1)
+        self.assertEqual(summary["position_weighted_return_pct"], 0.0079)
+
     def test_research_backtest_blocks_one_word_by_open_without_future_low(self) -> None:
         module = self._load_research_backtest_module()
         bars = [
@@ -2349,6 +2435,18 @@ class MainChainSmokeTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location(
             "firemoney_profit_matrix_for_test",
             Path("tools/research_one_to_two_profit_matrix.py"),
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def _load_strategy_matrix_module(self):
+        spec = importlib.util.spec_from_file_location(
+            "firemoney_strategy_matrix_for_test",
+            Path("tools/research_strategy_matrix_backtest.py"),
         )
         self.assertIsNotNone(spec)
         self.assertIsNotNone(spec.loader)

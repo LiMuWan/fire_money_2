@@ -36,6 +36,7 @@ from tools.research_one_to_two_backtest import (  # noqa: E402
     parse_iso_date,
     pct_change,
 )
+from tools.research_one_to_two_profit_matrix import load_cached_research_data  # noqa: E402
 
 
 DEFAULT_END_DATE = date.today()
@@ -61,6 +62,8 @@ class Trade:
     net_return_pct: float
     hold_days: int
     reason: str
+    rank_score: float
+    rank_turnover_amount: float
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,12 @@ def parse_args() -> argparse.Namespace:
         default=0.0015,
         help="Deducted from every trade return. 0.0015 means 0.15%.",
     )
+    parser.add_argument(
+        "--position-pct",
+        type=float,
+        default=0.08,
+        help="Capital weight for one-position portfolio comparisons.",
+    )
     parser.add_argument("--sample-preview", type=int, default=20)
     return parser.parse_args()
 
@@ -105,19 +114,26 @@ def main() -> int:
     cache_dir = Path(args.cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    universe = load_mainboard_universe()
-    if args.limit:
-        universe = universe[: args.limit]
-    print(f"universe={len(universe)} start={start} end={end}", flush=True)
-
-    histories, failed = load_histories(
-        universe=universe,
-        start_date=start - timedelta(days=420),
-        end_date=end,
-        cache_dir=cache_dir,
-        workers=max(1, args.workers),
-        refresh=args.refresh,
-    )
+    if args.refresh:
+        universe = load_mainboard_universe()
+        if args.limit:
+            universe = universe[: args.limit]
+        print(f"source=network universe={len(universe)} start={start} end={end}", flush=True)
+        histories, failed = load_histories(
+            universe=universe,
+            start_date=start - timedelta(days=420),
+            end_date=end,
+            cache_dir=cache_dir,
+            workers=max(1, args.workers),
+            refresh=args.refresh,
+        )
+    else:
+        universe, histories = load_cached_research_data(cache_dir, start, end)
+        failed = []
+        if args.limit:
+            universe = universe[: args.limit]
+            histories = {stock.code: histories[stock.code] for stock in universe}
+        print(f"source=cached universe={len(universe)} start={start} end={end}", flush=True)
     print(f"loaded={len(histories)} failed={len(failed)} analyzing...", flush=True)
 
     strategies = strategy_definitions()
@@ -147,6 +163,7 @@ def main() -> int:
         strategies=strategies,
         trades_by_strategy=trades_by_strategy,
         roundtrip_cost_pct=args.roundtrip_cost_pct,
+        position_pct=args.position_pct,
         min_turnover_amount=args.min_turnover_amount,
         sample_preview=args.sample_preview,
     )
@@ -167,7 +184,7 @@ def strategy_definitions() -> list[StrategyDefinition]:
         StrategyDefinition(
             strategy_id="touch_limit_up_chase",
             name="摸板追涨",
-            description="盘中触及 10cm 涨停但不要求封住，排除一字板，按当天最高价买入，次日收盘卖出。",
+            description="盘中触及 10cm 涨停但未封住，排除一字板，按当天最高价买入，次日收盘卖出。",
             generator=touch_limit_up_chase_trades,
         ),
         StrategyDefinition(
@@ -268,6 +285,8 @@ def touch_limit_up_chase_trades(
         if not signal_date_in_range(stock, bars[index], start, end):
             continue
         if not is_touched_limit_up(bars, index):
+            continue
+        if is_closed_limit_up(bars, index):
             continue
         if is_one_word_limit_up(bars, index):
             continue
@@ -652,6 +671,8 @@ def make_same_day_entry_trade(
         net_return_pct=round(gross - cost_pct, 4),
         hold_days=1,
         reason=reason,
+        rank_score=round(gross_visible_rank_score(bars, signal_index), 4),
+        rank_turnover_amount=round(estimated_turnover_amount(bars[signal_index]), 2),
     )
 
 
@@ -688,6 +709,8 @@ def make_next_open_trade(
         net_return_pct=round(gross - cost_pct, 4),
         hold_days=max(1, exit_index - entry_index + 1),
         reason=reason,
+        rank_score=round(gross_visible_rank_score(bars, signal_index), 4),
+        rank_turnover_amount=round(estimated_turnover_amount(bars[signal_index]), 2),
     )
 
 
@@ -700,6 +723,7 @@ def build_result(
     strategies: list[StrategyDefinition],
     trades_by_strategy: dict[str, list[Trade]],
     roundtrip_cost_pct: float,
+    position_pct: float,
     min_turnover_amount: float,
     sample_preview: int,
 ) -> dict[str, Any]:
@@ -709,16 +733,26 @@ def build_result(
         trades = trades_by_strategy[strategy.strategy_id]
         summary = summarize_trades(trades)
         yearly = summarize_by_year(trades)
+        one_position_trades = select_one_position_trades(select_daily_top_trades(trades))
+        one_position = summarize_position_trades(one_position_trades, position_pct)
+        yearly_one_position = summarize_position_by_year(one_position_trades, position_pct)
         positive_year_count = sum(
             1
             for item in yearly.values()
             if item["sample_count"] > 0 and item["average_net_return_pct"] > 0
+        )
+        positive_portfolio_year_count = sum(
+            1
+            for item in yearly_one_position.values()
+            if item["sample_count"] > 0 and item["position_weighted_return_pct"] > 0
         )
         strategy_payload[strategy.strategy_id] = {
             "name": strategy.name,
             "description": strategy.description,
             "summary": summary,
             "yearly": yearly,
+            "one_position_no_overlap": one_position,
+            "yearly_one_position_no_overlap": yearly_one_position,
             "recent_samples": [asdict(item) for item in trades[-sample_preview:]],
         }
         ranked.append(
@@ -732,13 +766,18 @@ def build_result(
                 "signal_day_compound_return_pct": summary["signal_day_compound_return_pct"],
                 "max_drawdown_pct": summary["max_drawdown_pct"],
                 "positive_year_count": positive_year_count,
+                "one_position_trades": one_position["sample_count"],
+                "one_position_win_rate": one_position["win_rate"],
+                "one_position_return_pct": one_position["position_weighted_return_pct"],
+                "one_position_max_drawdown_pct": one_position["max_drawdown_pct"],
+                "positive_portfolio_year_count": positive_portfolio_year_count,
             }
         )
     ranked.sort(
         key=lambda item: (
-            item["positive_year_count"],
-            item["average_net_return_pct"] if item["average_net_return_pct"] is not None else -999,
-            item["sample_count"],
+            item["positive_portfolio_year_count"],
+            item["one_position_return_pct"] if item["one_position_return_pct"] is not None else -999,
+            item["one_position_win_rate"] if item["one_position_win_rate"] is not None else -1,
         ),
         reverse=True,
     )
@@ -748,6 +787,7 @@ def build_result(
         "universe": "A-share mainboard 10cm, current listed non-ST/non-delisting names",
         "cost_model": {
             "roundtrip_cost_pct": roundtrip_cost_pct,
+            "position_pct": position_pct,
             "note": "Every trade deducts this fixed round-trip cost from gross return.",
         },
         "data_quality": {
@@ -762,6 +802,7 @@ def build_result(
             "daily bars cannot verify Level2 queue fills, seal amount, intraday stops, or topic leadership",
             "strategy definitions are rule-based approximations of common tactics, not exact private trader playbooks",
             "signal-day compound return assumes full capital is split equally across same-day signals and is idle otherwise",
+            "one-position portfolio uses visible rank_score and turnover only; future returns are not used for selection",
         ],
         "ranked": ranked,
         "strategies": strategy_payload,
@@ -807,6 +848,83 @@ def summarize_by_year(trades: list[Trade]) -> dict[str, Any]:
         year: summarize_trades([item for item in trades if item.entry_date.startswith(year)])
         for year in years
     }
+
+
+def summarize_position_trades(
+    trades: list[Trade],
+    position_pct: float,
+) -> dict[str, Any]:
+    if not trades:
+        return {
+            "sample_count": 0,
+            "win_count": 0,
+            "win_rate": None,
+            "average_net_return_pct": None,
+            "median_net_return_pct": None,
+            "position_weighted_return_pct": None,
+            "max_drawdown_pct": None,
+        }
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    returns = [item.net_return_pct for item in trades]
+    for trade in sorted(trades, key=lambda item: (item.entry_date, item.symbol)):
+        equity *= max(0.0, 1 + trade.net_return_pct * position_pct)
+        peak = max(peak, equity)
+        if peak > 0:
+            max_drawdown = min(max_drawdown, equity / peak - 1)
+    return {
+        "sample_count": len(trades),
+        "win_count": sum(1 for item in trades if item.net_return_pct > 0),
+        "win_rate": ratio(sum(1 for item in trades if item.net_return_pct > 0), len(trades)),
+        "average_net_return_pct": round(mean(returns), 4),
+        "median_net_return_pct": round(median(returns), 4),
+        "position_weighted_return_pct": round(equity - 1, 4),
+        "max_drawdown_pct": round(max_drawdown, 4),
+    }
+
+
+def summarize_position_by_year(
+    trades: list[Trade],
+    position_pct: float,
+) -> dict[str, Any]:
+    years = sorted({item.entry_date[:4] for item in trades})
+    return {
+        year: summarize_position_trades(
+            [item for item in trades if item.entry_date.startswith(year)],
+            position_pct,
+        )
+        for year in years
+    }
+
+
+def select_daily_top_trades(trades: list[Trade]) -> list[Trade]:
+    by_day: dict[str, list[Trade]] = {}
+    for trade in trades:
+        by_day.setdefault(trade.entry_date, []).append(trade)
+    return [
+        sorted(items, key=trade_rank_key, reverse=True)[0]
+        for _, items in sorted(by_day.items())
+    ]
+
+
+def select_one_position_trades(trades: list[Trade]) -> list[Trade]:
+    selected: list[Trade] = []
+    next_available_date = ""
+    for trade in sorted(trades, key=lambda item: (item.entry_date, item.symbol)):
+        if next_available_date and trade.entry_date <= next_available_date:
+            continue
+        selected.append(trade)
+        next_available_date = trade.exit_date
+    return selected
+
+
+def trade_rank_key(trade: Trade) -> tuple[float, float, float]:
+    return (
+        trade.rank_score,
+        trade.rank_turnover_amount,
+        -trade.entry_price,
+    )
 
 
 def signal_day_equity_stats(trades: list[Trade]) -> tuple[float, float]:
@@ -878,6 +996,24 @@ def estimated_turnover_amount(bar: DailyBar) -> float:
     return bar.volume_hands * 100 * bar.close
 
 
+def gross_visible_rank_score(bars: list[DailyBar], index: int) -> float:
+    if index <= 0:
+        return 0.0
+    current = bars[index]
+    day_pct = pct_change(current.close, bars[index - 1].close)
+    turnover = estimated_turnover_amount(current)
+    score = day_pct * 100
+    if current.close >= current.high * 0.97:
+        score += 2.0
+    if index >= 20 and ma_bullish(bars, index):
+        score += 2.0
+    if index >= 20 and volume_ratio(bars, index, 20) >= 1.3:
+        score += 1.5
+    if turnover >= 300_000_000:
+        score += 1.5
+    return score
+
+
 def volume_ratio(bars: list[DailyBar], index: int, window: int) -> float:
     start = max(0, index - window)
     base = average_volume(bars[start:index])
@@ -906,8 +1042,9 @@ def print_summary(result: dict[str, Any]) -> None:
     for item in result["ranked"]:
         print(
             "  {name}: samples={sample_count} win={win_rate} avg_net={average_net_return_pct} "
-            "median={median_net_return_pct} compound={signal_day_compound_return_pct} "
-            "positive_years={positive_year_count}".format(**item),
+            "portfolio_trades={one_position_trades} portfolio_win={one_position_win_rate} "
+            "portfolio_return={one_position_return_pct} portfolio_dd={one_position_max_drawdown_pct} "
+            "portfolio_positive_years={positive_portfolio_year_count}".format(**item),
             flush=True,
         )
 
