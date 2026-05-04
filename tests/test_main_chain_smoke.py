@@ -2315,6 +2315,81 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(summary["win_count"], 1)
         self.assertEqual(summary["position_weighted_return_pct"], 0.0079)
 
+    def test_limit_up_board_profit_matrix_keeps_validation_gate(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        base = {
+            "summary": {
+                "sample_count": 100,
+                "win_rate": 0.55,
+                "position_weighted_return_pct": 0.12,
+                "max_drawdown_pct": -0.03,
+            },
+            "train_summary": {
+                "sample_count": 80,
+                "position_weighted_return_pct": 0.10,
+            },
+            "validation_summary": {
+                "sample_count": 20,
+                "position_weighted_return_pct": -0.01,
+            },
+            "yearly": {
+                "2024": {"sample_count": 40, "position_weighted_return_pct": 0.04},
+                "2025": {"sample_count": 40, "position_weighted_return_pct": 0.05},
+                "2026": {"sample_count": 20, "position_weighted_return_pct": -0.01},
+            },
+        }
+
+        self.assertFalse(module.qualifies_result(base))
+        base["validation_summary"]["position_weighted_return_pct"] = 0.02
+        base["yearly"]["2026"]["position_weighted_return_pct"] = 0.02
+
+        self.assertTrue(module.qualifies_result(base))
+
+    def test_limit_up_board_profit_matrix_stop_wins_same_daily_bar_collision(
+        self,
+    ) -> None:
+        module = self._load_board_profit_matrix_module()
+        candidate = module.BoardCandidate(
+            symbol="600001",
+            name="board candidate",
+            board_date="2026-04-30",
+            index=0,
+            entry_price=10.0,
+            previous_close=9.09,
+            close_pct=0.1,
+            high_pct=0.1,
+            estimated_turnover_amount=300_000_000.0,
+            volume_ratio_20=1.5,
+            recent_gain_pct=0.2,
+            ma20_deviation_pct=0.2,
+            position_percentile_60=0.7,
+            first_board=True,
+            ma_bullish=True,
+            rank_score=12.0,
+        )
+        bars = [
+            module.sm.DailyBar("2026-04-30", 9.8, 10.0, 10.0, 9.8, 10000),
+            module.sm.DailyBar("2026-05-06", 10.0, 10.2, 10.6, 9.3, 10000),
+        ]
+        exit_case = module.ExitCase(
+            case_id="collision",
+            stop_loss_pct=0.06,
+            take_profit_pct=0.05,
+            max_hold_days=1,
+            weak_next_open_exit_pct=None,
+        )
+
+        trade = module.simulate_board_trade(
+            candidate,
+            bars,
+            exit_case,
+            roundtrip_cost_pct=0.0015,
+        )
+
+        self.assertIsNotNone(trade)
+        self.assertEqual(trade.reason, "stop_loss")
+        self.assertEqual(trade.exit_price, 9.4)
+
     def test_research_backtest_blocks_one_word_by_open_without_future_low(self) -> None:
         module = self._load_research_backtest_module()
         bars = [
@@ -2447,6 +2522,18 @@ class MainChainSmokeTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location(
             "firemoney_strategy_matrix_for_test",
             Path("tools/research_strategy_matrix_backtest.py"),
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def _load_board_profit_matrix_module(self):
+        spec = importlib.util.spec_from_file_location(
+            "firemoney_board_profit_matrix_for_test",
+            Path("tools/research_limit_up_board_profit_matrix.py"),
         )
         self.assertIsNotNone(spec)
         self.assertIsNotNone(spec.loader)
