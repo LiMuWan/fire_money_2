@@ -447,6 +447,36 @@ class MainChainSmokeTest(unittest.TestCase):
 
             self.assertEqual(watch.account.positions[0].symbol, "600001")
 
+    def test_one_to_two_blocks_when_ready_pool_is_too_wide(self) -> None:
+        base_row = SampleMarketDataProvider().load_one_to_two_rows("2026-05-01")[0]
+        rows = tuple(
+            replace(
+                base_row,
+                symbol=f"600{i:03d}",
+                name=f"过热候选{i}",
+                first_board_count=80,
+                turnover_amount=220000000 + i * 1000000,
+                open_pct=0.02,
+            )
+            for i in range(1, 21)
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = _build_service(
+                Path(temp_dir),
+                market_data_provider=StaticOneToTwoProvider(rows),
+            ).build_one_to_two_morning_report(
+                trade_date="2026-05-01",
+                notify=False,
+            )
+
+            self.assertEqual(report.status, "blocked")
+            self.assertTrue(
+                all(candidate.status == "blocked" for candidate in report.candidates)
+            )
+            self.assertTrue(
+                any("超过 18 个" in blocker for blocker in report.candidates[0].blockers)
+            )
+
     def test_weak_sealed_board_is_blocked_for_mainline_leader_candidate(self) -> None:
         weak_row = OneToTwoMarketRow(
             symbol="600008",
@@ -2011,9 +2041,53 @@ class MainChainSmokeTest(unittest.TestCase):
             ),
             min_low_breakout_first_board_count=0,
             min_low_breakout_ready_candidates=0,
+            max_ready_candidates=0,
         )
 
         self.assertEqual(tuple(item.symbol for item in filtered), ("600001",))
+
+    def test_research_backtest_can_filter_overwide_ready_pool(self) -> None:
+        module = self._load_research_backtest_module()
+        matches = [
+            module.Match(
+                symbol=f"600{i:03d}",
+                name=f"过热候选{i}",
+                first_board_date="2026-04-29",
+                second_day_date="2026-04-30",
+                first_board_pct=0.1,
+                second_close_pct=0.02,
+                second_open_pct=0.02,
+                second_high_pct=0.04,
+                buy_open_to_close_pct=0.0,
+                score=90.0,
+                position_label="breakout",
+                estimated_turnover_amount=300000000.0,
+                recent_gain_pct=0.12,
+                ma20_deviation_pct=0.14,
+                pressure_distance_pct=None,
+                first_board_count=60,
+                ready_candidate_count=0,
+                second_day_one_word=False,
+                blockers=(),
+                second_board_closed=False,
+                second_board_touched=False,
+                buy_day_positive=True,
+            )
+            for i in range(1, 20)
+        ]
+
+        filtered = module.apply_market_width_gate(
+            matches=matches,
+            min_score=80,
+            allowed_position_labels=module.parse_allowed_position_labels(
+                "breakout"
+            ),
+            min_low_breakout_first_board_count=0,
+            min_low_breakout_ready_candidates=0,
+            max_ready_candidates=18,
+        )
+
+        self.assertEqual(filtered, [])
 
     def test_research_backtest_blocks_one_word_by_open_without_future_low(self) -> None:
         module = self._load_research_backtest_module()
@@ -2838,6 +2912,7 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(settings.mainline_fade_score, 45)
         self.assertEqual(settings.min_low_breakout_first_board_count, 45)
         self.assertEqual(settings.min_low_breakout_ready_candidates, 6)
+        self.assertEqual(settings.max_ready_candidates, 18)
         self.assertEqual(settings.allowed_position_labels, ("低位平台突破", "平台突破", "低位启动"))
         self.assertEqual(settings.selection_rank, "turnover")
         self.assertIn("创业板", settings.excluded_boards)

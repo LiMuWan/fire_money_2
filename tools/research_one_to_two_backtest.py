@@ -47,6 +47,7 @@ DEFAULT_MAX_HOLDING_TRADE_DAYS = 2
 DEFAULT_MAX_SIMULATION_TRADE_DAYS = 10
 DEFAULT_MIN_LOW_BREAKOUT_FIRST_BOARD_COUNT = 45
 DEFAULT_MIN_LOW_BREAKOUT_READY_CANDIDATES = 6
+DEFAULT_MAX_READY_CANDIDATES = 18
 DEFAULT_MIN_CONFIRM_OPEN_PCT = 0.0
 DEFAULT_MAX_CONFIRM_OPEN_PCT = 0.035
 DEFAULT_ALLOWED_POSITION_LABELS = "low_breakout,breakout,low_position"
@@ -188,6 +189,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_MIN_LOW_BREAKOUT_READY_CANDIDATES,
     )
+    parser.add_argument(
+        "--max-ready-candidates",
+        type=int,
+        default=DEFAULT_MAX_READY_CANDIDATES,
+    )
     return parser.parse_args()
 
 
@@ -256,6 +262,7 @@ def main() -> int:
         allowed_position_labels=allowed_position_labels,
         min_low_breakout_first_board_count=args.min_low_breakout_first_board_count,
         min_low_breakout_ready_candidates=args.min_low_breakout_ready_candidates,
+        max_ready_candidates=args.max_ready_candidates,
     )
     result = build_result(
         start_date=start.isoformat(),
@@ -285,6 +292,7 @@ def main() -> int:
         max_simulation_trade_days=args.max_simulation_trade_days,
         min_low_breakout_first_board_count=args.min_low_breakout_first_board_count,
         min_low_breakout_ready_candidates=args.min_low_breakout_ready_candidates,
+        max_ready_candidates=args.max_ready_candidates,
         sample_preview=args.sample_preview,
     )
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -810,6 +818,7 @@ def apply_market_width_gate(
     allowed_position_labels: frozenset[str],
     min_low_breakout_first_board_count: int,
     min_low_breakout_ready_candidates: int,
+    max_ready_candidates: int,
 ) -> list[Match]:
     first_board_counts = Counter(item.first_board_date for item in matches)
     base_ready = [
@@ -829,6 +838,8 @@ def apply_market_width_gate(
     filtered: list[Match] = []
     for item in base_ready:
         ready_candidate_count = ready_counts[item.second_day_date]
+        if max_ready_candidates > 0 and ready_candidate_count > max_ready_candidates:
+            continue
         enriched = replace(
             item,
             ready_candidate_count=ready_candidate_count,
@@ -1199,6 +1210,7 @@ def build_result(
     max_simulation_trade_days: int,
     min_low_breakout_first_board_count: int,
     min_low_breakout_ready_candidates: int,
+    max_ready_candidates: int,
     sample_preview: int,
 ) -> dict[str, Any]:
     return {
@@ -1224,6 +1236,7 @@ def build_result(
                 "min_first_board_count": min_low_breakout_first_board_count,
                 "min_ready_candidates": min_low_breakout_ready_candidates,
             },
+            "max_ready_candidates": max_ready_candidates,
             "allowed_position_labels": sorted(allowed_position_labels),
             "selection_rank": selection_rank,
             "product_reliability_note": (

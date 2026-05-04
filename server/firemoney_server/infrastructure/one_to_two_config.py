@@ -44,6 +44,7 @@ class OneToTwoStrategySettings:
     min_mainline_score: float
     min_low_breakout_first_board_count: int
     min_low_breakout_ready_candidates: int
+    max_ready_candidates: int
     allowed_position_labels: tuple[str, ...]
     selection_rank: str
     board_strategy_enabled: bool
@@ -104,6 +105,7 @@ def load_one_to_two_settings(
         min_low_breakout_ready_candidates=int(
             parameters.get("min_low_breakout_ready_candidates", 0)
         ),
+        max_ready_candidates=int(parameters.get("max_ready_candidates", 0)),
         allowed_position_labels=tuple(
             str(item) for item in parameters.get("allowed_position_labels", ())
         ),

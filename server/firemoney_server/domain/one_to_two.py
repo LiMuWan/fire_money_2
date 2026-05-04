@@ -72,6 +72,7 @@ class OneToTwoSettings(Protocol):
     min_mainline_score: float
     min_low_breakout_first_board_count: int
     min_low_breakout_ready_candidates: int
+    max_ready_candidates: int
     allowed_position_labels: tuple[str, ...]
     selection_rank: str
     board_strategy_enabled: bool
@@ -100,7 +101,7 @@ class OneToTwoPolicy:
         candidates = tuple(
             (
                 row,
-                self._apply_low_breakout_width_gate(
+                self._apply_market_width_gate(
                     row,
                     candidate,
                     base_ready_count=base_ready_count,
@@ -111,7 +112,7 @@ class OneToTwoPolicy:
         ranked = sorted(candidates, key=self._candidate_rank_key, reverse=True)
         return tuple(candidate for _, candidate in ranked)
 
-    def _apply_low_breakout_width_gate(
+    def _apply_market_width_gate(
         self,
         row: OneToTwoMarketRow,
         candidate: OneToTwoCandidate,
@@ -119,6 +120,21 @@ class OneToTwoPolicy:
     ) -> OneToTwoCandidate:
         if candidate.status != "ready":
             return candidate
+        if (
+            self._settings.max_ready_candidates > 0
+            and base_ready_count > self._settings.max_ready_candidates
+        ):
+            return replace(
+                candidate,
+                status="blocked",
+                blockers=candidate.blockers
+                + (
+                    f"今日可执行候选 {base_ready_count} 个超过 {self._settings.max_ready_candidates} 个，主线过散只观察",
+                ),
+                warnings=candidate.warnings + ("候选池过热过散，先不做唯一票模拟买入。",),
+                rationale=f"{candidate.name} 当日候选池过宽，资金主线不够集中，先观察不买入。",
+                next_action="候选池过热闸门未通过，不生成模拟买入。",
+            )
         if not self._is_low_breakout(candidate.position_profile):
             return candidate
 

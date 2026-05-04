@@ -29,6 +29,7 @@
     "min_mainline_score": 14,
     "min_low_breakout_first_board_count": 45,
     "min_low_breakout_ready_candidates": 6,
+    "max_ready_candidates": 18,
     "allowed_position_labels": [
       "低位平台突破",
       "平台突破",
