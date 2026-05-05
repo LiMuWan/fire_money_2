@@ -254,7 +254,12 @@ def _board_shadow_bars(module):
     ]
 
 
-def _board_shadow_market_fixture(module, count: int = 20):
+def _board_shadow_market_fixture(
+    module,
+    count: int = 20,
+    prior_start: float = 9.0,
+    prior_close: float = 9.09,
+):
     stocks = []
     histories = {}
     for index in range(count):
@@ -263,7 +268,14 @@ def _board_shadow_market_fixture(module, count: int = 20):
         stocks.append(stock)
         volume = 120000 if index == 0 else 100000 - index
         histories[symbol] = [
-            module.sm.DailyBar("2026-04-01", 9.0, 9.09, 9.1, 8.95, 10000)
+            module.sm.DailyBar(
+                "2026-04-01",
+                prior_start,
+                prior_close,
+                max(prior_start, prior_close) + 0.01,
+                min(prior_start, prior_close) - 0.05,
+                10000,
+            )
             for _ in range(80)
         ] + [
             module.sm.DailyBar("2026-04-29", 9.3, 10.0, 10.0, 9.2, volume),
@@ -430,6 +442,31 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(report.status, "blocked")
             self.assertIsNone(report.candidate)
             self.assertIn("封板热度", report.quality_checks[-1].label)
+
+    def test_limit_up_board_shadow_blocks_extended_recent_gain(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        stocks, histories = _board_shadow_market_fixture(
+            module,
+            count=20,
+            prior_start=7.0,
+            prior_close=7.2,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            with patch(
+                "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
+                return_value=(stocks, histories),
+            ):
+                report = service.build_limit_up_board_shadow_report(
+                    as_of_date="2026-04-29"
+                )
+
+            self.assertEqual(report.status, "blocked")
+            self.assertIsNone(report.candidate)
+            self.assertIn("封板热度/候选", report.quality_checks[-1].label)
 
     def test_limit_up_board_shadow_record_builds_isolated_stability(self) -> None:
         module = self._load_board_profit_matrix_module()

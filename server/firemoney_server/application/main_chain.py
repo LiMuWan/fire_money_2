@@ -1106,10 +1106,10 @@ class MainChainService:
             board_matrix.sm.parse_iso_date(as_of),
         )
         entry_case = board_matrix.EntryCase(
-            case_id="shadow_sealed_gain35_ma_heat20_150",
+            case_id="shadow_sealed_gain25_ma_heat20_150",
             require_first_board=False,
             min_turnover_amount=80_000_000.0,
-            max_recent_gain_pct=0.35,
+            max_recent_gain_pct=0.25,
             max_ma20_deviation_pct=0.35,
             min_volume_ratio_20=1.0,
             require_ma_bullish=True,
@@ -1302,6 +1302,7 @@ class MainChainService:
             "仍缺封单强度、开板次数和排队可成交验证。",
             "日线同日碰止盈止损时按止损优先。",
             "封板影子线仅在市场封板家数 20 到 150 家的热度窗口内观察。",
+            "近 20 日涨幅超过 25% 的高位加速板只观察，不纳入 shadow 样本。",
             "shadow 模式不写入当前一进二模拟盘。",
         )
         return LimitUpBoardShadowCandidate(

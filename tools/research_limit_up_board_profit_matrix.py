@@ -352,7 +352,7 @@ def baseline_exit_case() -> ExitCase:
 def build_entry_cases(wide: bool) -> list[EntryCase]:
     first_board_options = (True, False)
     turnover_options = (80_000_000.0, 200_000_000.0, 500_000_000.0)
-    recent_gain_options: tuple[float | None, ...] = (0.35, 0.55, None)
+    recent_gain_options: tuple[float | None, ...] = (0.25, 0.35, 0.55, None)
     ma20_deviation_options: tuple[float | None, ...] = (0.35, None)
     volume_ratio_options = (1.0, 1.3)
     ma_bullish_options = (False, True)
