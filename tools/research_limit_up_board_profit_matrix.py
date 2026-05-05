@@ -166,6 +166,7 @@ def main() -> int:
         ),
         reverse=True,
     )
+    profiles = build_result_profiles(results)
     report = {
         "note": (
             "Entry filters and ranking use only board-day visible fields. "
@@ -179,6 +180,7 @@ def main() -> int:
         "universe_count": len(universe),
         "raw_candidate_count": len(candidates),
         "baseline": baseline,
+        "profiles": profiles,
         "top": results[: max(1, args.top)],
     }
     output_path.write_text(
@@ -719,6 +721,64 @@ def score_result(result: dict[str, Any]) -> float:
         - max_drawdown * 12,
         4,
     )
+
+
+def build_result_profiles(results: list[dict[str, Any]]) -> dict[str, dict[str, Any] | None]:
+    if not results:
+        return {"balanced": None, "validation_first": None, "attack": None}
+    eligible = [
+        item
+        for item in results
+        if (item["summary"]["sample_count"] or 0) >= 120
+        and (item["validation_summary"]["sample_count"] or 0) >= 30
+    ]
+    if not eligible:
+        eligible = results
+    return {
+        "balanced": compact_profile(
+            max(
+                eligible,
+                key=lambda item: (
+                    item["score"],
+                    item["summary"]["win_rate"] or 0.0,
+                    item["validation_summary"]["position_weighted_return_pct"] or -1.0,
+                ),
+            )
+        ),
+        "validation_first": compact_profile(
+            max(
+                eligible,
+                key=lambda item: (
+                    item["validation_summary"]["position_weighted_return_pct"] or -1.0,
+                    item["validation_summary"]["win_rate"] or 0.0,
+                    -abs(item["validation_summary"]["max_drawdown_pct"] or 0.0),
+                ),
+            )
+        ),
+        "attack": compact_profile(
+            max(
+                eligible,
+                key=lambda item: (
+                    item["summary"]["position_weighted_return_pct"] or -1.0,
+                    item["train_summary"]["position_weighted_return_pct"] or -1.0,
+                    item["validation_summary"]["position_weighted_return_pct"] or -1.0,
+                ),
+            )
+        ),
+    }
+
+
+def compact_profile(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "entry_case": result["entry_case"]["case_id"],
+        "exit_case": result["exit_case"]["case_id"],
+        "rank_case": result["rank_case"],
+        "summary": result["summary"],
+        "train_summary": result["train_summary"],
+        "validation_summary": result["validation_summary"],
+        "yearly": result["yearly"],
+        "exit_reasons": result["exit_reasons"],
+    }
 
 
 def qualifies_result(result: dict[str, Any]) -> bool:

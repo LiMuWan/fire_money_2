@@ -2595,6 +2595,49 @@ class MainChainSmokeTest(unittest.TestCase):
 
         self.assertTrue(module.qualifies_result(base))
 
+    def test_limit_up_board_profit_matrix_profiles_separate_attack_from_balance(
+        self,
+    ) -> None:
+        module = self._load_board_profit_matrix_module()
+
+        def result(case_id: str, total: float, validation: float) -> dict:
+            return {
+                "entry_case": {"case_id": case_id},
+                "exit_case": {"case_id": "exit"},
+                "rank_case": "score",
+                "summary": {
+                    "sample_count": 160,
+                    "win_rate": 0.62,
+                    "position_weighted_return_pct": total,
+                    "max_drawdown_pct": -0.02,
+                },
+                "train_summary": {
+                    "sample_count": 120,
+                    "win_rate": 0.61,
+                    "position_weighted_return_pct": total - validation,
+                    "max_drawdown_pct": -0.02,
+                },
+                "validation_summary": {
+                    "sample_count": 40,
+                    "win_rate": 0.7,
+                    "position_weighted_return_pct": validation,
+                    "max_drawdown_pct": -0.01,
+                },
+                "yearly": {},
+                "exit_reasons": {},
+                "score": validation * 130 + total * 45,
+            }
+
+        profiles = module.build_result_profiles(
+            [
+                result("balanced", total=0.70, validation=0.10),
+                result("attack", total=0.90, validation=0.03),
+            ]
+        )
+
+        self.assertEqual(profiles["balanced"]["entry_case"], "balanced")
+        self.assertEqual(profiles["attack"]["entry_case"], "attack")
+
     def test_limit_up_board_profit_matrix_stop_wins_same_daily_bar_collision(
         self,
     ) -> None:
