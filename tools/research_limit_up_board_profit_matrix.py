@@ -52,6 +52,9 @@ class BoardCandidate:
     first_board: bool
     ma_bullish: bool
     rank_score: float
+    market_seal_count: int = 0
+    market_touch_count: int = 0
+    market_advance_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,8 @@ class EntryCase:
     min_volume_ratio_20: float
     require_ma_bullish: bool
     min_position_percentile_60: float
+    min_market_seal_count: int = 0
+    max_market_seal_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -191,6 +196,7 @@ def build_board_candidates(
     end: date,
 ) -> list[BoardCandidate]:
     result: list[BoardCandidate] = []
+    market_stats = build_market_stats(histories, start, end)
     for stock in universe:
         bars = histories.get(stock.code)
         if not bars or len(bars) < 80:
@@ -210,7 +216,7 @@ def build_board_candidates(
                 continue
             if sm.is_one_word_limit_up(bars, index):
                 continue
-            candidate = build_candidate(stock, bars, index)
+            candidate = build_candidate(stock, bars, index, market_stats)
             if candidate:
                 result.append(candidate)
     return result
@@ -220,6 +226,7 @@ def build_candidate(
     stock: sm.StockMeta,
     bars: list[sm.DailyBar],
     index: int,
+    market_stats: dict[str, dict[str, float]],
 ) -> BoardCandidate | None:
     current = bars[index]
     previous = bars[index - 1]
@@ -233,6 +240,7 @@ def build_candidate(
     if low60 <= 0 or high60 <= low60:
         return None
     ma20 = sm.average_close(lookback20)
+    day_stats = market_stats.get(current.trade_date, {})
     candidate = BoardCandidate(
         symbol=stock.code,
         name=stock.name,
@@ -250,6 +258,9 @@ def build_candidate(
         first_board=sm.is_first_board(bars, index),
         ma_bullish=sm.ma_bullish(bars, index),
         rank_score=0.0,
+        market_seal_count=int(day_stats.get("seal_count", 0)),
+        market_touch_count=int(day_stats.get("touch_count", 0)),
+        market_advance_ratio=round(day_stats.get("advance_ratio", 0.0), 4),
     )
     return replace_rank_score(candidate)
 
@@ -276,6 +287,43 @@ def replace_rank_score(candidate: BoardCandidate) -> BoardCandidate:
     )
 
 
+def build_market_stats(
+    histories: dict[str, list[sm.DailyBar]],
+    start: date,
+    end: date,
+) -> dict[str, dict[str, float]]:
+    raw: dict[str, dict[str, float]] = {}
+    for bars in histories.values():
+        for index in range(1, len(bars)):
+            current = bars[index]
+            trade_date = sm.parse_iso_date(current.trade_date)
+            if trade_date < start or trade_date > end:
+                continue
+            stats = raw.setdefault(
+                current.trade_date,
+                {
+                    "available_count": 0.0,
+                    "up_count": 0.0,
+                    "seal_count": 0.0,
+                    "touch_count": 0.0,
+                },
+            )
+            stats["available_count"] += 1
+            if sm.pct_change(current.close, bars[index - 1].close) > 0:
+                stats["up_count"] += 1
+            if sm.is_closed_limit_up(bars, index):
+                stats["seal_count"] += 1
+            if sm.is_touched_limit_up(bars, index):
+                stats["touch_count"] += 1
+
+    for stats in raw.values():
+        available_count = stats["available_count"]
+        stats["advance_ratio"] = (
+            stats["up_count"] / available_count if available_count else 0.0
+        )
+    return raw
+
+
 def baseline_entry_case() -> EntryCase:
     return EntryCase(
         case_id="baseline_all_sealed_turnover80m",
@@ -286,6 +334,8 @@ def baseline_entry_case() -> EntryCase:
         min_volume_ratio_20=0.0,
         require_ma_bullish=False,
         min_position_percentile_60=0.0,
+        min_market_seal_count=0,
+        max_market_seal_count=None,
     )
 
 
@@ -307,10 +357,12 @@ def build_entry_cases(wide: bool) -> list[EntryCase]:
     volume_ratio_options = (1.0, 1.3)
     ma_bullish_options = (False, True)
     position_options = (0.0, 0.45)
+    market_seal_options: tuple[tuple[int, int | None], ...] = ((0, None), (20, 150))
     if wide:
         turnover_options = (80_000_000.0, 200_000_000.0, 500_000_000.0, 1_000_000_000.0)
         ma20_deviation_options = (0.25, 0.35, 0.55, None)
         position_options = (0.0, 0.35, 0.55, 0.75)
+        market_seal_options = ((0, None), (10, None), (20, 150), (30, 120), (40, None))
 
     cases: list[EntryCase] = [baseline_entry_case()]
     for require_first_board in first_board_options:
@@ -320,27 +372,36 @@ def build_entry_cases(wide: bool) -> list[EntryCase]:
                     for min_volume_ratio in volume_ratio_options:
                         for require_ma_bullish in ma_bullish_options:
                             for min_position in position_options:
-                                case_id = (
-                                    f"{'first' if require_first_board else 'sealed'}"
-                                    f"_to{int(min_turnover / 10_000)}w"
-                                    f"_gain{label_optional_pct(max_recent_gain)}"
-                                    f"_dev{label_optional_pct(max_ma20_dev)}"
-                                    f"_vr{min_volume_ratio:g}"
-                                    f"_{'ma' if require_ma_bullish else 'nomafilter'}"
-                                    f"_pos{min_position:g}"
-                                )
-                                cases.append(
-                                    EntryCase(
-                                        case_id=case_id,
-                                        require_first_board=require_first_board,
-                                        min_turnover_amount=min_turnover,
-                                        max_recent_gain_pct=max_recent_gain,
-                                        max_ma20_deviation_pct=max_ma20_dev,
-                                        min_volume_ratio_20=min_volume_ratio,
-                                        require_ma_bullish=require_ma_bullish,
-                                        min_position_percentile_60=min_position,
+                                for min_seal, max_seal in market_seal_options:
+                                    heat_label = (
+                                        "heatany"
+                                        if min_seal == 0 and max_seal is None
+                                        else f"heat{min_seal}-{max_seal or 'any'}"
                                     )
-                                )
+                                    case_id = (
+                                        f"{'first' if require_first_board else 'sealed'}"
+                                        f"_to{int(min_turnover / 10_000)}w"
+                                        f"_gain{label_optional_pct(max_recent_gain)}"
+                                        f"_dev{label_optional_pct(max_ma20_dev)}"
+                                        f"_vr{min_volume_ratio:g}"
+                                        f"_{'ma' if require_ma_bullish else 'nomafilter'}"
+                                        f"_pos{min_position:g}"
+                                        f"_{heat_label}"
+                                    )
+                                    cases.append(
+                                        EntryCase(
+                                            case_id=case_id,
+                                            require_first_board=require_first_board,
+                                            min_turnover_amount=min_turnover,
+                                            max_recent_gain_pct=max_recent_gain,
+                                            max_ma20_deviation_pct=max_ma20_dev,
+                                            min_volume_ratio_20=min_volume_ratio,
+                                            require_ma_bullish=require_ma_bullish,
+                                            min_position_percentile_60=min_position,
+                                            min_market_seal_count=min_seal,
+                                            max_market_seal_count=max_seal,
+                                        )
+                                    )
     return deduplicate_entry_cases(cases)
 
 
@@ -403,6 +464,13 @@ def entry_case_allows(case: EntryCase, candidate: BoardCandidate) -> bool:
     if case.require_ma_bullish and not candidate.ma_bullish:
         return False
     if candidate.position_percentile_60 < case.min_position_percentile_60:
+        return False
+    if candidate.market_seal_count < case.min_market_seal_count:
+        return False
+    if (
+        case.max_market_seal_count is not None
+        and candidate.market_seal_count > case.max_market_seal_count
+    ):
         return False
     return True
 

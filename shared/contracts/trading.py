@@ -384,6 +384,9 @@ class LimitUpBoardShadowCandidate:
     ma_bullish: bool
     risk_notes: tuple[str, ...]
     next_action: str
+    market_seal_count: int = 0
+    market_touch_count: int = 0
+    market_advance_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -420,6 +423,9 @@ class LimitUpBoardShadowSample:
     success: bool
     created_at: str
     limitations: tuple[str, ...]
+    market_seal_count: int = 0
+    market_touch_count: int = 0
+    market_advance_ratio: float = 0.0
 
 
 @dataclass(frozen=True)

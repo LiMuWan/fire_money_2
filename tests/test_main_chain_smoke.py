@@ -254,6 +254,24 @@ def _board_shadow_bars(module):
     ]
 
 
+def _board_shadow_market_fixture(module, count: int = 20):
+    stocks = []
+    histories = {}
+    for index in range(count):
+        symbol = f"600{index + 1:03d}"
+        stock = module.sm.StockMeta(symbol, f"shadow board {index + 1}", None)
+        stocks.append(stock)
+        volume = 120000 if index == 0 else 100000 - index
+        histories[symbol] = [
+            module.sm.DailyBar("2026-04-01", 9.0, 9.09, 9.1, 8.95, 10000)
+            for _ in range(80)
+        ] + [
+            module.sm.DailyBar("2026-04-29", 9.3, 10.0, 10.0, 9.2, volume),
+            module.sm.DailyBar("2026-04-30", 10.0, 10.5, 10.6, 9.8, volume),
+        ]
+    return stocks, histories
+
+
 class FakeFeishuApiServer:
     def __init__(self) -> None:
         self.requests: list[tuple[str, dict[str, str], dict[str, object]]] = []
@@ -347,8 +365,7 @@ class MainChainSmokeTest(unittest.TestCase):
 
     def test_limit_up_board_shadow_report_is_json_friendly(self) -> None:
         module = self._load_board_profit_matrix_module()
-        stock = module.sm.StockMeta("600001", "shadow board", None)
-        bars = _board_shadow_bars(module)
+        stocks, histories = _board_shadow_market_fixture(module)
         with tempfile.TemporaryDirectory() as temp_dir:
             service = _build_service(
                 Path(temp_dir),
@@ -356,7 +373,7 @@ class MainChainSmokeTest(unittest.TestCase):
             )
             with patch(
                 "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
-                return_value=([stock], {"600001": bars}),
+                return_value=(stocks, histories),
             ):
                 report = service.build_limit_up_board_shadow_report(
                     as_of_date="2026-04-29"
@@ -368,12 +385,12 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(report.candidate.symbol, "600001")
             self.assertEqual(report.trade.exit_reason, "take_profit")
             self.assertEqual(payload["candidate"]["take_profit_price"], 10.5)
+            self.assertEqual(payload["candidate"]["market_seal_count"], 20)
             self.assertIn("shadow", payload["limitations"][1])
 
     def test_limit_up_board_shadow_does_not_mutate_one_to_two_paper_ledger(self) -> None:
         module = self._load_board_profit_matrix_module()
-        stock = module.sm.StockMeta("600001", "shadow board", None)
-        bars = _board_shadow_bars(module)
+        stocks, histories = _board_shadow_market_fixture(module)
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             service = _build_service(
@@ -382,7 +399,7 @@ class MainChainSmokeTest(unittest.TestCase):
             )
             with patch(
                 "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
-                return_value=([stock], {"600001": bars}),
+                return_value=(stocks, histories),
             ):
                 report = service.build_limit_up_board_shadow_report(
                     as_of_date="2026-04-29"
@@ -394,10 +411,29 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(account.events, ())
             self.assertEqual(account.closed_trades, ())
 
+    def test_limit_up_board_shadow_blocks_cold_market_heat(self) -> None:
+        module = self._load_board_profit_matrix_module()
+        stocks, histories = _board_shadow_market_fixture(module, count=19)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SampleMarketDataProvider(),
+            )
+            with patch(
+                "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
+                return_value=(stocks, histories),
+            ):
+                report = service.build_limit_up_board_shadow_report(
+                    as_of_date="2026-04-29"
+                )
+
+            self.assertEqual(report.status, "blocked")
+            self.assertIsNone(report.candidate)
+            self.assertIn("封板热度", report.quality_checks[-1].label)
+
     def test_limit_up_board_shadow_record_builds_isolated_stability(self) -> None:
         module = self._load_board_profit_matrix_module()
-        stock = module.sm.StockMeta("600001", "shadow board", None)
-        bars = _board_shadow_bars(module)
+        stocks, histories = _board_shadow_market_fixture(module)
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             service = _build_service(
@@ -410,7 +446,7 @@ class MainChainSmokeTest(unittest.TestCase):
             )
             with patch(
                 "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
-                return_value=([stock], {"600001": bars}),
+                return_value=(stocks, histories),
             ):
                 first_report = service.record_limit_up_board_shadow_sample(
                     as_of_date="2026-04-29"
@@ -426,11 +462,11 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(stability.sample_count, 1)
             self.assertEqual(stability.success_rate, 1.0)
             self.assertEqual(payload["recent_samples"][0]["created_at"], "20260501090000")
+            self.assertEqual(payload["recent_samples"][0]["market_seal_count"], 20)
 
     def test_limit_up_board_shadow_record_notifies_without_touching_paper_ledger(self) -> None:
         module = self._load_board_profit_matrix_module()
-        stock = module.sm.StockMeta("600001", "shadow board", None)
-        bars = _board_shadow_bars(module)
+        stocks, histories = _board_shadow_market_fixture(module)
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             service = _build_service(
@@ -444,7 +480,7 @@ class MainChainSmokeTest(unittest.TestCase):
             )
             with patch(
                 "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
-                return_value=([stock], {"600001": bars}),
+                return_value=(stocks, histories),
             ):
                 report = service.record_limit_up_board_shadow_sample(
                     as_of_date="2026-04-29",
@@ -2838,8 +2874,7 @@ class MainChainSmokeTest(unittest.TestCase):
 
     def test_scheduler_records_board_shadow_after_eod_without_paper_trade(self) -> None:
         module = self._load_board_profit_matrix_module()
-        stock = module.sm.StockMeta("600001", "shadow board", None)
-        bars = _board_shadow_bars(module)
+        stocks, histories = _board_shadow_market_fixture(module)
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             service = _build_service(
@@ -2857,7 +2892,7 @@ class MainChainSmokeTest(unittest.TestCase):
 
             with patch(
                 "server.firemoney_server.application.main_chain.board_matrix.load_cached_research_data",
-                return_value=([stock], {"600001": bars}),
+                return_value=(stocks, histories),
             ):
                 result = scheduler.run_due(
                     trade_date="2026-04-30",

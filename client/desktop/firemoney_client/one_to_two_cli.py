@@ -493,6 +493,11 @@ def _format_board_shadow_brief(report) -> str:
                     f"量比20：{report.candidate.volume_ratio_20:.2f}，"
                     f"近20日涨幅：{report.candidate.recent_gain_pct:.2%}"
                 ),
+                (
+                    f"市场热度：封板 {report.candidate.market_seal_count} 家，"
+                    f"触板 {report.candidate.market_touch_count} 家，"
+                    f"上涨占比 {report.candidate.market_advance_ratio:.2%}"
+                ),
             ]
         )
     if report.trade:

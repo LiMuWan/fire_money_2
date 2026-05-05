@@ -1051,12 +1051,14 @@ class MainChainService:
         data_mode = f"cached_daily:{cache_path}"
         no_future_notes = (
             f"封板影子线选股只读取 {as_of} 当日及以前的本地日线缓存。",
+            "市场热度窗口只使用封板日当日可见的封板家数、触板家数和上涨占比。",
             "候选确定后，后续日线只用于卖点回放和盈亏计算，不参与排名。",
             "同一日线同时碰到 5% 止盈和 6% 止损时，按保守止损优先。",
         )
         limitations = (
             "日线缓存不能证明封单强度、开板次数、排队可成交或真实滑点。",
             "当前入口只做 shadow 验证，不写入一进二模拟盘，不代表实盘交易建议。",
+            "当前 shadow 默认要求封板日市场封板家数在 20 到 150 家之间，过冷或过热只观察。",
             "封板线进入模拟盘前必须接入分钟线/Tick、封单和主线消息持续性。",
         )
         quality_checks: list[BacktestDataQualityCheck] = [
@@ -1104,7 +1106,7 @@ class MainChainService:
             board_matrix.sm.parse_iso_date(as_of),
         )
         entry_case = board_matrix.EntryCase(
-            case_id="shadow_sealed_gain35_ma",
+            case_id="shadow_sealed_gain35_ma_heat20_150",
             require_first_board=False,
             min_turnover_amount=80_000_000.0,
             max_recent_gain_pct=0.35,
@@ -1112,6 +1114,8 @@ class MainChainService:
             min_volume_ratio_20=1.0,
             require_ma_bullish=True,
             min_position_percentile_60=0.0,
+            min_market_seal_count=20,
+            max_market_seal_count=150,
         )
         exit_case = board_matrix.ExitCase(
             case_id="shadow_stop6_target5_hold1",
@@ -1125,12 +1129,18 @@ class MainChainService:
         ]
         daily_candidates = board_matrix.select_daily_top_candidates(filtered, "score")
         if not daily_candidates:
+            heat_counts = [candidate.market_seal_count for candidate in candidates]
+            heat_detail = (
+                f"当日封板热度 {heat_counts[0]} 家，不在 20 到 150 家窗口内。"
+                if heat_counts and all(count < 20 or count > 150 for count in heat_counts)
+                else f"{as_of} 没有符合封板验证线的候选。"
+            )
             quality_checks.append(
                 BacktestDataQualityCheck(
                     check_id="candidate",
-                    label="封板候选",
+                    label="封板热度/候选",
                     status="blocked",
-                    detail=f"{as_of} 没有符合封板验证线的候选。",
+                    detail=heat_detail,
                     next_action="保持空仓观察，不生成影子买入。",
                 )
             )
@@ -1291,6 +1301,7 @@ class MainChainService:
         risk_notes = (
             "仍缺封单强度、开板次数和排队可成交验证。",
             "日线同日碰止盈止损时按止损优先。",
+            "封板影子线仅在市场封板家数 20 到 150 家的热度窗口内观察。",
             "shadow 模式不写入当前一进二模拟盘。",
         )
         return LimitUpBoardShadowCandidate(
@@ -1309,6 +1320,9 @@ class MainChainService:
             ma_bullish=candidate.ma_bullish,
             risk_notes=risk_notes,
             next_action="仅做影子验证；若后续补齐可成交数据，再进入模拟盘。",
+            market_seal_count=candidate.market_seal_count,
+            market_touch_count=candidate.market_touch_count,
+            market_advance_ratio=candidate.market_advance_ratio,
         )
 
     def _replay_trade_dates(self, entry_date: str, holding_days: int) -> list[str]:
@@ -2344,6 +2358,11 @@ class MainChainService:
                         f"成交额约 {candidate.estimated_turnover_amount:.0f}，"
                         f"20日量比 {candidate.volume_ratio_20:.2f}，"
                         f"近20日涨幅 {candidate.recent_gain_pct:.2%}"
+                    ),
+                    (
+                        f"市场热度：封板 {candidate.market_seal_count} 家，"
+                        f"触板 {candidate.market_touch_count} 家，"
+                        f"上涨占比 {candidate.market_advance_ratio:.2%}"
                     ),
                 ]
             )
