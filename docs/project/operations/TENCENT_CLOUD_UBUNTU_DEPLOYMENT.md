@@ -41,6 +41,26 @@ codex/one-to-two-core-prune
 9. 飞书测试通过后，再启动 `firemoney-beta-watch`。
 10. 用 `bash scripts/linux/check_firemoney_server.sh` 验收。
 
+如果你想“尽量少操作”，可以直接在 Windows 跑一键脚本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_tencent_ubuntu_one_click.ps1
+```
+
+这条命令默认会使用：
+
+```text
+IP: 81.70.202.132
+用户: ubuntu
+密钥: %USERPROFILE%\.ssh\firemoney_tencent
+```
+
+默认还会顺手做三件事：
+
+- 启动 `firemoney-preview`
+- 跑一次 `beta-check`
+- 如果前两步通过，再启动 `firemoney-beta-watch`
+
 如果你只想先把服务跑起来，按下面这段命令执行即可。把 `<你的服务器公网IP>` 替换成腾讯云公网 IP：
 
 ```powershell
