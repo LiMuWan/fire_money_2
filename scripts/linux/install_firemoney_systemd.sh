@@ -13,6 +13,12 @@ fi
 
 cd "$APP_DIR"
 
+if ! python3 -m venv --help >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y python3-venv python3-pip
+fi
+
 install -d -m 0755 "$ENV_DIR"
 if [[ ! -f "$ENV_FILE" ]]; then
   cat >"$ENV_FILE" <<EOF

@@ -111,6 +111,14 @@ cd /opt/firemoney
 /opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli feishu-test
 ```
 
+如果安装时提示 `python3.12-venv` 或 `ensurepip` 不可用，先补系统包：
+
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip
+sudo bash scripts/linux/install_firemoney_systemd.sh
+```
+
 确认飞书群收到测试消息后，再启动真实模拟盘值守：
 
 ```bash

@@ -33,6 +33,7 @@
 | [ ] | 飞书测试收到 | `feishu-test` 成功 |
 | [ ] | 值守启动 | `sudo systemctl status firemoney-beta-watch --no-pager` |
 | [ ] | 健康检查输出 ready | `bash scripts/linux/check_firemoney_server.sh` |
+| [ ] | 若提示缺 venv，先补系统包 | `sudo apt install -y python3-venv python3-pip` |
 
 ## 服务器常用命令
 
