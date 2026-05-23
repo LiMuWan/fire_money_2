@@ -43,6 +43,9 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
 
         self.assertIn("/etc/firemoney", installer)
         self.assertIn("chmod 0600 \"$ENV_FILE\"", installer)
+        self.assertIn("python3 -m ensurepip --version", installer)
+        self.assertIn("apt-get install -y python3-venv python3-pip", installer)
+        self.assertIn("rm -rf \"$APP_DIR/.venv\"", installer)
         self.assertIn("FEISHU_ENABLED=false", installer)
         self.assertIn("# FEISHU_WEBHOOK_URL=", installer)
         self.assertIn("systemctl enable firemoney-preview.service", installer)

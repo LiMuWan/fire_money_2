@@ -13,7 +13,7 @@ fi
 
 cd "$APP_DIR"
 
-if ! python3 -m venv --help >/dev/null 2>&1; then
+if ! python3 -m ensurepip --version >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y python3-venv python3-pip
@@ -41,6 +41,7 @@ EOF
   chown root:root "$ENV_FILE"
 fi
 
+rm -rf "$APP_DIR/.venv"
 python3 -m venv "$APP_DIR/.venv"
 "$APP_DIR/.venv/bin/python" -m pip install --upgrade pip
 "$APP_DIR/.venv/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
