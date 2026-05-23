@@ -35,6 +35,29 @@
 | [ ] | 健康检查输出 ready | `bash scripts/linux/check_firemoney_server.sh` |
 | [ ] | 若提示缺 venv，先补系统包 | `sudo apt install -y python3-venv python3-pip` |
 
+## 一条验收命令
+
+部署完成后，在服务器里直接跑这一条：
+
+```bash
+cd /opt/firemoney && \
+sudo systemctl status firemoney-preview --no-pager && \
+sudo systemctl status firemoney-beta-watch --no-pager && \
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli schedule-health --brief && \
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli notifications --action-only --brief --limit 20 && \
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli paper-db --brief --limit 20 && \
+bash scripts/linux/check_firemoney_server.sh
+```
+
+你看到这些关键字就算通过：
+
+- `preview`
+- `beta-watch`
+- `schedule-health`
+- `notifications`
+- `paper-db`
+- `preview_http_ok`
+
 ## 服务器常用命令
 
 ```bash
