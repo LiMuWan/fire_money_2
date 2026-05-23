@@ -8,10 +8,14 @@ import hmac
 import json
 import os
 import time
+from collections.abc import Callable
 from urllib import request
 from urllib.error import URLError
 from urllib.parse import quote
 
+from server.firemoney_server.application.notification_rich_text import (
+    feishu_message_card,
+)
 from shared.contracts import FeishuNotificationResult, NotificationStatus
 
 
@@ -28,6 +32,9 @@ class FeishuNotifier:
         receive_id_env: str = "FEISHU_RECEIVE_ID",
         receive_id_type_env: str = "FEISHU_RECEIVE_ID_TYPE",
         api_base_url_env: str = "FEISHU_API_BASE_URL",
+        retry_attempts: int = 3,
+        retry_delay_seconds: float = 1.0,
+        sleep_func: Callable[[float], None] | None = None,
     ) -> None:
         self._enabled_env = enabled_env
         self._webhook_env = webhook_env
@@ -37,6 +44,9 @@ class FeishuNotifier:
         self._receive_id_env = receive_id_env
         self._receive_id_type_env = receive_id_type_env
         self._api_base_url_env = api_base_url_env
+        self._retry_attempts = max(1, retry_attempts)
+        self._retry_delay_seconds = max(0.0, retry_delay_seconds)
+        self._sleep_func = sleep_func or time.sleep
 
     def notify(self, title: str, message: str) -> FeishuNotificationResult:
         enabled = os.environ.get(self._enabled_env, "").lower() == "true"
@@ -70,17 +80,21 @@ class FeishuNotifier:
         message: str,
         webhook: str,
     ) -> FeishuNotificationResult:
-        payload = self._webhook_payload(title, message)
+        payload = self._webhook_payload(title, message, rich=True)
         try:
             self._post_json(webhook, payload)
         except Exception as exc:
-            return FeishuNotificationResult(
-                status=NotificationStatus.FAILED,
-                title=title,
-                message=message,
-                webhook_configured=True,
-                error=str(exc),
-            )
+            text_payload = self._webhook_payload(title, message, rich=False)
+            try:
+                self._post_json(webhook, text_payload)
+            except Exception as text_exc:
+                return FeishuNotificationResult(
+                    status=NotificationStatus.FAILED,
+                    title=title,
+                    message=message,
+                    webhook_configured=True,
+                    error=f"{exc}; fallback text failed: {text_exc}",
+                )
         return FeishuNotificationResult(
             status=NotificationStatus.SENT,
             title=title,
@@ -102,9 +116,9 @@ class FeishuNotifier:
                 send_url,
                 {
                     "receive_id": self._receive_id(),
-                    "msg_type": "text",
+                    "msg_type": "interactive",
                     "content": json.dumps(
-                        {"text": f"{title}\n{message}"},
+                        feishu_message_card(title, message),
                         ensure_ascii=False,
                     ),
                 },
@@ -125,11 +139,23 @@ class FeishuNotifier:
             webhook_configured=True,
         )
 
-    def _webhook_payload(self, title: str, message: str) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "msg_type": "text",
-            "content": {"text": f"{title}\n{message}"},
-        }
+    def _webhook_payload(
+        self,
+        title: str,
+        message: str,
+        rich: bool = True,
+    ) -> dict[str, object]:
+        payload: dict[str, object]
+        if rich:
+            payload = {
+                "msg_type": "interactive",
+                "card": feishu_message_card(title, message),
+            }
+        else:
+            payload = {
+                "msg_type": "text",
+                "content": {"text": f"{title}\n{message}"},
+            }
         secret = os.environ.get(self._secret_env, "")
         if secret:
             timestamp = str(int(time.time()))
@@ -156,6 +182,28 @@ class FeishuNotifier:
         payload: dict[str, object],
         headers: dict[str, str] | None = None,
     ) -> dict[str, object]:
+        last_error: Exception | None = None
+        for attempt in range(self._retry_attempts):
+            try:
+                return self._post_json_once(url, payload, headers=headers)
+            except Exception as exc:
+                last_error = exc
+                if not self._is_retryable_post_error(exc):
+                    raise
+                if attempt >= self._retry_attempts - 1:
+                    raise
+                if self._retry_delay_seconds:
+                    self._sleep_func(self._retry_delay_seconds)
+        if last_error:
+            raise last_error
+        raise URLError("Feishu post failed without response")
+
+    def _post_json_once(
+        self,
+        url: str,
+        payload: dict[str, object],
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request_headers = {"Content-Type": "application/json"}
         if headers:
@@ -174,6 +222,12 @@ class FeishuNotifier:
             if response_error:
                 raise URLError(response_error)
             return json.loads(body) if body.strip() else {}
+
+    def _is_retryable_post_error(self, exc: Exception) -> bool:
+        if isinstance(exc, URLError):
+            reason = getattr(exc, "reason", None)
+            return isinstance(reason, (OSError, TimeoutError))
+        return isinstance(exc, (OSError, TimeoutError))
 
     def _response_error(self, body: str) -> str | None:
         if not body.strip():

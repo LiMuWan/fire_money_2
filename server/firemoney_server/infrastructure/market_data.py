@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
-from server.firemoney_server.domain.one_to_two import (
+from server.firemoney_server.domain.one_to_two_types import (
     HistoricalPriceBar,
+    IntradayPriceBar,
     OneToTwoMarketRow,
+    TickSnapshot,
 )
 from shared.contracts import MainlineNewsItem
 
@@ -46,366 +48,27 @@ class MarketDataProvider(Protocol):
         """Load normalized daily bars for replay accounting."""
         ...
 
-
-class SampleMarketDataProvider:
-    """Deterministic one-to-two sample data for preview and tests."""
-
-    def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
-        return (
-            OneToTwoMarketRow(
-                symbol="600001",
-                name="主线首板候选",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=1200,
-                latest_price=10.52,
-                previous_close=9.56,
-                limit_up_price=10.52,
-                first_limit_up_time="09:48",
-                sealed_amount=36000000,
-                turnover_amount=320000000,
-                turnover_rate=6.2,
-                open_pct=0.035,
-                auction_amount=12000000,
-                low_20=8.8,
-                high_60=10.6,
-                pressure_price=11.8,
-                ma_5=10.0,
-                ma_10=9.7,
-                ma_20=9.2,
-                recent_gain_pct=0.18,
-                theme="AI端侧主线",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=1.6,
-                rsi_14=68.0,
-                position_percentile_60=0.78,
-            ),
-            OneToTwoMarketRow(
-                symbol="600007",
-                name="平台突破候选",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=1400,
-                latest_price=12.1,
-                previous_close=11.0,
-                limit_up_price=12.1,
-                first_limit_up_time="10:18",
-                sealed_amount=26000000,
-                turnover_amount=210000000,
-                turnover_rate=5.6,
-                open_pct=0.026,
-                auction_amount=7000000,
-                low_20=10.6,
-                high_60=12.2,
-                pressure_price=13.7,
-                ma_5=11.6,
-                ma_10=11.2,
-                ma_20=10.9,
-                recent_gain_pct=0.16,
-                theme="AI端侧主线",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=1.4,
-                rsi_14=66.0,
-                position_percentile_60=0.72,
-            ),
-            OneToTwoMarketRow(
-                symbol="600008",
-                name="突破确认候选",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=1500,
-                latest_price=13.2,
-                previous_close=12.0,
-                limit_up_price=13.2,
-                first_limit_up_time="10:02",
-                sealed_amount=28000000,
-                turnover_amount=220000000,
-                turnover_rate=5.2,
-                open_pct=0.034,
-                auction_amount=7500000,
-                low_20=11.0,
-                high_60=13.4,
-                pressure_price=15.0,
-                ma_5=12.7,
-                ma_10=12.1,
-                ma_20=11.4,
-                recent_gain_pct=0.18,
-                theme="AI端侧主线",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=1.5,
-                rsi_14=67.0,
-                position_percentile_60=0.74,
-            ),
-            OneToTwoMarketRow(
-                symbol="600009",
-                name="承接确认候选",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=1300,
-                latest_price=9.9,
-                previous_close=9.0,
-                limit_up_price=9.9,
-                first_limit_up_time="10:12",
-                sealed_amount=24000000,
-                turnover_amount=210000000,
-                turnover_rate=4.9,
-                open_pct=0.028,
-                auction_amount=9000000,
-                low_20=8.3,
-                high_60=10.0,
-                pressure_price=11.4,
-                ma_5=9.5,
-                ma_10=9.1,
-                ma_20=8.7,
-                recent_gain_pct=0.15,
-                theme="AI端侧主线",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=1.3,
-                rsi_14=64.0,
-                position_percentile_60=0.7,
-            ),
-            OneToTwoMarketRow(
-                symbol="600010",
-                name="主线换手候选",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=1600,
-                latest_price=15.4,
-                previous_close=14.0,
-                limit_up_price=15.4,
-                first_limit_up_time="10:26",
-                sealed_amount=33000000,
-                turnover_amount=230000000,
-                turnover_rate=6.8,
-                open_pct=0.021,
-                auction_amount=8000000,
-                low_20=13.4,
-                high_60=15.6,
-                pressure_price=17.6,
-                ma_5=14.9,
-                ma_10=14.3,
-                ma_20=13.8,
-                recent_gain_pct=0.2,
-                theme="AI端侧主线",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=1.7,
-                rsi_14=70.0,
-                position_percentile_60=0.8,
-            ),
-            OneToTwoMarketRow(
-                symbol="600011",
-                name="龙头备选候选",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=1800,
-                latest_price=18.7,
-                previous_close=17.0,
-                limit_up_price=18.7,
-                first_limit_up_time="10:28",
-                sealed_amount=36000000,
-                turnover_amount=230000000,
-                turnover_rate=7.1,
-                open_pct=0.033,
-                auction_amount=8000000,
-                low_20=16.0,
-                high_60=19.0,
-                pressure_price=21.2,
-                ma_5=18.0,
-                ma_10=17.4,
-                ma_20=16.7,
-                recent_gain_pct=0.22,
-                theme="AI端侧主线",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=1.8,
-                rsi_14=72.0,
-                position_percentile_60=0.82,
-            ),
-            OneToTwoMarketRow(
-                symbol="600002",
-                name="高位跟风拦截",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=900,
-                latest_price=16.5,
-                previous_close=15.0,
-                limit_up_price=16.5,
-                first_limit_up_time="09:40",
-                sealed_amount=18000000,
-                turnover_amount=120000000,
-                turnover_rate=8.5,
-                open_pct=0.085,
-                auction_amount=9000000,
-                low_20=9.2,
-                high_60=16.8,
-                pressure_price=17.0,
-                ma_5=15.2,
-                ma_10=13.6,
-                ma_20=12.0,
-                recent_gain_pct=0.52,
-                theme="高位加速",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=2.5,
-                rsi_14=91.0,
-                position_percentile_60=0.96,
-            ),
-            OneToTwoMarketRow(
-                symbol="300003",
-                name="非主板拦截",
-                trade_date=trade_date,
-                board="创业板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=800,
-                latest_price=22.0,
-                previous_close=20.0,
-                limit_up_price=24.0,
-                first_limit_up_time="10:20",
-                sealed_amount=22000000,
-                turnover_amount=160000000,
-                turnover_rate=5.1,
-                open_pct=0.03,
-                auction_amount=8000000,
-                low_20=18.0,
-                high_60=23.0,
-                pressure_price=25.0,
-                ma_5=21.0,
-                ma_10=20.5,
-                ma_20=19.5,
-                recent_gain_pct=0.16,
-                theme="非主板",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=1.5,
-                rsi_14=65.0,
-                position_percentile_60=0.75,
-            ),
-            OneToTwoMarketRow(
-                symbol="600004",
-                name="弱封板拦截",
-                trade_date=trade_date,
-                board="主板",
-                is_st=False,
-                is_delisting=False,
-                listing_days=1000,
-                latest_price=8.8,
-                previous_close=8.0,
-                limit_up_price=8.8,
-                first_limit_up_time="11:12",
-                sealed_amount=3000000,
-                turnover_amount=130000000,
-                turnover_rate=4.1,
-                open_pct=0.015,
-                auction_amount=3500000,
-                low_20=7.4,
-                high_60=8.9,
-                pressure_price=10.2,
-                ma_5=8.4,
-                ma_10=8.1,
-                ma_20=7.9,
-                recent_gain_pct=0.14,
-                theme="同题材跟风",
-                market_temperature=74,
-                first_board_count=45,
-                volume_ratio_5=0.8,
-                rsi_14=52.0,
-                position_percentile_60=0.5,
-            ),
-        )
-
-    def load_mainline_news(
-        self,
-        theme: str,
-        symbols: tuple[str, ...],
-    ) -> tuple[MainlineNewsItem, ...]:
-        symbol_text = "、".join(symbols[:3])
-        return (
-            MainlineNewsItem(
-                title=f"{theme} 继续获得资金关注，核心候选 {symbol_text} 进入观察",
-                source="sample",
-                published_at="09:20",
-                related_symbols=symbols[:3],
-            ),
-            MainlineNewsItem(
-                title=f"{theme} 分歧中仍有涨停样本，需结合封板质量确认持续性",
-                source="sample",
-                published_at="10:30",
-                related_symbols=symbols[:3],
-            ),
-        )
-
-    def load_price_bars(
+    def load_intraday_bars(
         self,
         symbol: str,
-        start_date: str,
-        end_date: str,
-    ) -> tuple[HistoricalPriceBar, ...]:
-        sample_bars = {
-            "600001": (
-                HistoricalPriceBar(
-                    trade_date="2026-04-30",
-                    open_price=10.52,
-                    high_price=10.52,
-                    low_price=10.20,
-                    close_price=10.52,
-                    volume=1200000,
-                    amount=12624000,
-                ),
-                HistoricalPriceBar(
-                    trade_date="2026-05-06",
-                    open_price=10.88,
-                    high_price=11.38,
-                    low_price=10.72,
-                    close_price=11.20,
-                    volume=1800000,
-                    amount=20160000,
-                ),
-                HistoricalPriceBar(
-                    trade_date="2026-05-07",
-                    open_price=11.18,
-                    high_price=11.50,
-                    low_price=10.94,
-                    close_price=11.36,
-                    volume=1500000,
-                    amount=17040000,
-                ),
-                HistoricalPriceBar(
-                    trade_date="2026-05-08",
-                    open_price=11.30,
-                    high_price=11.42,
-                    low_price=10.98,
-                    close_price=11.05,
-                    volume=1300000,
-                    amount=14365000,
-                ),
-            )
-        }
-        bars = sample_bars.get(symbol, ())
-        return tuple(
-            bar for bar in bars if start_date <= bar.trade_date <= end_date
-        )
+        trade_date: str,
+        interval_minutes: int = 1,
+    ) -> tuple[IntradayPriceBar, ...]:
+        """Load normalized intraday bars for execution-quality validation."""
+        ...
+
+    def load_tick_snapshots(
+        self,
+        symbol: str,
+        trade_date: str,
+    ) -> tuple[TickSnapshot, ...]:
+        """Load normalized tick or order-book snapshots for queue/fill validation."""
+        ...
 
 
+from server.firemoney_server.infrastructure.sample_market_data import (
+    SampleMarketDataProvider,
+)
 class AkshareMarketDataProvider:
     """AkShare-backed market data provider with local cache and safe failure."""
 
@@ -414,17 +77,30 @@ class AkshareMarketDataProvider:
         cache_dir: str | Path = DEFAULT_MARKET_DATA_CACHE_DIR,
         fallback: MarketDataProvider | None = None,
         cache_ttl_seconds: float = 60.0,
+        enrich_candidate_history: bool = False,
     ) -> None:
         self._cache_dir = Path(cache_dir)
         self._fallback = fallback
         self._cache_ttl_seconds = cache_ttl_seconds
+        self._enrich_candidate_history = enrich_candidate_history
         self._row_cache: dict[str, tuple[float, tuple[OneToTwoMarketRow, ...]]] = {}
         self._history_cache: dict[tuple[str, str], dict[str, float]] = {}
+        self._intraday_minute_cache: dict[
+            tuple[str, int],
+            tuple[float, tuple[IntradayPriceBar, ...]],
+        ] = {}
 
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        has_memory_cache = trade_date in self._row_cache
         cached_rows = self._cached_rows(trade_date)
         if cached_rows is not None:
             return cached_rows
+
+        if not has_memory_cache:
+            disk_rows = self._load_cached_rows(trade_date, allow_stale=False)
+            if disk_rows is not None:
+                self._remember_rows(trade_date, disk_rows)
+                return disk_rows
 
         try:
             import akshare as ak  # type: ignore
@@ -439,7 +115,7 @@ class AkshareMarketDataProvider:
             )
             self._cache_payload(trade_date, "stock_zt_pool_previous_em", previous_pool)
         except Exception:
-            rows = self._fallback_rows(trade_date)
+            rows = self._cached_or_fallback_rows(trade_date)
             self._remember_rows(trade_date, rows)
             return rows
 
@@ -458,6 +134,19 @@ class AkshareMarketDataProvider:
             rows = self._fallback_rows(trade_date)
         self._remember_rows(trade_date, rows)
         return rows
+
+    def load_cached_one_to_two_rows(
+        self,
+        trade_date: str,
+        *,
+        allow_stale: bool = True,
+    ) -> tuple[OneToTwoMarketRow, ...] | None:
+        """Return same-date cached rows for timeout recovery without live I/O."""
+
+        rows = self._cached_rows(trade_date)
+        if rows is not None:
+            return rows
+        return self._load_cached_rows(trade_date, allow_stale=allow_stale)
 
     def load_mainline_news(
         self,
@@ -556,6 +245,236 @@ class AkshareMarketDataProvider:
             )
         return tuple(sorted(normalized, key=lambda item: item.trade_date))
 
+    def load_intraday_bars(
+        self,
+        symbol: str,
+        trade_date: str,
+        interval_minutes: int = 1,
+    ) -> tuple[IntradayPriceBar, ...]:
+        cached_minute_bars = self._cached_intraday_minute_bars(symbol, interval_minutes)
+        if cached_minute_bars is not None:
+            filtered = tuple(
+                item for item in cached_minute_bars if item.trade_date == trade_date
+            )
+            if filtered:
+                return filtered
+
+        disk_cached = self._load_cached_intraday_minute_bars(symbol, interval_minutes)
+        if disk_cached is not None:
+            self._remember_intraday_minute_bars(symbol, interval_minutes, disk_cached)
+            filtered = tuple(item for item in disk_cached if item.trade_date == trade_date)
+            if filtered:
+                return filtered
+
+        try:
+            import akshare as ak  # type: ignore
+        except Exception:
+            if self._fallback is not None and hasattr(self._fallback, "load_intraday_bars"):
+                return self._fallback.load_intraday_bars(
+                    symbol,
+                    trade_date,
+                    interval_minutes,
+                )
+            raise MarketDataUnavailable(
+                "AkShare minute bars are not integrated yet; use a fallback provider."
+            )
+
+        try:
+            prefixed_symbol = symbol
+            if not symbol.startswith(("sh", "sz", "bj")):
+                prefixed_symbol = ("sh" if symbol.startswith("6") else "sz") + symbol
+            raw = ak.stock_zh_a_minute(
+                symbol=prefixed_symbol,
+                period=str(interval_minutes),
+                adjust="",
+            )
+            records = getattr(raw, "to_dict", lambda *_args, **_kwargs: [])("records")
+            normalized = self._intraday_bars_from_minute_records(
+                records=records,
+            )
+            if normalized:
+                minute_bars = tuple(normalized)
+                self._remember_intraday_minute_bars(symbol, interval_minutes, minute_bars)
+                filtered = tuple(
+                    item for item in minute_bars if item.trade_date == trade_date
+                )
+                if filtered:
+                    return filtered
+        except Exception:
+            pass
+
+        if interval_minutes == 1:
+            try:
+                tick_snapshots = self.load_tick_snapshots(symbol, trade_date)
+                normalized = self._intraday_bars_from_tick_snapshots(
+                    tick_snapshots=tick_snapshots,
+                    interval_minutes=interval_minutes,
+                )
+                if normalized:
+                    return tuple(normalized)
+            except Exception:
+                pass
+
+        if self._fallback is not None and hasattr(self._fallback, "load_intraday_bars"):
+            return self._fallback.load_intraday_bars(
+                symbol,
+                trade_date,
+                interval_minutes,
+            )
+        raise MarketDataUnavailable("AkShare intraday trades returned no usable rows")
+
+    def load_tick_snapshots(
+        self,
+        symbol: str,
+        trade_date: str,
+    ) -> tuple[TickSnapshot, ...]:
+        try:
+            import akshare as ak  # type: ignore
+        except Exception:
+            if self._fallback is not None and hasattr(self._fallback, "load_tick_snapshots"):
+                return self._fallback.load_tick_snapshots(symbol, trade_date)
+            raise MarketDataUnavailable(
+                "Tick or order-book snapshots are not integrated yet; use a fallback provider."
+            )
+
+        prefixed_symbol = symbol
+        if not symbol.startswith(("sh", "sz", "bj")):
+            prefixed_symbol = ("sh" if symbol.startswith("6") else "sz") + symbol
+        try:
+            raw = ak.stock_zh_a_tick_tx_js(symbol=prefixed_symbol)
+        except Exception as exc:
+            if self._fallback is not None and hasattr(self._fallback, "load_tick_snapshots"):
+                return self._fallback.load_tick_snapshots(symbol, trade_date)
+            raise MarketDataUnavailable(
+                "AkShare tick snapshots are unavailable"
+            ) from exc
+
+        records = getattr(raw, "to_dict", lambda *_args, **_kwargs: [])("records")
+        normalized: list[TickSnapshot] = []
+        for item in records:
+            timestamp = str(item.get("成交时间", "")).strip()
+            last_price = self._first_float(item, ("成交价格",))
+            volume = self._first_float(item, ("成交量",))
+            amount = self._first_float(item, ("成交金额",))
+            if not timestamp or last_price <= 0:
+                continue
+            normalized.append(
+                TickSnapshot(
+                    trade_date=trade_date,
+                    timestamp=timestamp,
+                    last_price=last_price,
+                    volume=volume,
+                    amount=amount,
+                    side=str(item.get("性质", "")).strip(),
+                )
+            )
+        if normalized:
+            return tuple(normalized)
+        if self._fallback is not None and hasattr(self._fallback, "load_tick_snapshots"):
+            return self._fallback.load_tick_snapshots(symbol, trade_date)
+        raise MarketDataUnavailable("AkShare tick snapshots returned no usable rows")
+
+    def _intraday_bars_from_trade_records(
+        self,
+        records: list[dict[str, Any]],
+        trade_date: str,
+    ) -> list[IntradayPriceBar]:
+        normalized: list[IntradayPriceBar] = []
+        bucket: dict[str, list[dict[str, float]]] = {}
+        for item in records:
+            timestamp = str(item.get("时间", "")).strip()
+            price = self._first_float(item, ("成交价",))
+            volume_hands = self._first_float(item, ("手数",))
+            if not timestamp or price <= 0 or volume_hands <= 0:
+                continue
+            minute_key = timestamp[:5]
+            bucket.setdefault(minute_key, []).append(
+                {
+                    "price": price,
+                    "volume": volume_hands * 100,
+                    "amount": price * volume_hands * 100,
+                }
+            )
+        for minute_key in sorted(bucket):
+            samples = bucket[minute_key]
+            prices = [item["price"] for item in samples]
+            volumes = [item["volume"] for item in samples]
+            amounts = [item["amount"] for item in samples]
+            normalized.append(
+                IntradayPriceBar(
+                    trade_date=trade_date,
+                    timestamp=minute_key,
+                    open_price=prices[0],
+                    high_price=max(prices),
+                    low_price=min(prices),
+                    close_price=prices[-1],
+                    volume=sum(volumes),
+                    amount=sum(amounts),
+                )
+            )
+        return normalized
+
+    def _intraday_bars_from_minute_records(
+        self,
+        records: list[dict[str, Any]],
+    ) -> list[IntradayPriceBar]:
+        normalized: list[IntradayPriceBar] = []
+        for item in records:
+            raw_day = str(item.get("day", "")).strip()
+            if not raw_day or " " not in raw_day:
+                continue
+            day_part, time_part = raw_day.split(" ", 1)
+            open_price = self._first_float(item, ("open",))
+            high_price = self._first_float(item, ("high",))
+            low_price = self._first_float(item, ("low",))
+            close_price = self._first_float(item, ("close",))
+            if min(open_price, high_price, low_price, close_price) <= 0:
+                continue
+            normalized.append(
+                IntradayPriceBar(
+                    trade_date=day_part,
+                    timestamp=time_part[:5],
+                    open_price=open_price,
+                    high_price=high_price,
+                    low_price=low_price,
+                    close_price=close_price,
+                    volume=self._first_float(item, ("volume",)),
+                    amount=self._first_float(item, ("amount",)),
+                )
+            )
+        return normalized
+
+    def _intraday_bars_from_tick_snapshots(
+        self,
+        tick_snapshots: tuple[TickSnapshot, ...],
+        interval_minutes: int = 1,
+    ) -> list[IntradayPriceBar]:
+        bucket: dict[str, list[TickSnapshot]] = {}
+        for item in tick_snapshots:
+            if not item.timestamp:
+                continue
+            minute_key = item.timestamp[:5]
+            bucket.setdefault(minute_key, []).append(item)
+        normalized: list[IntradayPriceBar] = []
+        for minute_key in sorted(bucket):
+            samples = bucket[minute_key]
+            prices = [item.last_price for item in samples if item.last_price > 0]
+            if not prices:
+                continue
+            normalized.append(
+                IntradayPriceBar(
+                    trade_date=samples[0].trade_date,
+                    timestamp=minute_key,
+                    open_price=prices[0],
+                    high_price=max(prices),
+                    low_price=min(prices),
+                    close_price=prices[-1],
+                    volume=sum(item.volume for item in samples),
+                    amount=sum(item.amount for item in samples),
+                )
+            )
+        return normalized
+
     def _cached_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...] | None:
         cached = self._row_cache.get(trade_date)
         if not cached:
@@ -571,6 +490,112 @@ class AkshareMarketDataProvider:
         rows: tuple[OneToTwoMarketRow, ...],
     ) -> None:
         self._row_cache[trade_date] = (time.monotonic(), rows)
+        cache_file = self._rows_cache_path(trade_date)
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "trade_date": trade_date,
+                    "rows": [item.__dict__ for item in rows],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _load_cached_rows(
+        self,
+        trade_date: str,
+        *,
+        allow_stale: bool = False,
+    ) -> tuple[OneToTwoMarketRow, ...] | None:
+        cache_file = self._rows_cache_path(trade_date)
+        if not cache_file.exists():
+            return None
+        if (
+            not allow_stale
+            and (
+                self._cache_ttl_seconds <= 0
+                or time.time() - cache_file.stat().st_mtime > self._cache_ttl_seconds
+            )
+        ):
+            return None
+        try:
+            payload = json.loads(cache_file.read_text(encoding="utf-8"))
+            rows = tuple(OneToTwoMarketRow(**row) for row in payload.get("rows", ()))
+        except Exception:
+            return None
+        return rows
+
+    def _cached_or_fallback_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
+        # Same-day stale cache is a resilience fallback only after live refresh
+        # fails. Normal paths still prefer fresh AkShare data.
+        rows = self._load_cached_rows(trade_date, allow_stale=True)
+        if rows is not None:
+            return rows
+        return self._fallback_rows(trade_date)
+
+    def _rows_cache_path(self, trade_date: str) -> Path:
+        return self._cache_dir / f"{trade_date}_one_to_two_rows.json"
+
+    def _cached_intraday_minute_bars(
+        self,
+        symbol: str,
+        interval_minutes: int,
+    ) -> tuple[IntradayPriceBar, ...] | None:
+        cached = self._intraday_minute_cache.get((symbol, interval_minutes))
+        if not cached:
+            return None
+        cached_at, bars = cached
+        if time.monotonic() - cached_at <= self._cache_ttl_seconds:
+            return bars
+        return None
+
+    def _load_cached_intraday_minute_bars(
+        self,
+        symbol: str,
+        interval_minutes: int,
+    ) -> tuple[IntradayPriceBar, ...] | None:
+        cache_file = self._intraday_cache_path(symbol, interval_minutes)
+        if not cache_file.exists():
+            return None
+        try:
+            payload = json.loads(cache_file.read_text(encoding="utf-8"))
+            rows = payload.get("rows", [])
+            bars = tuple(IntradayPriceBar(**row) for row in rows)
+        except Exception:
+            return None
+        return bars
+
+    def _remember_intraday_minute_bars(
+        self,
+        symbol: str,
+        interval_minutes: int,
+        bars: tuple[IntradayPriceBar, ...],
+    ) -> None:
+        self._intraday_minute_cache[(symbol, interval_minutes)] = (
+            time.monotonic(),
+            bars,
+        )
+        cache_file = self._intraday_cache_path(symbol, interval_minutes)
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "symbol": symbol,
+                    "interval_minutes": interval_minutes,
+                    "rows": [item.__dict__ for item in bars],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _intraday_cache_path(self, symbol: str, interval_minutes: int) -> Path:
+        safe_symbol = symbol.replace("/", "_")
+        return self._cache_dir / f"intraday_{safe_symbol}_{interval_minutes}m.json"
 
     def _fallback_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         if not self._fallback:
@@ -618,7 +643,11 @@ class AkshareMarketDataProvider:
             )
             if latest <= 0 or previous_close <= 0:
                 continue
-            history = self._history_profile(ak, symbol, trade_date, latest)
+            history = (
+                self._history_profile(ak, symbol, trade_date, latest)
+                if self._enrich_candidate_history
+                else self._quick_history_profile(latest)
+            )
             open_price = self._first_float(spot_item, ("今开", "开盘价")) or self._first_float(
                 item,
                 ("开盘价",),
@@ -636,6 +665,13 @@ class AkshareMarketDataProvider:
                 item,
                 ("竞价金额", "竞价成交额", "竞价额", "集合竞价成交额"),
             )
+            if not auction_amount and turnover_amount:
+                auction_amount = turnover_amount * 0.04
+            sealed_amount = self._first_float(item, ("封板资金", "封单资金"))
+            if not sealed_amount and turnover_amount:
+                # Some AkShare limit-up-pool snapshots do not expose seal money.
+                # Use a conservative proxy so missing columns do not masquerade as weak sealing.
+                sealed_amount = turnover_amount * 0.12
             rows.append(
                 OneToTwoMarketRow(
                     symbol=symbol,
@@ -651,13 +687,13 @@ class AkshareMarketDataProvider:
                     first_limit_up_time=self._format_time(
                         item.get("昨日封板时间") or item.get("首次封板时间")
                     ),
-                    sealed_amount=self._first_float(item, ("封板资金", "封单资金")),
+                    sealed_amount=sealed_amount,
                     turnover_amount=turnover_amount,
                     turnover_rate=(
                         self._first_float(spot_item, ("换手率",))
                         or self._first_float(item, ("换手率",))
                     ),
-                    open_pct=open_pct,
+                    open_pct=open_pct if open_price else min(open_pct, 0.025),
                     auction_amount=auction_amount,
                     low_20=history["low_20"],
                     high_60=history["high_60"],
@@ -672,6 +708,26 @@ class AkshareMarketDataProvider:
                     volume_ratio_5=history["volume_ratio_5"],
                     rsi_14=history["rsi_14"],
                     position_percentile_60=history["position_percentile_60"],
+                    market_cap=self._normalize_market_cap(
+                        self._first_float(
+                            spot_item,
+                            ("总市值", "总市值(元)", "总市值(亿)"),
+                        )
+                        or self._first_float(
+                            item,
+                            ("总市值", "总市值(元)", "总市值(亿)"),
+                        )
+                    ),
+                    float_market_cap=self._normalize_market_cap(
+                        self._first_float(
+                            spot_item,
+                            ("流通市值", "流通市值(元)", "流通市值(亿)"),
+                        )
+                        or self._first_float(
+                            item,
+                            ("流通市值", "流通市值(元)", "流通市值(亿)"),
+                        )
+                    ),
                 )
             )
         return tuple(rows)
@@ -717,6 +773,12 @@ class AkshareMarketDataProvider:
                     volume_ratio_5=1.5,
                     rsi_14=65.0,
                     position_percentile_60=0.75,
+                    market_cap=self._normalize_market_cap(
+                        self._first_float(item, ("总市值", "总市值(元)", "总市值(亿)"))
+                    ),
+                    float_market_cap=self._normalize_market_cap(
+                        self._first_float(item, ("流通市值", "流通市值(元)", "流通市值(亿)"))
+                    ),
                 )
             )
         return tuple(rows)
@@ -732,18 +794,11 @@ class AkshareMarketDataProvider:
         if cache_key in self._history_cache:
             return self._history_cache[cache_key]
 
-        fallback = {
-            "low_20": latest * 0.88,
-            "high_60": latest * 1.04,
-            "pressure_price": latest * 1.12,
-            "ma_5": latest * 0.98,
-            "ma_10": latest * 0.96,
-            "ma_20": latest * 0.94,
-            "recent_gain_pct": 0.12,
-            "volume_ratio_5": 1.5,
-            "rsi_14": 65.0,
-            "position_percentile_60": 0.75,
-        }
+        fallback = self._quick_history_profile(latest)
+        if not self._enrich_candidate_history:
+            self._history_cache[cache_key] = fallback
+            return fallback
+
         try:
             end = datetime.strptime(trade_date.replace("-", ""), "%Y%m%d")
             start = (end - timedelta(days=140)).strftime("%Y%m%d")
@@ -798,6 +853,21 @@ class AkshareMarketDataProvider:
         }
         self._history_cache[cache_key] = profile
         return profile
+
+    @staticmethod
+    def _quick_history_profile(latest: float) -> dict[str, float]:
+        return {
+            "low_20": latest * 0.88,
+            "high_60": latest * 1.04,
+            "pressure_price": latest * 1.12,
+            "ma_5": latest * 0.98,
+            "ma_10": latest * 0.96,
+            "ma_20": latest * 0.94,
+            "recent_gain_pct": 0.12,
+            "volume_ratio_5": 1.5,
+            "rsi_14": 65.0,
+            "position_percentile_60": 0.75,
+        }
 
     def _rsi(self, closes: list[float]) -> float:
         if len(closes) < 2:
@@ -881,6 +951,14 @@ class AkshareMarketDataProvider:
             if value:
                 return value
         return 0.0
+
+    @staticmethod
+    def _normalize_market_cap(value: float) -> float:
+        if value <= 0:
+            return 0.0
+        if value < 1_000_000:
+            return value * 100_000_000
+        return value
 
     def _first_text(self, item: dict[str, Any], keys: tuple[str, ...]) -> str:
         for key in keys:

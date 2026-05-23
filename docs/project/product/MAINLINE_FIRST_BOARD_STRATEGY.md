@@ -65,13 +65,17 @@ FireMoney 当前只服务一条核心链路：
 
 ## 主线持续性
 
-主线持续性只作为持仓纪律和风险提示，不单独触发买入。第一版证据来自三类：
+主线持续性既是买入质量门，也是不恋战的卖出纪律。第一版证据来自三类：
 
 - 价格证据：同主线候选数量、近涨停强度、封板质量。
 - 消息证据：AkShare 东方财富个股新闻 `stock_news_em` 抓到的相关新闻数量和标题。
 - 市场证据：市场温度、主线分数、龙头辨识度。
 
-消息抓取失败时不阻断策略，但飞书会提示“未抓取到新的主线消息”；此时只按价格、封板和 T+1 纪律处理。
+买入前如果已有主线持续性证据且状态为 `fading`，或主线分数低于 `mainline_fade_score`，候选不进入模拟盘买点；这能避免明知主线退潮还硬买。消息抓取失败本身不阻断策略，飞书会提示“未抓取到新的主线消息”；此时只按价格、封板、换手和 T+1 纪律处理，避免把新闻源故障误判成题材退潮。
+
+## 行情源稳定性
+
+早评、策略决策和纸面指挥单属于只读判断，实时行情源超时或报错时允许使用同一交易日的本地缓存兜底，避免把强市误发成“行情异常暂停”。`watch --phase open/risk` 会写入模拟买入或卖出，必须使用实时行情；实时源超时且无可靠实时数据时宁可不写交易，也不允许用旧缓存触发买卖。
 
 ## 回测准入
 
@@ -113,6 +117,7 @@ FireMoney 当前只服务一条核心链路：
 2026-05-04 继续为封板打板验证线新增利润矩阵：只读本地历史缓存，入口和排名只使用封板当天可见字段，并强制训练期（2024-2025）和验证期（2026）都为正才进入榜单。当前最稳候选为：非一字封板、成交额不低于 8000 万、均线多头、近 20 日涨幅不高于 35%、按封板日可见强度分排序，每天最多一只；卖点为次日 5% 止盈、6% 止损、最多持有 1 个交易日，同一日线同时碰止盈止损按止损优先。2024-01-01 到 2026-05-03 的日线代理为 272 笔，胜率 66.54%，单笔平均收益 2.34%，8% 仓位复合约 66.10%，最大回撤约 3.41%；训练期约 +52.41%，2026 验证期约 +8.98%；分年看，2024 约 +18.75%，2025 约 +28.35%，2026 约 +8.98%。这比当前一进二默认线更强，但仍不直接转实盘：下一步必须把封单强度、开板次数、成交队列、分时滑点和主线消息持续性接入模拟盘验证。
 
 同日新增 `board-shadow` 影子入口：它把上述封板规则接到产品 CLI，但只读本地历史缓存并输出候选/卖点回放报告，不写入当前一进二模拟盘，也不发交易指令。随后补上独立 `board-shadow-record` / `board-shadow-stability` 样本账本，记录到 `.firemoney/board_shadow_samples.json`，和一进二 `paper_trades.json` 完全隔离。这个入口用于每天并行比较“如果今天做封板线会怎样”，等积累 30/50/100 笔 shadow 样本并补齐可成交数据后，再决定是否升级为模拟盘主线。
+同日补上 `board-shadow-system` 体系入口：它直接用产品口径输出这条封板波段经营线的买点、卖点、仓位和 2024 以来验证收益，方便经营层优先围绕“更赚钱的验证体系”而不是单日信号做判断。
 
 推荐研究命令：
 
@@ -124,6 +129,7 @@ python -B tools\research_limit_up_board_profit_matrix.py --start-date 2024-01-01
 python -m client.desktop.firemoney_client.one_to_two_cli board-shadow --trade-date 2026-04-29 --brief
 python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-record --trade-date 2026-04-29 --brief
 python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-stability --brief
+python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-system --start-date 2024-01-01 --end-date 2026-05-05 --brief
 ```
 
 ## 历史逐日回放
@@ -145,3 +151,20 @@ python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-
 同日继续只使用封板日可见字段复核“高位加速板”风险，把 shadow 默认的近 20 日涨幅上限从 35% 收紧到 25%。正式矩阵重跑 2024-01-01 到 2026-05-03 后，默认组合更新为：非一字封板、成交额不低于 8000 万、近 20 日涨幅不高于 25%、均线多头、市场封板家数 20 到 150 家、按封板日可见强度排名、次日 5% 止盈、6% 止损、最多持有 1 个交易日。结果为 264 笔，胜率 70.45%，单笔平均收益 2.75%，8% 仓位复合约 78.35%，最大回撤约 2.04%；训练期 2024-2025 约 +63.50%，2026 验证期约 +9.08%。分年看：2024 约 +23.42%，2025 约 +32.47%，2026 约 +9.08%。这条规则落地为 shadow 默认拦截，但仍不代表实盘盈利承诺；进入模拟盘主线前仍要补分钟线/Tick、封单排队、滑点和主线消息持续性。
 
 同日继续复核卖点纪律：8% 止盈的进攻型组合纸面复合约 86.32%，但 2026 验证期降到约 +6.45%，验证期胜率降到 63.16%；当前 5% 止盈的平衡型组合验证期约 +9.08%，验证期胜率 73.68%。因此不把 8% 止盈落地为默认规则。研究矩阵新增 `profiles.balanced`、`profiles.validation_first` 和 `profiles.attack` 三个画像，后续优化优先看平衡画像和验证段稳定性，而不是只追逐样本内最高收益。
+
+2026-05-05 继续只改封板影子线卖点，不放宽买点，也不使用 T+1 后涨跌倒推。新增动态止盈：封板日全市场上涨占比超过 70% 时，说明当日情绪足够强，止盈从 5% 提高到 8%；其余市场环境仍用 5% 平衡止盈，止损保持 6%，最多持有 1 个交易日。该规则只读取封板日已经可见的上涨占比，候选确定后才读取后续日线回放卖点。按 2024-01-01 到 2026-05-05 本地缓存重跑，默认 shadow 口径为 264 笔，胜率 69.32%，单笔平均收益 2.82%，8% 仓位复合约 80.78%，最大回撤约 2.04%；训练期 2024-2025 约 +64.17%，2026 验证期约 +10.12%。分年看：2024 约 +24.85%，2025 约 +31.49%，2026 约 +10.12%。对照上一版 5% 固定止盈，整体复合约从 78.35% 提高到 80.78%，2026 验证期从约 +9.08% 提高到 +10.12%；胜率从 70.45% 降到 69.32%，但验证段胜率保持 73.68%，因此落地为 shadow 默认卖点。该结论仍依赖日线代理，进入模拟盘主线前必须继续补分钟线/Tick、封单排队、滑点和主线消息持续性。
+
+2026-05-05 继续补了一条 walk-forward 防过拟合验证：每 3 个月为一个测试周期，卖点规则只能用测试周期之前 365 天的样本选择；候选卖点必须在过去窗口同时比当前 shadow 默认多 2% 以上复合收益、胜率不低、回撤不更差，才允许替换默认规则。按 2024-01-01 到 2026-05-05 重跑，10 个滚动周期全部因为默认 shadow 更稳而没有切换到进攻卖点；全局单仓不重叠口径仍为 264 笔，胜率 69.32%，8% 仓位复合约 80.78%，最大回撤约 2.04%，2026 验证期约 +10.12%。这说明“追过去一年最强卖点”会倾向固定 8% 等样本内进攻参数，但不能提高验证段；当前经营决策是保留动态止盈默认规则，把 walk-forward 作为以后改卖点前必须通过的护栏。
+
+主经营线迁移方案见 [BOARD_SHADOW_MAINLINE_MIGRATION_PLAN.md](./BOARD_SHADOW_MAINLINE_MIGRATION_PLAN.md)。
+
+
+2026-05-10 balanced low-drawdown v2: refreshed local history coverage from 2020 onward before accepting a new default. The accepted shadow rule tightens the 20-day gain cap from 25% to 20%, raises the ordinary take-profit line from 5% to 6%, keeps the strong-market take-profit line at 8%, keeps the 6% stop loss and the 1-trading-day max hold. Backtest from 2020-01-01 to 2026-05-05: 726 samples, 63.91% win rate, dynamic 8%/12% compound about +384.22%, max drawdown about -2.18%, and 7/7 positive calendar years. The key quality improvement is weak-year stability: 2021 improved from about +10.17% to +10.96%, while max drawdown improved from about -3.19% to -2.18%. Operating window evidence from 2024-01-01 to 2026-05-05: 269 samples, dynamic compound about +100.32%, validation about +11.17%, and max drawdown about -1.69%. The tradeoff is that 2026 validation is lower than the previous about +12.06%, but drawdown and weak-year quality are better, so this is now the default shadow rule. It is still not a live-profit guarantee.
+
+2026-05-23 复核 5 月局部行情：先新增 `paper-backtest --refresh-cache`，让产品命令可增量刷新 `.firemoney/research_cache/one_to_two_daily`，避免预览页继续引用只覆盖到 2026-04-30 的旧回测证据。刷新后缓存覆盖到 2026-05-22；`paper-backtest --start-date 2020-01-01 --end-date 2026-05-23 --brief` 显示 2026-05 已纳入，长期口径 725 笔、胜率 64.83%、仓位复合 +1687.34%、最大回撤 -3.93%，2026-05 月度收益 +0.79%。单独查看 2026-05-01 到 2026-05-23，日线研究口径有 6 笔，月度收益约 +2.03%、最大回撤约 -1.28%。这说明 5 月不是一直应该空仓；真正问题是实时值守/模拟盘没有完整接住研究口径机会。真实账本目前只记录 2026-05-22 联创电子（002036）一笔买入，5 月早中旬的大唐发电（601991）、荣联科技（002642）、太极实业（600667）、天富能源（600509）等日线回测机会没有进入真实模拟盘。新增 `missed-opportunities --start-date 2026-05-01 --end-date 2026-05-23 --brief` 作为正式错失机会审计入口，逐日对齐回测候选、watch/open 触发、通知和 paper-db 事件。当前审计显示：5 月回测机会 6 笔，真实模拟盘抓到 0 笔，错失盈利机会 4 笔，按小账户口径约少赚 3.32%；主要阻断是常驻调度/open 值守覆盖不足。下一步优先修复常驻调度、开盘值守审计和实时候选映射，不能再只显示防守空仓。
+
+同日把 `schedule-health` 从“早评/晚评覆盖”升级为“关键值守覆盖”：交易日必须检查早评、09:00 模拟盘指挥单、09:31 开盘确认和晚评。早评/晚评 sent 但 `paper-decision` 或 `watch:open` 没有调度审计记录时，健康状态直接 `blocked`。以 2026-05-06 为例，系统现在明确提示：早评和晚评已发送，但 `paper-decision`、`watch:open` 缺失，因此不能再把“飞书有消息”误判为“模拟盘值守正常”。
+
+同日继续修复常驻值守审计：`scheduler_runs.json` 不再让每分钟空转记录挤掉关键执行证据。系统会长期保留已执行、失败、过期和重试任务记录，只对普通 observed 空转记录做限量降噪；`schedule-health` 读取完整保留记录，而不是只看最近 30 条。这样月度 `missed-opportunities` 复盘可以继续回答“当日 09:00 指挥单和 09:31 open 到底有没有跑”，不会因为 beta-start 常驻太久把早期关键日志冲掉。
+
+同日继续收口指挥单与开盘执行一致性：`watch/open` 的策略路由现在复用本次早评/开盘报告中的候选快照和市场温度，不再为了路由判断二次拉取行情并重算候选池。这样 09:00 `paper-decision` 给出的“唯一候选”和 09:31 open 阶段实际写入模拟盘的候选更容易保持一致；后续仍要继续补“候选快照落库”，让跨进程重启后也能严格复现同一张指挥单。

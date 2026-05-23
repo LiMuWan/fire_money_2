@@ -35,6 +35,12 @@ releases/
 # Runtime exports and generated reports
 exports/
 reports/
+client/desktop/preview/*.png
+client/desktop/preview/notifications.json
+client/desktop/preview/paper_trades.json
+client/desktop/preview/paper_trades.sqlite3
+client/desktop/preview/runtime_status.json
+client/desktop/preview/scheduler_state.json
 
 # IDE files
 .idea/

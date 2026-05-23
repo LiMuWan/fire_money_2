@@ -8,18 +8,23 @@ from pathlib import Path
 from time import strftime
 from typing import Any
 
+from server.firemoney_server.infrastructure.paper_database import PaperTradeDatabase
+from server.firemoney_server.infrastructure.paper_store_codec import PaperStoreCodec
+from server.firemoney_server.domain.paper_position_sizing import (
+    resolve_paper_position_size,
+)
+from server.firemoney_server.infrastructure.one_to_two_config import (
+    load_one_to_two_settings,
+)
 from shared.contracts import (
-    MainlineContinuity,
-    MainlineNewsItem,
     OneToTwoCandidate,
     OneToTwoEventType,
-    OneToTwoExitPlan,
     PaperAccount,
     PaperPosition,
     PaperTradeEvent,
     PaperTradeRecord,
+    PaperTradingGuardDecision,
     PaperTradeStatus,
-    contract_to_dict,
 )
 
 
@@ -32,14 +37,29 @@ class PaperTradeStore:
     def __init__(
         self,
         path: str | Path = DEFAULT_PAPER_STORE_PATH,
-        initial_cash: float = 100000.0,
-        max_position_pct: float = 0.08,
+        database_path: str | Path | None = None,
+        initial_cash: float | None = None,
+        max_position_pct: float | None = None,
         max_daily_trades: int = 1,
     ) -> None:
         self._path = Path(path)
-        self._initial_cash = float(initial_cash)
-        self._max_position_pct = float(max_position_pct)
+        self._database = PaperTradeDatabase(
+            database_path or self._path.with_suffix(".sqlite3")
+        )
+        settings = load_one_to_two_settings()
+        self._settings = settings
+        self._initial_cash = float(
+            settings.initial_cash if initial_cash is None else initial_cash
+        )
+        self._max_position_pct = float(
+            settings.max_position_pct if max_position_pct is None else max_position_pct
+        )
         self._max_daily_trades = int(max_daily_trades)
+        self._codec = PaperStoreCodec(
+            initial_cash=self._initial_cash,
+            max_position_pct=self._max_position_pct,
+            max_daily_trades=self._max_daily_trades,
+        )
 
     @property
     def path(self) -> Path:
@@ -47,19 +67,56 @@ class PaperTradeStore:
 
     def load(self) -> PaperAccount:
         if not self._path.exists():
-            return self._empty_account()
+            return self._codec.empty_account()
         try:
             payload = json.loads(self._path.read_text(encoding="utf-8"))
-            return self._from_payload(payload)
+            account = self._codec.from_payload(payload)
+            if self._is_stale_empty_account(account):
+                return self._codec.empty_account()
+            return self._normalize_account_basis(account)
         except (JSONDecodeError, KeyError, OSError, TypeError, ValueError):
-            return self._empty_account()
+            return self._codec.empty_account()
+
+    def _is_stale_empty_account(self, account: PaperAccount) -> bool:
+        if account.positions or account.events or account.closed_trades:
+            return False
+        return (
+            abs(float(account.initial_cash) - self._initial_cash) > 0.01
+            or abs(float(account.max_position_pct) - self._max_position_pct) > 0.0001
+        )
+
+    def _normalize_account_basis(self, account: PaperAccount) -> PaperAccount:
+        if account.positions:
+            return account
+        if (
+            abs(float(account.initial_cash) - self._initial_cash) <= 0.01
+            and abs(float(account.max_position_pct) - self._max_position_pct) <= 0.0001
+        ):
+            return account
+        realized_pnl = sum(float(trade.realized_pnl) for trade in account.closed_trades)
+        normalized_equity = round(max(0.0, self._initial_cash + realized_pnl), 2)
+        return PaperAccount(
+            account_id=account.account_id,
+            last_trade_date=account.last_trade_date,
+            cash=normalized_equity,
+            initial_cash=self._initial_cash,
+            equity=normalized_equity,
+            max_position_pct=self._max_position_pct,
+            max_daily_trades=self._max_daily_trades,
+            daily_trade_count=account.daily_trade_count,
+            positions=account.positions,
+            events=account.events,
+            closed_trades=account.closed_trades,
+        )
 
     def save(self, account: PaperAccount) -> PaperAccount:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(
-            json.dumps(self._to_payload(account), ensure_ascii=False, indent=2),
+            json.dumps(self._codec.to_payload(account), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        if self._database is not None:
+            self._database.sync_account(account)
         return account
 
     def prepare_for_trade_date(self, trade_date: str) -> PaperAccount:
@@ -104,6 +161,9 @@ class PaperTradeStore:
                 exit_plan=position.exit_plan,
                 mainline_continuity=position.mainline_continuity,
                 peak_price=position.peak_price,
+                trough_price=position.trough_price,
+                **self._planned_position_fields(position),
+                **self._entry_evidence_position_fields(position),
             )
             for position in account.positions
         )
@@ -123,7 +183,11 @@ class PaperTradeStore:
             )
         )
 
-    def buy_candidate(self, candidate: OneToTwoCandidate) -> PaperAccount:
+    def buy_candidate(
+        self,
+        candidate: OneToTwoCandidate,
+        guard_decision: PaperTradingGuardDecision | None = None,
+    ) -> PaperAccount:
         account = self.prepare_for_trade_date(candidate.trade_date)
         if candidate.status != "ready":
             return self.save(
@@ -147,9 +211,13 @@ class PaperTradeStore:
                     "模拟盘当日交易次数已满或已有持仓",
                 )
             )
-        budget = account.initial_cash * account.max_position_pct
-        quantity = int(budget // candidate.entry_price // 100) * 100
-        amount = round(quantity * candidate.entry_price, 2)
+        position_size = resolve_paper_position_size(
+            settings=self._settings,
+            account=account,
+            candidate=candidate,
+        )
+        quantity = position_size.quantity
+        amount = position_size.cash_budget
         if quantity <= 0 or amount > account.cash:
             return self.save(
                 self._append_event(
@@ -158,7 +226,7 @@ class PaperTradeStore:
                     candidate,
                     candidate.latest_price,
                     0,
-                    "模拟资金不足或买入数量不足一手",
+                    position_size.note or "模拟资金不足或买入数量不足一手",
                 )
             )
         position = PaperPosition(
@@ -184,6 +252,19 @@ class PaperTradeStore:
             exit_plan=candidate.exit_plan,
             mainline_continuity=candidate.mainline_continuity,
             peak_price=candidate.latest_price,
+            trough_price=candidate.latest_price,
+            planned_stop_risk_pct=self._planned_stop_risk_pct(candidate),
+            planned_first_target_return_pct=self._planned_first_target_return_pct(
+                candidate
+            ),
+            planned_reward_risk_ratio=self._planned_reward_risk_ratio(candidate),
+            max_intratrade_drawdown_budget_pct=(
+                self._max_intratrade_drawdown_budget_pct(candidate)
+            ),
+            entry_turnover_quality_score=round(candidate.turnover_quality_score, 2),
+            entry_turnover_quality_label=candidate.turnover_quality_label,
+            entry_turnover_quality_notes=candidate.turnover_quality_notes,
+            **self._entry_guard_fields(guard_decision),
         )
         account = PaperAccount(
             account_id=account.account_id,
@@ -272,6 +353,9 @@ class PaperTradeStore:
                 exit_plan=position.exit_plan,
                 mainline_continuity=candidate.mainline_continuity or position.mainline_continuity,
                 peak_price=position.peak_price,
+                trough_price=position.trough_price,
+                **self._planned_position_fields(position),
+                **self._entry_evidence_position_fields(position),
             )
             account = PaperAccount(
                 account_id=account.account_id,
@@ -304,6 +388,9 @@ class PaperTradeStore:
             (candidate.latest_price - position.entry_price) / position.entry_price,
             4,
         )
+        max_favorable_pct, max_adverse_pct, profit_drawdown_ratio = (
+            self._trade_excursion_quality(position, candidate.latest_price, realized_pnl_pct)
+        )
         warning_count = sum(
             1
             for event in account.events
@@ -327,6 +414,19 @@ class PaperTradeStore:
             position_label=position.position_label,
             success=realized_pnl > 0,
             warning_count=warning_count,
+            max_favorable_pct=max_favorable_pct,
+            max_adverse_pct=max_adverse_pct,
+            profit_drawdown_ratio=profit_drawdown_ratio,
+            planned_stop_risk_pct=position.planned_stop_risk_pct,
+            planned_first_target_return_pct=position.planned_first_target_return_pct,
+            planned_reward_risk_ratio=position.planned_reward_risk_ratio,
+            max_intratrade_drawdown_budget_pct=(
+                position.max_intratrade_drawdown_budget_pct
+            ),
+            entry_turnover_quality_score=position.entry_turnover_quality_score,
+            entry_turnover_quality_label=position.entry_turnover_quality_label,
+            entry_turnover_quality_notes=position.entry_turnover_quality_notes,
+            **self._entry_guard_position_fields(position),
         )
         account = PaperAccount(
             account_id=account.account_id,
@@ -380,6 +480,9 @@ class PaperTradeStore:
                 candidate.mainline_continuity or position.mainline_continuity
             ),
             peak_price=position.peak_price,
+            trough_price=position.trough_price,
+            **self._planned_position_fields(position),
+            **self._entry_evidence_position_fields(position),
         )
         return PaperAccount(
             account_id=account.account_id,
@@ -416,6 +519,9 @@ class PaperTradeStore:
             (candidate.latest_price - position.entry_price) / position.entry_price,
             4,
         )
+        max_favorable_pct, max_adverse_pct, profit_drawdown_ratio = (
+            self._trade_excursion_quality(position, candidate.latest_price, realized_pnl_pct)
+        )
         warning_count = sum(
             1
             for event in account.events
@@ -440,6 +546,19 @@ class PaperTradeStore:
             position_label=position.position_label,
             success=realized_pnl > 0,
             warning_count=warning_count,
+            max_favorable_pct=max_favorable_pct,
+            max_adverse_pct=max_adverse_pct,
+            profit_drawdown_ratio=profit_drawdown_ratio,
+            planned_stop_risk_pct=position.planned_stop_risk_pct,
+            planned_first_target_return_pct=position.planned_first_target_return_pct,
+            planned_reward_risk_ratio=position.planned_reward_risk_ratio,
+            max_intratrade_drawdown_budget_pct=(
+                position.max_intratrade_drawdown_budget_pct
+            ),
+            entry_turnover_quality_score=position.entry_turnover_quality_score,
+            entry_turnover_quality_label=position.entry_turnover_quality_label,
+            entry_turnover_quality_notes=position.entry_turnover_quality_notes,
+            **self._entry_guard_position_fields(position),
         )
         account = PaperAccount(
             account_id=account.account_id,
@@ -486,6 +605,9 @@ class PaperTradeStore:
                 exit_plan=position.exit_plan,
                 mainline_continuity=position.mainline_continuity,
                 peak_price=position.peak_price,
+                trough_price=position.trough_price,
+                **self._planned_position_fields(position),
+                **self._entry_evidence_position_fields(position),
             )
             for position in account.positions
         )
@@ -557,6 +679,7 @@ class PaperTradeStore:
             )
         position = account.positions[0]
         peak_price = max(position.peak_price or position.entry_price, latest_price)
+        trough_price = min(position.trough_price or position.entry_price, latest_price)
         value = round(position.quantity * latest_price, 2)
         pnl = round((latest_price - position.entry_price) * position.quantity, 2)
         pnl_pct = round((latest_price - position.entry_price) / position.entry_price, 4)
@@ -579,6 +702,14 @@ class PaperTradeStore:
             exit_plan=position.exit_plan,
             mainline_continuity=position.mainline_continuity,
             peak_price=round(peak_price, 2),
+            trough_price=round(trough_price, 2),
+            planned_stop_risk_pct=position.planned_stop_risk_pct,
+            planned_first_target_return_pct=position.planned_first_target_return_pct,
+            planned_reward_risk_ratio=position.planned_reward_risk_ratio,
+            max_intratrade_drawdown_budget_pct=(
+                position.max_intratrade_drawdown_budget_pct
+            ),
+            **self._entry_evidence_position_fields(position),
         )
         return PaperAccount(
             account_id=account.account_id,
@@ -594,167 +725,157 @@ class PaperTradeStore:
             closed_trades=account.closed_trades,
         )
 
-    def _empty_account(self) -> PaperAccount:
-        return PaperAccount(
-            account_id="one-to-two-paper",
-            last_trade_date="",
-            cash=self._initial_cash,
-            initial_cash=self._initial_cash,
-            equity=self._initial_cash,
-            max_position_pct=self._max_position_pct,
-            max_daily_trades=self._max_daily_trades,
-            daily_trade_count=0,
-            positions=(),
-            events=(),
-            closed_trades=(),
+    def _trade_excursion_quality(
+        self,
+        position: PaperPosition,
+        exit_price: float,
+        realized_pnl_pct: float,
+    ) -> tuple[float, float, float]:
+        peak_price = max(position.peak_price or position.entry_price, exit_price)
+        trough_price = min(position.trough_price or position.entry_price, exit_price)
+        max_favorable_pct = round(
+            max(0.0, (peak_price - position.entry_price) / position.entry_price),
+            4,
+        )
+        max_adverse_pct = round(
+            max(0.0, (position.entry_price - trough_price) / position.entry_price),
+            4,
+        )
+        return (
+            max_favorable_pct,
+            max_adverse_pct,
+            self._profit_drawdown_ratio(realized_pnl_pct, max_adverse_pct),
         )
 
-    def _to_payload(self, account: PaperAccount) -> dict[str, Any]:
+    @staticmethod
+    def _profit_drawdown_ratio(realized_pnl_pct: float, max_adverse_pct: float) -> float:
+        if realized_pnl_pct <= 0:
+            return 0.0
+        if max_adverse_pct <= 0:
+            return 99.0
+        return round(realized_pnl_pct / max_adverse_pct, 4)
+
+    @staticmethod
+    def _planned_stop_risk_pct(candidate: OneToTwoCandidate) -> float:
+        if candidate.entry_price <= 0:
+            return 0.0
+        return round(
+            max(0.0, (candidate.entry_price - candidate.stop_loss) / candidate.entry_price),
+            4,
+        )
+
+    @staticmethod
+    def _planned_first_target_return_pct(candidate: OneToTwoCandidate) -> float:
+        if candidate.entry_price <= 0 or candidate.exit_plan is None:
+            return 0.0
+        return round(
+            max(
+                0.0,
+                (
+                    candidate.exit_plan.first_take_profit_price
+                    - candidate.entry_price
+                )
+                / candidate.entry_price,
+            ),
+            4,
+        )
+
+    def _planned_reward_risk_ratio(self, candidate: OneToTwoCandidate) -> float:
+        risk_pct = self._planned_stop_risk_pct(candidate)
+        reward_pct = self._planned_first_target_return_pct(candidate)
+        if risk_pct <= 0:
+            return 0.0
+        return round(reward_pct / risk_pct, 4)
+
+    def _max_intratrade_drawdown_budget_pct(
+        self,
+        candidate: OneToTwoCandidate,
+    ) -> float:
+        # The first target must be able to pay for the process drawdown.
+        return self._planned_first_target_return_pct(candidate)
+
+    @staticmethod
+    def _planned_position_fields(position: PaperPosition) -> dict[str, float]:
         return {
-            "account_id": account.account_id,
-            "last_trade_date": account.last_trade_date,
-            "cash": account.cash,
-            "initial_cash": account.initial_cash,
-            "equity": account.equity,
-            "max_position_pct": account.max_position_pct,
-            "max_daily_trades": account.max_daily_trades,
-            "daily_trade_count": account.daily_trade_count,
-            "positions": [contract_to_dict(position) for position in account.positions],
-            "events": [
-                event.__dict__ | {"event_type": event.event_type.value}
-                for event in account.events
-            ],
-            "closed_trades": [record.__dict__ for record in account.closed_trades],
+            "planned_stop_risk_pct": position.planned_stop_risk_pct,
+            "planned_first_target_return_pct": (
+                position.planned_first_target_return_pct
+            ),
+            "planned_reward_risk_ratio": position.planned_reward_risk_ratio,
+            "max_intratrade_drawdown_budget_pct": (
+                position.max_intratrade_drawdown_budget_pct
+            ),
         }
 
-    def _from_payload(self, payload: dict[str, Any]) -> PaperAccount:
-        last_trade_date = str(
-            payload.get("last_trade_date")
-            or self._infer_last_trade_date(payload)
-            or ""
-        )
-        return PaperAccount(
-            account_id=str(payload["account_id"]),
-            last_trade_date=last_trade_date,
-            cash=float(payload["cash"]),
-            initial_cash=float(payload["initial_cash"]),
-            equity=float(payload["equity"]),
-            max_position_pct=float(payload["max_position_pct"]),
-            max_daily_trades=int(payload["max_daily_trades"]),
-            daily_trade_count=int(payload["daily_trade_count"]),
-            positions=tuple(
-                PaperPosition(
-                    symbol=str(item["symbol"]),
-                    name=str(item["name"]),
-                    quantity=int(item["quantity"]),
-                    entry_price=float(item["entry_price"]),
-                    latest_price=float(item["latest_price"]),
-                    stop_loss=float(item["stop_loss"]),
-                    position_value=float(item["position_value"]),
-                    unrealized_pnl=float(item["unrealized_pnl"]),
-                    unrealized_pnl_pct=float(item["unrealized_pnl_pct"]),
-                    opened_at=str(item["opened_at"]),
-                    position_label=str(item.get("position_label") or "未标记样本"),
-                    opened_score=float(item.get("opened_score", 0.0)),
-                    can_sell_today=bool(item["can_sell_today"]),
-                    status=PaperTradeStatus(str(item["status"])),
-                    risk_note=str(item["risk_note"]),
-                    exit_plan=self._exit_plan_from_payload(item.get("exit_plan")),
-                    mainline_continuity=self._continuity_from_payload(
-                        item.get("mainline_continuity")
-                    ),
-                    peak_price=float(item.get("peak_price", item["latest_price"])),
-                )
-                for item in payload.get("positions", ())
-            ),
-            events=tuple(
-                PaperTradeEvent(
-                    event_id=str(item["event_id"]),
-                    event_type=OneToTwoEventType(str(item["event_type"])),
-                    symbol=str(item["symbol"]),
-                    name=str(item["name"]),
-                    trade_date=str(item["trade_date"]),
-                    price=float(item["price"]),
-                    quantity=int(item["quantity"]),
-                    amount=float(item["amount"]),
-                    message=str(item["message"]),
-                    created_at=str(item["created_at"]),
-                )
-                for item in payload.get("events", ())
-            ),
-            closed_trades=tuple(
-                PaperTradeRecord(
-                    trade_id=str(item["trade_id"]),
-                    symbol=str(item["symbol"]),
-                    name=str(item["name"]),
-                    opened_at=str(item["opened_at"]),
-                    closed_at=str(item["closed_at"]),
-                    entry_price=float(item["entry_price"]),
-                    exit_price=float(item["exit_price"]),
-                    quantity=int(item["quantity"]),
-                    entry_amount=float(item["entry_amount"]),
-                    exit_amount=float(item["exit_amount"]),
-                    realized_pnl=float(item["realized_pnl"]),
-                    realized_pnl_pct=float(item["realized_pnl_pct"]),
-                    holding_trade_days=int(item["holding_trade_days"]),
-                    exit_reason=str(item["exit_reason"]),
-                    position_label=str(item["position_label"]),
-                    success=bool(item["success"]),
-                    warning_count=int(item["warning_count"]),
-                )
-                for item in payload.get("closed_trades", ())
-            ),
+    @staticmethod
+    def _entry_evidence_position_fields(position: PaperPosition) -> dict[str, Any]:
+        return (
+            PaperTradeStore._entry_quality_position_fields(position)
+            | PaperTradeStore._entry_guard_position_fields(position)
         )
 
-    def _exit_plan_from_payload(self, payload: Any) -> OneToTwoExitPlan | None:
-        if not isinstance(payload, dict):
-            return None
-        return OneToTwoExitPlan(
-            stop_loss=float(payload["stop_loss"]),
-            stop_loss_pct=float(payload["stop_loss_pct"]),
-            first_take_profit_price=float(payload["first_take_profit_price"]),
-            first_take_profit_pct=float(payload["first_take_profit_pct"]),
-            strong_take_profit_price=float(payload["strong_take_profit_price"]),
-            strong_take_profit_pct=float(payload["strong_take_profit_pct"]),
-            trailing_stop_pct=float(payload["trailing_stop_pct"]),
-            max_holding_trade_days=int(payload["max_holding_trade_days"]),
-            summary=str(payload["summary"]),
-        )
+    @staticmethod
+    def _entry_quality_position_fields(position: PaperPosition) -> dict[str, Any]:
+        return {
+            "entry_turnover_quality_score": position.entry_turnover_quality_score,
+            "entry_turnover_quality_label": position.entry_turnover_quality_label,
+            "entry_turnover_quality_notes": position.entry_turnover_quality_notes,
+        }
 
-    def _continuity_from_payload(self, payload: Any) -> MainlineContinuity | None:
-        if not isinstance(payload, dict):
-            return None
-        return MainlineContinuity(
-            theme=str(payload["theme"]),
-            score=float(payload["score"]),
-            status=str(payload["status"]),
-            hot_stock_count=int(payload["hot_stock_count"]),
-            limit_up_count=int(payload["limit_up_count"]),
-            news_count=int(payload["news_count"]),
-            latest_news=tuple(
-                MainlineNewsItem(
-                    title=str(item["title"]),
-                    source=str(item["source"]),
-                    published_at=str(item["published_at"]),
-                    related_symbols=tuple(str(symbol) for symbol in item.get("related_symbols", ())),
-                    url=str(item.get("url", "")),
-                )
-                for item in payload.get("latest_news", ())
+    @staticmethod
+    def _entry_guard_fields(
+        guard_decision: PaperTradingGuardDecision | None,
+    ) -> dict[str, Any]:
+        if guard_decision is None:
+            return {
+                "entry_guard_status": "",
+                "entry_guard_action": "",
+                "entry_guard_suggested_position_pct": 0.0,
+                "entry_guard_reason": "",
+                "entry_guard_quality_bucket": "",
+                "entry_guard_quality_sample_count": 0,
+                "entry_guard_quality_win_rate": 0.0,
+                "entry_guard_quality_average_return_pct": 0.0,
+                "entry_guard_quality_pass_rate": 0.0,
+            }
+        return {
+            "entry_guard_status": guard_decision.status,
+            "entry_guard_action": guard_decision.action,
+            "entry_guard_suggested_position_pct": (
+                guard_decision.suggested_position_pct
             ),
-            reasons=tuple(str(item) for item in payload.get("reasons", ())),
-            risk_notes=tuple(str(item) for item in payload.get("risk_notes", ())),
-            next_action=str(payload["next_action"]),
-        )
+            "entry_guard_reason": (
+                guard_decision.reasons[0] if guard_decision.reasons else ""
+            ),
+            "entry_guard_quality_bucket": guard_decision.candidate_quality_bucket,
+            "entry_guard_quality_sample_count": (
+                guard_decision.candidate_quality_sample_count
+            ),
+            "entry_guard_quality_win_rate": guard_decision.candidate_quality_win_rate,
+            "entry_guard_quality_average_return_pct": (
+                guard_decision.candidate_quality_average_return_pct
+            ),
+            "entry_guard_quality_pass_rate": (
+                guard_decision.candidate_quality_risk_quality_pass_rate
+            ),
+        }
 
-    def _infer_last_trade_date(self, payload: dict[str, Any]) -> str:
-        dates = [
-            str(item.get("trade_date", ""))
-            for item in payload.get("events", ())
-            if item.get("trade_date")
-        ]
-        dates.extend(
-            str(item.get("opened_at", ""))
-            for item in payload.get("positions", ())
-            if item.get("opened_at")
-        )
-        return max(dates, default="")
+    @staticmethod
+    def _entry_guard_position_fields(position: PaperPosition) -> dict[str, Any]:
+        return {
+            "entry_guard_status": position.entry_guard_status,
+            "entry_guard_action": position.entry_guard_action,
+            "entry_guard_suggested_position_pct": (
+                position.entry_guard_suggested_position_pct
+            ),
+            "entry_guard_reason": position.entry_guard_reason,
+            "entry_guard_quality_bucket": position.entry_guard_quality_bucket,
+            "entry_guard_quality_sample_count": (
+                position.entry_guard_quality_sample_count
+            ),
+            "entry_guard_quality_win_rate": position.entry_guard_quality_win_rate,
+            "entry_guard_quality_average_return_pct": (
+                position.entry_guard_quality_average_return_pct
+            ),
+            "entry_guard_quality_pass_rate": position.entry_guard_quality_pass_rate,
+        }

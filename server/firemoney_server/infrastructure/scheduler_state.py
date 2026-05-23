@@ -1,50 +1,17 @@
-"""Local scheduler state persistence for the one-to-two workflow."""
+"""FireMoney scheduler state persistence."""
 
 from __future__ import annotations
 
-import json
-from json import JSONDecodeError
 from pathlib import Path
+
+from framework.scheduler import CompletedTaskStateStore
 
 
 DEFAULT_SCHEDULER_STATE_PATH = Path(".firemoney") / "scheduler_state.json"
 
 
-class SchedulerStateStore:
+class SchedulerStateStore(CompletedTaskStateStore):
     """Persists completed scheduler task keys to prevent duplicate runs."""
 
     def __init__(self, path: str | Path = DEFAULT_SCHEDULER_STATE_PATH) -> None:
-        self._path = Path(path)
-
-    @property
-    def path(self) -> Path:
-        return self._path
-
-    def load(self) -> tuple[str, ...]:
-        return tuple(sorted(self._load()))
-
-    def is_done(self, task_key: str) -> bool:
-        return task_key in self._load()
-
-    def mark_done(self, task_key: str) -> None:
-        done = self._load()
-        if task_key in done:
-            return
-        done.add(task_key)
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps({"completed": sorted(done)}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-    def _load(self) -> set[str]:
-        if not self._path.exists():
-            return set()
-        try:
-            payload = json.loads(self._path.read_text(encoding="utf-8"))
-        except (JSONDecodeError, OSError, TypeError, ValueError):
-            return set()
-        completed = payload.get("completed", ())
-        if not isinstance(completed, list):
-            return set()
-        return {str(item) for item in completed}
+        super().__init__(path, key="completed")

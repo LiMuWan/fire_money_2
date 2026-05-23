@@ -3,96 +3,22 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
-from typing import Protocol
+from dataclasses import replace
 
 from shared.contracts import (
+    BreakoutStructureProfile,
     MainlineContinuity,
     OneToTwoExitPlan,
     OneToTwoCandidate,
     OneToTwoPositionProfile,
 )
-
-
-@dataclass(frozen=True)
-class OneToTwoMarketRow:
-    symbol: str
-    name: str
-    trade_date: str
-    board: str
-    is_st: bool
-    is_delisting: bool
-    listing_days: int
-    latest_price: float
-    previous_close: float
-    limit_up_price: float
-    first_limit_up_time: str
-    sealed_amount: float
-    turnover_amount: float
-    turnover_rate: float
-    open_pct: float
-    auction_amount: float
-    low_20: float
-    high_60: float
-    pressure_price: float
-    ma_5: float
-    ma_10: float
-    ma_20: float
-    recent_gain_pct: float
-    theme: str
-    market_temperature: int
-    first_board_count: int = 0
-    volume_ratio_5: float = 1.5
-    rsi_14: float = 65.0
-    position_percentile_60: float = 0.75
-
-
-@dataclass(frozen=True)
-class HistoricalPriceBar:
-    trade_date: str
-    open_price: float
-    high_price: float
-    low_price: float
-    close_price: float
-    volume: float = 0.0
-    amount: float = 0.0
-
-
-class OneToTwoSettings(Protocol):
-    min_score: int
-    max_execution_score: float
-    max_position_pct: float
-    stop_loss_pct: float
-    min_confirm_open_pct: float
-    max_confirm_open_pct: float
-    min_turnover_amount: float
-    liquidity_score_amount: float
-    market_temperature_floor: int
-    high_deviation_block_pct: float
-    recent_gain_block_pct: float
-    near_pressure_pct: float
-    min_sealed_amount_ratio: float
-    min_leader_score: float
-    min_mainline_score: float
-    min_volume_ratio_5: float
-    min_rsi_14: float
-    max_rsi_14: float
-    min_position_percentile_60: float
-    min_low_breakout_first_board_count: int
-    min_low_breakout_ready_candidates: int
-    max_ready_candidates: int
-    allowed_position_labels: tuple[str, ...]
-    selection_rank: str
-    board_strategy_enabled: bool
-    first_take_profit_pct: float
-    strong_take_profit_pct: float
-    trailing_stop_pct: float
-    max_holding_trade_days: int
-    exclude_st: bool
-    exclude_delisting: bool
-    exclude_new_stock_days: int
-    excluded_boards: tuple[str, ...]
-
+from server.firemoney_server.domain.one_to_two_types import (
+    HistoricalPriceBar,
+    IntradayPriceBar,
+    OneToTwoMarketRow,
+    OneToTwoSettings,
+    TickSnapshot,
+)
 
 class OneToTwoPolicy:
     """Scores yesterday's first boards for next-day mainboard one-to-two review."""
@@ -207,6 +133,7 @@ class OneToTwoPolicy:
     ) -> tuple[float, ...]:
         return (
             candidate.score,
+            candidate.turnover_quality_score,
             row.turnover_amount,
             self._position_rank(candidate.position_profile),
             -abs(row.open_pct - 0.025),
@@ -222,8 +149,6 @@ class OneToTwoPolicy:
         return 0.0
 
     def _candidate_from_row(self, row: OneToTwoMarketRow) -> OneToTwoCandidate:
-        blockers = self._blockers(row)
-        warnings = self._warnings(row)
         first_board_score = self._first_board_score(row)
         auction_score = self._auction_score(row)
         position_profile = self._position_profile(row)
@@ -232,6 +157,23 @@ class OneToTwoPolicy:
         mainline_score = self._mainline_score(row, position_profile)
         sealing_score = self._sealing_score(row)
         leader_score = self._leader_score(row, position_profile)
+        breakout_structure = self._breakout_structure_profile(row, position_profile)
+        turnover_quality_score, turnover_quality_label, turnover_quality_notes = (
+            self._turnover_dragon_quality(row, position_profile)
+        )
+        blockers = self._blockers(
+            row,
+            position_profile=position_profile,
+            mainline_score=mainline_score,
+            leader_score=leader_score,
+            turnover_quality_score=turnover_quality_score,
+            breakout_structure=breakout_structure,
+        )
+        warnings = self._warnings(
+            row,
+            turnover_quality_score=turnover_quality_score,
+            turnover_quality_notes=turnover_quality_notes,
+        )
         execution_score = self._execution_score(
             first_board_score=first_board_score,
             auction_score=auction_score,
@@ -308,10 +250,18 @@ class OneToTwoPolicy:
                 leader_score,
                 sealing_score,
                 mainline_score,
+                turnover_quality_score,
             ),
             discipline_summary=self._discipline_summary(row, exit_plan),
             exit_plan=exit_plan,
             mainline_continuity=continuity,
+            turnover_quality_score=turnover_quality_score,
+            turnover_quality_label=turnover_quality_label,
+            turnover_quality_notes=turnover_quality_notes,
+            market_cap=round(row.market_cap, 2),
+            float_market_cap=round(row.float_market_cap, 2),
+            market_cap_source=self._market_cap_source(row),
+            breakout_structure=breakout_structure,
         )
 
     def _execution_score(
@@ -350,7 +300,16 @@ class OneToTwoPolicy:
             )
         return warnings
 
-    def _blockers(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
+    def _blockers(
+        self,
+        row: OneToTwoMarketRow,
+        *,
+        position_profile: OneToTwoPositionProfile,
+        mainline_score: float,
+        leader_score: float,
+        turnover_quality_score: float,
+        breakout_structure: BreakoutStructureProfile,
+    ) -> tuple[str, ...]:
         blockers: list[str] = []
         if row.board in self._settings.excluded_boards:
             blockers.append(f"{row.board} 不在主板 10cm 一进二范围内")
@@ -362,10 +321,29 @@ class OneToTwoPolicy:
             blockers.append("新股前 5 个交易日不参与")
         if row.turnover_amount < self._settings.min_turnover_amount:
             blockers.append("成交额低于流动性门槛")
+        effective_market_cap = self._effective_market_cap(row)
+        if effective_market_cap <= 0:
+            blockers.append("缺少总市值/流通市值，不能确认 50-800 亿市值带")
+        elif effective_market_cap < self._settings.min_market_cap:
+            blockers.append(
+                f"市值低于 {self._format_yi(self._settings.min_market_cap)} 亿，"
+                "不做流动性过弱的小票"
+            )
+        elif effective_market_cap > self._settings.max_market_cap:
+            blockers.append(
+                f"市值高于 {self._format_yi(self._settings.max_market_cap)} 亿，"
+                "不做弹性不足的大票"
+            )
         if self._settings.board_strategy_enabled and row.turnover_amount > 0:
             sealed_ratio = row.sealed_amount / row.turnover_amount
             if sealed_ratio < self._settings.min_sealed_amount_ratio:
                 blockers.append("封板资金不足，不能作为主线首板龙头候选")
+            if sealed_ratio < self._settings.min_turnover_dragon_sealed_ratio:
+                blockers.append("换手龙封单/成交额不足，炸板风险过高")
+        if row.turnover_rate < self._settings.min_turnover_dragon_turnover_rate:
+            blockers.append("换手不足，资金接力不够，不能作为换手龙买点")
+        if row.turnover_rate > self._settings.max_turnover_dragon_turnover_rate:
+            blockers.append("换手过高，疑似分歧过大，换手龙买点失效")
         if row.open_pct < self._settings.min_confirm_open_pct:
             blockers.append("次日确认未红盘开，产品算法不进入模拟买入")
         if row.open_pct > self._settings.max_confirm_open_pct:
@@ -394,20 +372,51 @@ class OneToTwoPolicy:
             blockers.append("RSI 过热，短线追高风险偏高")
         if row.position_percentile_60 < self._settings.min_position_percentile_60:
             blockers.append("60 日位置分位过低，突破持续性不足")
-        position_profile = self._position_profile(row)
         if not self._position_label_allowed(position_profile.label):
             blockers.append("位置一般，不符合低位/突破一进二核心买点")
-        if self._mainline_score(row, position_profile) < self._settings.min_mainline_score:
+        if mainline_score < self._settings.min_mainline_score:
             blockers.append("主线首板强度不足，先不进入模拟盘")
-        if self._leader_score(row, position_profile) < self._settings.min_leader_score:
+        if leader_score < self._settings.min_leader_score:
             blockers.append("龙头候选辨识度不足，避免普通跟风票")
+        if turnover_quality_score < self._settings.min_turnover_dragon_score:
+            blockers.append(
+                f"换手龙质量 {turnover_quality_score:.0f}/100 未达 "
+                f"{self._settings.min_turnover_dragon_score:.0f}，不做启动前买点"
+            )
+        if not breakout_structure.passed:
+            blockers.append(
+                f"结构突破评分 {breakout_structure.score:.0f}/100 未达 "
+                f"{self._settings.min_breakout_structure_score:.0f}，不做弱结构买点"
+            )
         return tuple(blockers)
+
+    @staticmethod
+    def _effective_market_cap(row: OneToTwoMarketRow) -> float:
+        return row.market_cap or row.float_market_cap
+
+    @staticmethod
+    def _market_cap_source(row: OneToTwoMarketRow) -> str:
+        if row.market_cap > 0:
+            return "total"
+        if row.float_market_cap > 0:
+            return "float"
+        return "missing"
+
+    @staticmethod
+    def _format_yi(value: float) -> str:
+        return f"{value / 100_000_000:.0f}"
 
     def _position_label_allowed(self, label: str) -> bool:
         allowed = self._settings.allowed_position_labels
         return not allowed or label in allowed
 
-    def _warnings(self, row: OneToTwoMarketRow) -> tuple[str, ...]:
+    def _warnings(
+        self,
+        row: OneToTwoMarketRow,
+        *,
+        turnover_quality_score: float,
+        turnover_quality_notes: tuple[str, ...],
+    ) -> tuple[str, ...]:
         warnings: list[str] = ["严格 T+1：当天买入后跌破止损只预警，次日才模拟卖出"]
         if row.open_pct > self._settings.max_confirm_open_pct:
             warnings.append("竞价/开盘涨幅偏高，防止高开兑现")
@@ -419,6 +428,9 @@ class OneToTwoPolicy:
             sealed_ratio = row.sealed_amount / row.turnover_amount
             if sealed_ratio < self._settings.min_sealed_amount_ratio * 1.5:
                 warnings.append("封板资金刚过线，盘中炸板风险需要重点盯")
+        if turnover_quality_score < self._settings.min_turnover_dragon_score + 8:
+            warnings.append("换手龙质量刚过线，必须等开盘承接继续确认")
+        warnings.extend(turnover_quality_notes[:2])
         warnings.append(f"资金风格代理：{self._capital_style_label(row)}")
         return tuple(warnings)
 
@@ -504,6 +516,128 @@ class OneToTwoPolicy:
             + profile.volume_score
         )
 
+    def _breakout_structure_profile(
+        self,
+        row: OneToTwoMarketRow,
+        profile: OneToTwoPositionProfile,
+    ) -> BreakoutStructureProfile:
+        breakout_line = row.high_60 or row.pressure_price or row.ma_20 or row.latest_price
+        distance_pct = (
+            max((row.latest_price - breakout_line) / breakout_line, 0.0)
+            if breakout_line
+            else 0.0
+        )
+        base_tightness_score = self._base_tightness_score(row)
+        volume_surge_score = self._volume_surge_score(row)
+        overhead_supply_score = self._overhead_supply_score(row)
+        relative_strength_score = self._relative_strength_score(row, profile)
+        score = round(
+            min(
+                100.0,
+                base_tightness_score
+                + volume_surge_score
+                + overhead_supply_score
+                + relative_strength_score,
+            ),
+            2,
+        )
+        risk_notes: list[str] = []
+        if distance_pct > self._settings.max_breakout_entry_distance_pct:
+            risk_notes.append(
+                f"买点距离突破线 {distance_pct:.1%}，超过 "
+                f"{self._settings.max_breakout_entry_distance_pct:.1%} 容忍线"
+            )
+        if row.volume_ratio_5 < self._settings.min_breakout_volume_ratio:
+            risk_notes.append(
+                f"突破量比 {row.volume_ratio_5:.2f} 低于 "
+                f"{self._settings.min_breakout_volume_ratio:.2f}"
+            )
+        if overhead_supply_score < 16:
+            risk_notes.append("左侧压力没有完全打开，突破后容易回落验证。")
+        if base_tightness_score < 18:
+            risk_notes.append("平台紧凑度不足，不是最干净的强势整理。")
+        passed = (
+            score >= self._settings.min_breakout_structure_score
+            and distance_pct <= self._settings.max_breakout_entry_distance_pct
+            and row.volume_ratio_5 >= self._settings.min_breakout_volume_ratio
+        )
+        label = (
+            "强结构突破"
+            if passed and score >= 82
+            else "有效结构突破"
+            if passed
+            else "结构突破不足"
+        )
+        summary = (
+            f"{label} {score:.0f}/100，突破线 {breakout_line:.2f}，"
+            f"距突破线 {distance_pct:.1%}，量比 {row.volume_ratio_5:.2f}"
+        )
+        return BreakoutStructureProfile(
+            score=score,
+            label=label,
+            breakout_line=round(breakout_line, 2),
+            distance_pct=round(distance_pct, 4),
+            base_tightness_score=round(base_tightness_score, 2),
+            volume_surge_score=round(volume_surge_score, 2),
+            overhead_supply_score=round(overhead_supply_score, 2),
+            relative_strength_score=round(relative_strength_score, 2),
+            passed=passed,
+            summary=summary,
+            risk_notes=tuple(risk_notes),
+        )
+
+    def _base_tightness_score(self, row: OneToTwoMarketRow) -> float:
+        if not row.low_20 or not row.latest_price:
+            return 10.0
+        range_pct = max((row.latest_price - row.low_20) / row.low_20, 0.0)
+        if range_pct <= 0.12:
+            return 28.0
+        if range_pct <= 0.20:
+            return 24.0
+        if range_pct <= 0.28:
+            return 18.0
+        return 10.0
+
+    def _volume_surge_score(self, row: OneToTwoMarketRow) -> float:
+        ratio = row.volume_ratio_5
+        if 1.5 <= ratio <= 3.5:
+            return 24.0
+        if ratio >= self._settings.min_breakout_volume_ratio:
+            return 18.0
+        if ratio >= self._settings.min_volume_ratio_5:
+            return 10.0
+        return 4.0
+
+    def _overhead_supply_score(self, row: OneToTwoMarketRow) -> float:
+        if not row.pressure_price or not row.latest_price:
+            return 18.0
+        pressure_distance = (row.pressure_price - row.latest_price) / row.latest_price
+        if pressure_distance > 0.12:
+            return 24.0
+        if pressure_distance > self._settings.near_pressure_pct:
+            return 18.0
+        if pressure_distance >= 0:
+            return 8.0
+        return 22.0
+
+    def _relative_strength_score(
+        self,
+        row: OneToTwoMarketRow,
+        profile: OneToTwoPositionProfile,
+    ) -> float:
+        score = 8.0
+        if profile.breakout_score >= 7:
+            score += 10.0
+        if row.position_percentile_60 >= 0.75:
+            score += 8.0
+        elif row.position_percentile_60 >= self._settings.min_position_percentile_60:
+            score += 5.0
+        if 0.08 <= row.recent_gain_pct <= 0.35:
+            score += 6.0
+        elif row.recent_gain_pct < self._settings.recent_gain_block_pct:
+            score += 3.0
+        return min(score, 24.0)
+
     def _theme_score(self, row: OneToTwoMarketRow) -> float:
         if row.theme:
             return 12.0 if row.market_temperature >= 70 else 9.0
@@ -580,6 +714,101 @@ class OneToTwoPolicy:
             score += 2.0
         return min(score, 20.0)
 
+    def _turnover_dragon_quality(
+        self,
+        row: OneToTwoMarketRow,
+        profile: OneToTwoPositionProfile,
+    ) -> tuple[float, str, tuple[str, ...]]:
+        sealed_ratio = row.sealed_amount / row.turnover_amount if row.turnover_amount else 0.0
+        auction_ratio = row.auction_amount / row.turnover_amount if row.turnover_amount else 0.0
+        score = 0.0
+        notes: list[str] = []
+
+        if (
+            self._settings.min_turnover_dragon_turnover_rate
+            <= row.turnover_rate
+            <= self._settings.max_turnover_dragon_turnover_rate
+        ):
+            score += 20.0
+        elif row.turnover_rate > 0:
+            score += 8.0
+            notes.append("换手不在有效接力区间")
+
+        if sealed_ratio >= 0.15:
+            score += 20.0
+        elif sealed_ratio >= self._settings.min_turnover_dragon_sealed_ratio:
+            score += 16.0
+        elif sealed_ratio >= self._settings.min_sealed_amount_ratio:
+            score += 8.0
+            notes.append("封单/成交额刚过最低线")
+        else:
+            notes.append("封单/成交额不足")
+
+        if row.first_limit_up_time and row.first_limit_up_time <= "10:00":
+            score += 16.0
+        elif row.first_limit_up_time and row.first_limit_up_time <= "10:30":
+            score += 12.0
+        elif row.first_limit_up_time:
+            score += 5.0
+            notes.append("首封时间偏晚")
+        else:
+            notes.append("缺少首封时间，换手质量只能降级评估")
+
+        if auction_ratio >= 0.04:
+            score += 12.0
+        elif auction_ratio >= self._settings.min_turnover_dragon_auction_ratio:
+            score += 8.0
+        elif row.auction_amount > 0:
+            score += 4.0
+            notes.append("竞价成交占比偏低")
+        else:
+            notes.append("缺少竞价成交额")
+
+        if row.market_temperature >= 70 and row.theme:
+            score += 12.0
+        elif row.market_temperature >= self._settings.market_temperature_floor:
+            score += 7.0
+        else:
+            notes.append("市场温度不足，换手持续性打折")
+
+        if row.volume_ratio_5 >= 1.5:
+            score += 8.0
+        elif row.volume_ratio_5 >= self._settings.min_volume_ratio_5:
+            score += 5.0
+        else:
+            notes.append("量比不足")
+
+        if self._settings.min_rsi_14 <= row.rsi_14 <= min(78.0, self._settings.max_rsi_14):
+            score += 6.0
+        elif self._settings.min_rsi_14 <= row.rsi_14 <= self._settings.max_rsi_14:
+            score += 3.0
+            notes.append("RSI 偏热，启动买点安全垫变薄")
+        else:
+            notes.append("RSI 不在健康区间")
+
+        if (
+            profile.low_position_score >= 8
+            or profile.breakout_score >= 7
+            or row.position_percentile_60 >= 0.7
+        ):
+            score += 6.0
+        else:
+            notes.append("位置结构不够像主升启动前")
+
+        score = round(min(score, 100.0), 2)
+        label = (
+            "强换手龙买点"
+            if score >= 86
+            else "有效换手龙买点"
+            if score >= self._settings.min_turnover_dragon_score
+            else "换手质量不足"
+        )
+        summary = (
+            f"换手质量 {score:.0f}/100，换手 {row.turnover_rate:.1f}%，"
+            f"封单/成交额 {sealed_ratio:.1%}，竞价占比 {auction_ratio:.1%}"
+        )
+        return score, label, tuple(dict.fromkeys((summary, *notes)))
+
     def _leader_label(
         self,
         leader_score: float,
@@ -599,10 +828,15 @@ class OneToTwoPolicy:
         leader_score: float,
         sealing_score: float,
         mainline_score: float,
+        turnover_quality_score: float,
     ) -> tuple[str, ...]:
         tags: list[str] = [
             self._leader_label(leader_score, sealing_score, mainline_score)
         ]
+        if turnover_quality_score >= 86:
+            tags.append("强换手龙")
+        elif turnover_quality_score >= self._settings.min_turnover_dragon_score:
+            tags.append("有效换手龙")
         if sealing_score >= 18:
             tags.append("封板纪律达标")
         if mainline_score >= 18:
@@ -725,7 +959,8 @@ class OneToTwoPolicy:
         return (
             f"封板资金占比 {sealed_ratio:.1%}；只做非一字、封板确认后的主线首板候选，"
             f"量比 {row.volume_ratio_5:.2f}、RSI {row.rsi_14:.1f}、"
-            f"60日位置 {row.position_percentile_60:.0%}、{self._capital_style_label(row)}；"
+            f"换手 {row.turnover_rate:.1f}%、60日位置 {row.position_percentile_60:.0%}、"
+            f"{self._capital_style_label(row)}；"
             f"次日一进二只作为确认点，模拟盘严格 T+1；{exit_plan.summary}"
         )
 

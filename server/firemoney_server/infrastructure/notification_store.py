@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
-from json import JSONDecodeError
 from pathlib import Path
 from time import strftime
 from typing import Any, Callable
 
+from framework.storage import AppendOnlyJsonRecordStore
 from shared.contracts import (
     FeishuNotificationResult,
     NotificationRecord,
@@ -26,12 +25,12 @@ class NotificationRecordStore:
         path: str | Path = DEFAULT_NOTIFICATION_STORE_PATH,
         created_at_provider: Callable[[], str] | None = None,
     ) -> None:
-        self._path = Path(path)
+        self._store = AppendOnlyJsonRecordStore(path, key="records", limit=200)
         self._created_at_provider = created_at_provider
 
     @property
     def path(self) -> Path:
-        return self._path
+        return self._store.path
 
     def append(
         self,
@@ -56,37 +55,17 @@ class NotificationRecordStore:
             created_at=created_at,
             error=result.error,
         )
-        records = (record, *self.load())[:200]
-        self._save(records)
+        self._store.prepend(self._to_payload(record))
         return record
 
     def load(self) -> tuple[NotificationRecord, ...]:
-        if not self._path.exists():
-            return ()
-        try:
-            payload = json.loads(self._path.read_text(encoding="utf-8"))
-        except (JSONDecodeError, OSError, TypeError, ValueError):
-            return ()
-        raw_records = payload.get("records", ())
-        if not isinstance(raw_records, list):
-            return ()
         records: list[NotificationRecord] = []
-        for item in raw_records:
-            if not isinstance(item, dict):
-                continue
+        for item in self._store.load():
             try:
                 records.append(self._from_payload(item))
             except (KeyError, TypeError, ValueError):
                 continue
         return tuple(records)
-
-    def _save(self, records: tuple[NotificationRecord, ...]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"records": [self._to_payload(record) for record in records]}
-        self._path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
 
     def _to_payload(self, record: NotificationRecord) -> dict[str, Any]:
         return {

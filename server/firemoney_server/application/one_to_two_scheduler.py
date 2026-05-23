@@ -24,7 +24,14 @@ class ScheduledOneToTwoJob:
 
 
 DEFAULT_ONE_TO_TWO_SCHEDULE: tuple[ScheduledOneToTwoJob, ...] = (
+    ScheduledOneToTwoJob(
+        "strategy-decision",
+        "strategy-decision",
+        "08:45",
+        expires_at="09:31",
+    ),
     ScheduledOneToTwoJob("morning", "morning", "08:50", expires_at="09:31"),
+    ScheduledOneToTwoJob("paper-decision", "paper-decision", "09:00", expires_at="09:31"),
     ScheduledOneToTwoJob("watch-scan", "watch", "09:20", "scan", "09:31"),
     ScheduledOneToTwoJob("watch-auction", "watch", "09:25", "auction", "09:31"),
     ScheduledOneToTwoJob("watch-open", "watch", "09:31", "open", "09:45"),
@@ -61,6 +68,7 @@ class OneToTwoScheduler:
         trade_date: str | None = None,
         at_time: str | None = None,
         notify: bool = True,
+        market_data_timeout_seconds: float | None = None,
     ) -> OneToTwoScheduleRun:
         requested_time = _normalize_time(at_time or datetime.now().strftime("%H:%M"))
         trade_context = self._service.resolve_trading_day(trade_date)
@@ -97,6 +105,44 @@ class OneToTwoScheduler:
             due_count += 1
             task_key = f"{trade_context.trade_date}:{job.task_id}"
             if self._state_store.is_done(task_key):
+                if _requires_sent_notification(job, notify) and not _is_expired(
+                    job,
+                    requested_time,
+                ):
+                    latest_notification = self._latest_notification_status(
+                        job.mode,
+                        trade_context.trade_date,
+                    )
+                    if latest_notification != NotificationStatus.SENT:
+                        task_results.append(
+                            _task_contract(
+                                job,
+                                status="retrying",
+                                message=(
+                                    "required notification was previously marked done "
+                                    "without sent confirmation; retrying inside window"
+                                ),
+                                notification_status=(
+                                    latest_notification
+                                    or NotificationStatus.PREPARED
+                                ),
+                            )
+                        )
+                    else:
+                        skipped_count += 1
+                        task_results.append(
+                            _task_contract(job, status="skipped", message="already completed")
+                        )
+                        continue
+                else:
+                    skipped_count += 1
+                    task_results.append(
+                        _task_contract(job, status="skipped", message="already completed")
+                    )
+                    continue
+            if task_results and task_results[-1].task_id == job.task_id and task_results[-1].status == "retrying":
+                task_results.pop()
+            elif self._state_store.is_done(task_key):
                 skipped_count += 1
                 task_results.append(
                     _task_contract(job, status="skipped", message="already completed")
@@ -114,7 +160,12 @@ class OneToTwoScheduler:
                 )
                 continue
             try:
-                result = self._run_job(job, trade_context.trade_date, notify)
+                result = self._run_job(
+                    job,
+                    trade_context.trade_date,
+                    notify,
+                    market_data_timeout_seconds,
+                )
             except Exception as exc:
                 task_results.append(
                     _task_contract(
@@ -125,14 +176,24 @@ class OneToTwoScheduler:
                     )
                 )
                 continue
-            self._state_store.mark_done(task_key)
+            notification_status = getattr(
+                getattr(result, "notification", None),
+                "status",
+                NotificationStatus.PREPARED,
+            )
+            notification_ready = (
+                not _requires_sent_notification(job, notify)
+                or notification_status == NotificationStatus.SENT
+            )
+            if notification_status != NotificationStatus.FAILED and notification_ready:
+                self._state_store.mark_done(task_key)
             executed_count += 1
             task_results.append(
                 _task_contract(
                     job,
                     status="completed",
                     message=getattr(result, "next_action", "completed"),
-                    notification_status=result.notification.status,
+                    notification_status=notification_status,
                 )
             )
 
@@ -148,29 +209,66 @@ class OneToTwoScheduler:
             next_action=_next_action(executed_count, skipped_count, due_count),
         )
 
-    def _run_job(self, job: ScheduledOneToTwoJob, trade_date: str, notify: bool):
+    def _run_job(
+        self,
+        job: ScheduledOneToTwoJob,
+        trade_date: str,
+        notify: bool,
+        market_data_timeout_seconds: float | None,
+    ):
+        if job.mode == "strategy-decision":
+            return self._service.build_strategy_decision_report(
+                trade_date=trade_date,
+            )
+        if job.mode == "paper-decision":
+            return self._service.build_paper_trading_decision_report(
+                trade_date=trade_date,
+                notify=False,
+                market_data_timeout_seconds=(
+                    market_data_timeout_seconds
+                    if market_data_timeout_seconds is not None
+                    else 8.0
+                ),
+            )
         if job.mode == "morning":
             return self._service.build_one_to_two_morning_report(
                 trade_date=trade_date,
                 notify=notify,
+                market_data_timeout_seconds=market_data_timeout_seconds,
             )
         if job.mode == "watch":
             return self._service.run_one_to_two_watch(
                 trade_date=trade_date,
                 phase=job.phase or "scan",
                 notify=notify,
+                market_data_timeout_seconds=market_data_timeout_seconds,
             )
         if job.mode == "eod":
             return self._service.build_one_to_two_end_of_day_review(
                 trade_date=trade_date,
                 notify=notify,
+                market_data_timeout_seconds=market_data_timeout_seconds,
             )
         if job.mode == "board-shadow-record":
             return self._service.run_scheduled_limit_up_board_shadow_record(
                 trade_date=trade_date,
-                notify=notify,
+                notify=False,
             )
         raise ValueError(f"unsupported scheduler mode: {job.mode}")
+
+    def _latest_notification_status(
+        self,
+        workflow: str,
+        trade_date: str,
+    ) -> NotificationStatus | None:
+        records = self._service.load_notification_records(
+            workflow=workflow,
+            limit=20,
+        )
+        for record in records:
+            if record.trade_date == trade_date:
+                return record.status
+        return None
 
 
 def _task_contract(
@@ -196,6 +294,12 @@ def _next_action(executed_count: int, skipped_count: int, due_count: int) -> str
     if skipped_count and skipped_count == due_count:
         return "All due one-to-two jobs were already completed for this trading day."
     return "No one-to-two jobs are due yet."
+
+
+def _requires_sent_notification(job: ScheduledOneToTwoJob, notify: bool) -> bool:
+    if not notify:
+        return False
+    return job.mode in {"morning", "eod"}
 
 
 def _is_expired(job: ScheduledOneToTwoJob, requested_time: str) -> bool:

@@ -65,6 +65,7 @@ class LimitUpBoardShadowStore:
             market_seal_count=report.candidate.market_seal_count,
             market_touch_count=report.candidate.market_touch_count,
             market_advance_ratio=report.candidate.market_advance_ratio,
+            suggested_position_pct=report.candidate.suggested_position_pct,
         )
         records = [item for item in self.load() if item.sample_id != sample.sample_id]
         records.insert(0, sample)
@@ -177,6 +178,7 @@ class LimitUpBoardShadowStore:
             "market_seal_count": sample.market_seal_count,
             "market_touch_count": sample.market_touch_count,
             "market_advance_ratio": sample.market_advance_ratio,
+            "suggested_position_pct": sample.suggested_position_pct,
         }
 
     def _from_payload(self, payload: dict[str, Any]) -> LimitUpBoardShadowSample:
@@ -201,6 +203,7 @@ class LimitUpBoardShadowStore:
             market_seal_count=int(payload.get("market_seal_count", 0)),
             market_touch_count=int(payload.get("market_touch_count", 0)),
             market_advance_ratio=float(payload.get("market_advance_ratio", 0.0)),
+            suggested_position_pct=float(payload.get("suggested_position_pct", 0.08)),
         )
 
     @staticmethod
@@ -209,7 +212,8 @@ class LimitUpBoardShadowStore:
         peak = 1.0
         max_drawdown = 0.0
         for sample in reversed(samples):
-            equity *= max(0.0, 1 + sample.realized_pnl_pct * 0.08)
+            position_pct = sample.suggested_position_pct or 0.08
+            equity *= max(0.0, 1 + sample.realized_pnl_pct * position_pct)
             peak = max(peak, equity)
             if peak > 0:
                 max_drawdown = min(max_drawdown, equity / peak - 1)

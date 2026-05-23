@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import json
-from json import JSONDecodeError
 from pathlib import Path
 from time import strftime
 from typing import Any, Callable
 
+from framework.storage import AppendOnlyJsonRecordStore
 from shared.contracts import OneToTwoScheduleRun, contract_to_dict
 
 
 DEFAULT_SCHEDULER_RUN_STORE_PATH = Path(".firemoney") / "scheduler_runs.json"
+SCHEDULER_RUN_STORE_LIMIT = 2000
+OBSERVED_RUN_RETAIN_LIMIT = 240
+IMPORTANT_TASK_STATUSES = frozenset({"completed", "failed", "expired", "retrying"})
 
 
 class SchedulerRunStore:
@@ -22,12 +24,16 @@ class SchedulerRunStore:
         path: str | Path = DEFAULT_SCHEDULER_RUN_STORE_PATH,
         created_at_provider: Callable[[], str] | None = None,
     ) -> None:
-        self._path = Path(path)
+        self._store = AppendOnlyJsonRecordStore(
+            path,
+            key="records",
+            limit=SCHEDULER_RUN_STORE_LIMIT,
+        )
         self._created_at_provider = created_at_provider
 
     @property
     def path(self) -> Path:
-        return self._path
+        return self._store.path
 
     def append(self, run: OneToTwoScheduleRun) -> dict[str, Any]:
         created_at = (
@@ -43,28 +49,36 @@ class SchedulerRunStore:
             "status": "executed" if run.executed_count else "observed",
             "run": contract_to_dict(run),
         }
-        records = (record, *self.load())[:200]
-        self._save(records)
+        records = self._store.prepend(record)
+        self._prune_observed_noise(records)
         return record
 
     def load(self, limit: int | None = None) -> tuple[dict[str, Any], ...]:
-        if not self._path.exists():
-            return ()
-        try:
-            payload = json.loads(self._path.read_text(encoding="utf-8"))
-        except (JSONDecodeError, OSError, TypeError, ValueError):
-            return ()
-        raw_records = payload.get("records", ())
-        if not isinstance(raw_records, list):
-            return ()
-        records = tuple(item for item in raw_records if isinstance(item, dict))
-        if limit is None:
-            return records
-        return records[: max(0, limit)]
+        return self._store.load(limit)
 
-    def _save(self, records: tuple[dict[str, Any], ...]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps({"records": list(records)}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+    def _prune_observed_noise(self, records: tuple[dict[str, Any], ...]) -> None:
+        observed_count = 0
+        kept: list[dict[str, Any]] = []
+        for record in records:
+            if _is_important_run(record):
+                kept.append(record)
+                continue
+            observed_count += 1
+            if observed_count <= OBSERVED_RUN_RETAIN_LIMIT:
+                kept.append(record)
+        if len(kept) != len(records):
+            self._store.replace(kept)
+
+
+def _is_important_run(record: dict[str, Any]) -> bool:
+    if record.get("status") == "executed":
+        return True
+    run = record.get("run")
+    if not isinstance(run, dict):
+        return False
+    for task in run.get("tasks", ()) or ():
+        if not isinstance(task, dict):
+            continue
+        if str(task.get("status", "")) in IMPORTANT_TASK_STATUSES:
+            return True
+    return False

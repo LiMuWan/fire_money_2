@@ -544,12 +544,13 @@ def read_cached_bars(cache_file: Path, start_date: date, end_date: date) -> list
 
 def fetch_tencent_daily_bars(code: str, start_date: date, end_date: date) -> list[DailyBar]:
     tx_symbol = tencent_symbol(code)
+    requested_bars = min(2000, max(1000, int((end_date - start_date).days * 1.25) + 260))
     query = urllib.parse.urlencode(
         {
             "_var": f"kline_day_{tx_symbol}",
             "param": (
                 f"{tx_symbol},day,{start_date.isoformat()},"
-                f"{end_date.isoformat()},1000,"
+                f"{end_date.isoformat()},{requested_bars},"
             ),
             "r": "0.8205512681390605",
         }

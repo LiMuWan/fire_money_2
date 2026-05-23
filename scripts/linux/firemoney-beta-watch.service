@@ -1,0 +1,16 @@
+[Unit]
+Description=FireMoney beta trading watch loop
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/firemoney
+EnvironmentFile=-/etc/firemoney/firemoney.env
+ExecStart=/opt/firemoney/scripts/linux/start_firemoney_beta_watch.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

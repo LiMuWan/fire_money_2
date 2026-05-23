@@ -16,6 +16,16 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any
 
+from .paper_database import (
+    PaperTradeDailyAudit,
+    PaperTradeDatabaseEvent,
+    PaperTradeDatabasePosition,
+    PaperTradeDatabaseReport,
+    PaperTradeDatabaseTrade,
+    PaperTradeGuardBucket,
+    PaperTradeQualityBucket,
+)
+
 
 class OneToTwoEventType(str, Enum):
     MORNING_SCAN = "morning_scan"
@@ -69,6 +79,21 @@ class OneToTwoPositionProfile:
     rsi_14: float = 65.0
     position_percentile_60: float = 0.75
     capital_style_label: str = ""
+
+
+@dataclass(frozen=True)
+class BreakoutStructureProfile:
+    score: float
+    label: str
+    breakout_line: float
+    distance_pct: float
+    base_tightness_score: float
+    volume_surge_score: float
+    overhead_supply_score: float
+    relative_strength_score: float
+    passed: bool
+    summary: str
+    risk_notes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -137,6 +162,13 @@ class OneToTwoCandidate:
     discipline_summary: str = ""
     exit_plan: OneToTwoExitPlan | None = None
     mainline_continuity: MainlineContinuity | None = None
+    turnover_quality_score: float = 0.0
+    turnover_quality_label: str = ""
+    turnover_quality_notes: tuple[str, ...] = ()
+    market_cap: float = 0.0
+    float_market_cap: float = 0.0
+    market_cap_source: str = ""
+    breakout_structure: BreakoutStructureProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +191,23 @@ class PaperPosition:
     exit_plan: OneToTwoExitPlan | None = None
     mainline_continuity: MainlineContinuity | None = None
     peak_price: float = 0.0
+    trough_price: float = 0.0
+    planned_stop_risk_pct: float = 0.0
+    planned_first_target_return_pct: float = 0.0
+    planned_reward_risk_ratio: float = 0.0
+    max_intratrade_drawdown_budget_pct: float = 0.0
+    entry_turnover_quality_score: float = 0.0
+    entry_turnover_quality_label: str = ""
+    entry_turnover_quality_notes: tuple[str, ...] = ()
+    entry_guard_status: str = ""
+    entry_guard_action: str = ""
+    entry_guard_suggested_position_pct: float = 0.0
+    entry_guard_reason: str = ""
+    entry_guard_quality_bucket: str = ""
+    entry_guard_quality_sample_count: int = 0
+    entry_guard_quality_win_rate: float = 0.0
+    entry_guard_quality_average_return_pct: float = 0.0
+    entry_guard_quality_pass_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -194,6 +243,25 @@ class PaperTradeRecord:
     position_label: str
     success: bool
     warning_count: int
+    max_favorable_pct: float = 0.0
+    max_adverse_pct: float = 0.0
+    profit_drawdown_ratio: float = 0.0
+    planned_stop_risk_pct: float = 0.0
+    planned_first_target_return_pct: float = 0.0
+    planned_reward_risk_ratio: float = 0.0
+    max_intratrade_drawdown_budget_pct: float = 0.0
+    entry_turnover_quality_score: float = 0.0
+    entry_turnover_quality_label: str = ""
+    entry_turnover_quality_notes: tuple[str, ...] = ()
+    entry_guard_status: str = ""
+    entry_guard_action: str = ""
+    entry_guard_suggested_position_pct: float = 0.0
+    entry_guard_reason: str = ""
+    entry_guard_quality_bucket: str = ""
+    entry_guard_quality_sample_count: int = 0
+    entry_guard_quality_win_rate: float = 0.0
+    entry_guard_quality_average_return_pct: float = 0.0
+    entry_guard_quality_pass_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -210,6 +278,9 @@ class OneToTwoRecentSample:
     position_label: str
     success: bool
     warning_count: int
+    max_favorable_pct: float = 0.0
+    max_adverse_pct: float = 0.0
+    profit_drawdown_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -387,6 +458,7 @@ class LimitUpBoardShadowCandidate:
     market_seal_count: int = 0
     market_touch_count: int = 0
     market_advance_ratio: float = 0.0
+    suggested_position_pct: float = 0.08
 
 
 @dataclass(frozen=True)
@@ -426,6 +498,7 @@ class LimitUpBoardShadowSample:
     market_seal_count: int = 0
     market_touch_count: int = 0
     market_advance_ratio: float = 0.0
+    suggested_position_pct: float = 0.08
 
 
 @dataclass(frozen=True)
@@ -457,6 +530,374 @@ class LimitUpBoardShadowStabilityReport:
     status: str
     summary: str
     strategy_boundary_suggestion: str
+    next_action: str
+
+
+@dataclass(frozen=True)
+class LimitUpBoardShadowSystemMetric:
+    label: str
+    sample_count: int
+    win_rate: float
+    position_weighted_return_pct: float
+    max_drawdown_pct: float
+
+
+@dataclass(frozen=True)
+class PaperBacktestYearlyMetric:
+    year: str
+    sample_count: int
+    win_rate: float
+    average_return_pct: float
+    median_return_pct: float
+    position_weighted_return_pct: float
+    max_drawdown_pct: float
+    status: str
+    conclusion: str
+
+
+@dataclass(frozen=True)
+class PaperBacktestFrictionScenario:
+    label: str
+    roundtrip_cost_pct: float
+    sample_count: int
+    win_rate: float
+    position_weighted_return_pct: float
+    max_drawdown_pct: float
+    validation_return_pct: float
+    negative_years: tuple[str, ...]
+    weakest_year: str
+    weakest_year_return_pct: float
+    status: str
+    conclusion: str
+
+
+@dataclass(frozen=True)
+class PaperBacktestReturnTarget:
+    target_annual_return_pct: float
+    weakest_year: str
+    weakest_year_return_pct: float
+    required_linear_position_multiple: float
+    projected_max_drawdown_pct: float
+    conclusion: str
+
+
+@dataclass(frozen=True)
+class PaperBacktestEfficiencyCandidate:
+    label: str
+    total_return_pct: float
+    max_drawdown_pct: float
+    validation_return_pct: float
+    weakest_full_year_return_pct: float
+    monthly_positive_ratio: float
+    worst_month_return_pct: float
+    conclusion: str
+
+
+@dataclass(frozen=True)
+class PaperBacktestMonthlyStability:
+    total_months: int
+    positive_months: int
+    positive_month_ratio: float
+    worst_month: str
+    worst_month_return_pct: float
+    longest_losing_streak: int
+    conclusion: str
+
+
+@dataclass(frozen=True)
+class PaperBacktestMonthlyMetric:
+    month: str
+    position_weighted_return_pct: float
+    status: str
+    conclusion: str
+
+
+@dataclass(frozen=True)
+class PaperBacktestReport:
+    report_id: str
+    start_date: str
+    end_date: str
+    status: str
+    strategy_id: str
+    summary: str
+    overall: LimitUpBoardShadowSystemMetric
+    train: LimitUpBoardShadowSystemMetric
+    validation: LimitUpBoardShadowSystemMetric
+    yearly: tuple[PaperBacktestYearlyMetric, ...]
+    negative_years: tuple[str, ...]
+    weak_years: tuple[str, ...]
+    buy_rule_summary: tuple[str, ...]
+    improvement_notes: tuple[str, ...]
+    no_future_leakage_notes: tuple[str, ...]
+    limitations: tuple[str, ...]
+    next_action: str
+    data_coverage_start: str = ""
+    data_coverage_end: str = ""
+    data_coverage_notes: tuple[str, ...] = ()
+    friction_scenarios: tuple[PaperBacktestFrictionScenario, ...] = ()
+    return_target: PaperBacktestReturnTarget | None = None
+    efficiency_candidates: tuple[PaperBacktestEfficiencyCandidate, ...] = ()
+    monthly_stability: PaperBacktestMonthlyStability | None = None
+    monthly: tuple[PaperBacktestMonthlyMetric, ...] = ()
+    current_month_notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MissedOpportunityItem:
+    trade_date: str
+    symbol: str
+    name: str
+    entry_price: float
+    net_return_pct: float
+    account_return_pct: float
+    position_pct: float
+    quantity: int
+    paper_status: str
+    watch_status: str
+    notification_status: str
+    diagnosis: str
+    next_action: str
+
+
+@dataclass(frozen=True)
+class MissedOpportunityReport:
+    report_id: str
+    start_date: str
+    end_date: str
+    status: str
+    summary: str
+    backtest_trade_count: int
+    caught_count: int
+    missed_count: int
+    missed_profit_count: int
+    missed_account_return_pct: float
+    items: tuple[MissedOpportunityItem, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class LimitUpBoardShadowSystemReport:
+    report_id: str
+    start_date: str
+    end_date: str
+    status: str
+    system_name: str
+    summary: str
+    buy_rules: tuple[str, ...]
+    sell_rules: tuple[str, ...]
+    position_rules: tuple[str, ...]
+    fixed_position_summary: LimitUpBoardShadowSystemMetric
+    fixed_position_validation: LimitUpBoardShadowSystemMetric
+    dynamic_position_summary: LimitUpBoardShadowSystemMetric
+    dynamic_position_validation: LimitUpBoardShadowSystemMetric
+    yearly_dynamic_position_returns: dict[str, float]
+    factor_validation_notes: tuple[str, ...]
+    no_future_leakage_notes: tuple[str, ...]
+    limitations: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class StrategyDecisionOption:
+    strategy_id: str
+    role: str
+    status: str
+    action: str
+    confidence: str
+    expected_return_label: str
+    max_drawdown_label: str
+    rationale: str
+
+
+@dataclass(frozen=True)
+class StrategyDecisionReport:
+    report_id: str
+    trade_date: str
+    status: str
+    evidence_end_date: str
+    market_regime: str
+    regime_rationale: str
+    regime_action: str
+    k92_regime: str
+    k92_gate: str
+    k92_rationale: str
+    selected_strategy_id: str
+    selected_action: str
+    selected_role: str
+    summary: str
+    options: tuple[StrategyDecisionOption, ...]
+    risk_rules: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class K92EmotionLiquidityCandidate:
+    symbol: str
+    name: str
+    bucket: str
+    action: str
+    status: str
+    score: float
+    latest_price: float
+    entry_price: float
+    stop_loss: float
+    market_cap: float
+    turnover_quality_score: float
+    mainline_score: float
+    position_percentile_60: float
+    rationale: str
+    reasons: tuple[str, ...]
+    blockers: tuple[str, ...]
+    warnings: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class K92EmotionLiquidityReport:
+    report_id: str
+    trade_date: str
+    status: str
+    market_temperature: int
+    regime: str
+    regime_label: str
+    action: str
+    summary: str
+    leader_candidates: tuple[K92EmotionLiquidityCandidate, ...]
+    supplement_candidates: tuple[K92EmotionLiquidityCandidate, ...]
+    switch_candidates: tuple[K92EmotionLiquidityCandidate, ...]
+    risk_candidates: tuple[K92EmotionLiquidityCandidate, ...]
+    stand_aside_reasons: tuple[str, ...]
+    rules: tuple[str, ...]
+    limitations: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class PaperTradingInstruction:
+    action: str
+    strategy_id: str
+    symbol: str
+    name: str
+    timing: str
+    entry_window: str
+    entry_trigger: str
+    entry_price: float
+    stop_loss: float
+    first_take_profit_price: float
+    planned_stop_risk_pct: float
+    planned_first_target_return_pct: float
+    planned_reward_risk_ratio: float
+    max_intratrade_drawdown_budget_pct: float
+    position_pct: float
+    cash_budget: float
+    quantity: int
+    confidence: str
+    rationale: str
+    invalidation_rules: tuple[str, ...]
+    sell_rules: tuple[str, ...]
+    risk_notes: tuple[str, ...]
+    next_check_time: str
+
+
+@dataclass(frozen=True)
+class PaperHoldingInstruction:
+    action: str
+    symbol: str
+    name: str
+    opened_at: str
+    holding_trade_days: int
+    can_sell_today: bool
+    quantity: int
+    entry_price: float
+    latest_price: float
+    stop_loss: float
+    positive_lock_price: float
+    first_take_profit_price: float
+    hard_exit_trade_days: int
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
+    status: str
+    rationale: str
+    sell_triggers: tuple[str, ...]
+    next_check_time: str
+    next_command: str
+
+
+@dataclass(frozen=True)
+class PaperTradingGuardDecision:
+    status: str
+    action: str
+    review_sample_count: int
+    win_rate: float
+    average_return_pct: float
+    max_drawdown_pct: float
+    consecutive_losses: int
+    consecutive_quality_failures: int
+    average_profit_drawdown_ratio: float
+    risk_quality_pass_rate: float
+    suggested_position_pct: float
+    reasons: tuple[str, ...]
+    next_action: str
+    candidate_quality_bucket: str = ""
+    candidate_quality_sample_count: int = 0
+    candidate_quality_win_rate: float = 0.0
+    candidate_quality_average_return_pct: float = 0.0
+    candidate_quality_risk_quality_pass_rate: float = 0.0
+
+
+@dataclass(frozen=True)
+class PaperTradingDecisionReport:
+    report_id: str
+    trade_date: str
+    status: str
+    market_regime: str
+    execution_track: str
+    selected_strategy_id: str
+    selected_action: str
+    evidence_end_date: str
+    should_buy: bool
+    instruction: PaperTradingInstruction | None
+    holding_instruction: PaperHoldingInstruction | None
+    candidate_count: int
+    ready_count: int
+    blocked_count: int
+    account_equity: float
+    account_cash: float
+    existing_position_count: int
+    guard_decision: PaperTradingGuardDecision
+    summary: str
+    decision_rules: tuple[str, ...]
+    next_action: str
+    notification: FeishuNotificationResult | None = None
+
+
+@dataclass(frozen=True)
+class OneToTwoExecutionQualityReport:
+    report_id: str
+    symbol: str
+    trade_date: str
+    status: str
+    summary: str
+    minute_bar_count: int
+    tick_snapshot_count: int
+    first_minute_range_pct: float
+    first_five_minute_range_pct: float
+    first_tick_bid_ask_spread_pct: float
+    max_bid_queue_volume: float
+    max_ask_queue_volume: float
+    first_five_minute_buy_amount_pct: float
+    first_five_minute_sell_amount_pct: float
+    max_single_tick_amount: float
+    auction_window_amount: float
+    open_window_amount: float
+    open_window_price_lift_pct: float
+    large_tick_amount_ratio: float
+    buy_drive_score: float
+    queue_imbalance_score: float
+    entry_momentum_score: float
+    entry_momentum_signal: str
+    entry_momentum_reasons: tuple[str, ...]
+    limitations: tuple[str, ...]
     next_action: str
 
 
@@ -522,6 +963,30 @@ class OneToTwoBetaLaunchPlan:
 
 
 @dataclass(frozen=True)
+class CommercialReadinessGate:
+    gate_id: str
+    title: str
+    status: str
+    tone: str
+    score: float
+    detail: str
+    metrics: dict[str, str] | None = None
+
+
+@dataclass(frozen=True)
+class CommercialReadinessReport:
+    report_id: str
+    trade_date: str
+    status: str
+    headline: str
+    stage: str
+    score: float
+    gates: tuple[CommercialReadinessGate, ...]
+    next_actions: tuple[str, ...]
+    summary: str
+
+
+@dataclass(frozen=True)
 class OneToTwoScheduleTask:
     task_id: str
     mode: str
@@ -542,6 +1007,34 @@ class OneToTwoScheduleRun:
     executed_count: int
     skipped_count: int
     tasks: tuple[OneToTwoScheduleTask, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class OneToTwoScheduleHealthItem:
+    task_id: str
+    workflow: str
+    scheduled_time: str
+    required_notification: bool
+    schedule_status: str
+    notification_status: str
+    status: str
+    summary: str
+    next_action: str
+
+
+@dataclass(frozen=True)
+class OneToTwoScheduleHealthReport:
+    report_id: str
+    requested_date: str
+    trade_date: str
+    is_trading_day: bool
+    status: str
+    summary: str
+    checked_at: str
+    items: tuple[OneToTwoScheduleHealthItem, ...]
+    scheduler_run_count: int
+    notification_record_count: int
     next_action: str
 
 

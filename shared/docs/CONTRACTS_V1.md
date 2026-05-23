@@ -12,7 +12,15 @@ morning scan -> candidate scoring -> paper trading event -> end-of-day review ->
 
 Code entry point:
 
-- `shared/contracts/trading.py`
+- `shared/contracts/__init__.py` is the public import surface for client and server code.
+- `shared/contracts/trading.py` keeps the core workflow contracts and re-exports grouped subcontracts for backward compatibility.
+- `shared/contracts/paper_database.py` owns the SQLite paper-ledger report contracts so the shared layer does not grow into one unbounded file.
+
+Module boundary:
+
+- Client and server code should keep importing public DTOs from `shared.contracts` unless a focused internal module has an explicit reason to import a grouped contract file.
+- `trading.py` remains the compatibility aggregate for one-to-two workflow DTOs, but new large report families should be split into dedicated contract modules before the aggregate approaches another 1000-line file.
+- `paper_database.py` is contract-only. It must not import SQLite adapters, stores, service code, client renderers, or FireMoney infrastructure.
 
 ## 2. Core Contracts
 
@@ -53,6 +61,15 @@ Key fields:
 - `warnings`
 - `rationale`
 - `next_action`
+- `mainline_score`
+- `sealing_score`
+- `leader_score`
+- `strategy_tags`
+- `turnover_quality_score`
+- `turnover_quality_label`
+- `turnover_quality_notes`
+
+`turnover_quality_*` is the product-owned daily-proxy score for the "effective turnover leader" buy point. It uses only visible first-board information such as turnover rate, sealed amount / turnover amount, first limit-up time, auction amount ratio, market temperature, volume ratio, RSI, and position structure. It is not tick-level order-book proof until a point-in-time tick adapter is available.
 
 ### `OneToTwoPositionProfile`
 
@@ -87,6 +104,10 @@ Rules represented by the contracts:
 - T+1 exits are represented by `OneToTwoEventType.T1_SELL`
 - weak positions that exceed the configured holding window are represented by `OneToTwoEventType.DISCIPLINE_EXIT`
 - completed exits are stored as `PaperTradeRecord` samples with entry, exit, P/L, holding days, exit reason, position label, and warning count
+- `PaperPosition`, `PaperTradeRecord`, and the SQLite report contracts preserve the original entry `turnover_quality_score`, label, and notes so review can connect realized P/L back to the buy-point quality that triggered the paper trade
+- The same paper-trade contracts also preserve the original entry guard status, action, suggested position, guard reason, and same-bucket quality metrics, so realized P/L can be reviewed against the exact risk gate that allowed or reduced the buy
+- `PaperTradeQualityBucket` summarizes closed-trade performance by entry quality segment, including sample count, win rate, average return, profit/drawdown ratio, risk-quality pass rate, and the next review action
+- `PaperTradeGuardBucket` summarizes closed-trade performance by entry guard action, including sample count, average suggested position, win rate, average return, profit/drawdown ratio, risk-quality pass rate, and the next position-sizing action
 
 ### `FeishuNotificationResult`
 

@@ -16,8 +16,9 @@ import argparse
 import json
 import sys
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
+from statistics import mean, median
 from typing import Any
 
 if __package__ in {None, ""}:
@@ -32,6 +33,12 @@ from tools.research_one_to_two_profit_matrix import (  # noqa: E402
 DEFAULT_OUTPUT = Path("exports") / "limit_up_board_profit_matrix_2024_to_now.json"
 DEFAULT_CACHE_DIR = Path(".firemoney") / "research_cache" / "one_to_two_daily"
 TRAIN_END_DATE = "2025-12-31"
+WALK_FORWARD_DEFAULT_TRAIN_DAYS = 365
+WALK_FORWARD_DEFAULT_PERIOD_MONTHS = 3
+WALK_FORWARD_DEFAULT_MIN_TRADES = 40
+WALK_FORWARD_MIN_RETURN_EDGE = 0.02
+SHADOW_BASE_POSITION_PCT = 0.08
+SHADOW_STRONG_MARKET_POSITION_PCT = 0.12
 
 
 @dataclass(frozen=True)
@@ -55,6 +62,8 @@ class BoardCandidate:
     market_seal_count: int = 0
     market_touch_count: int = 0
     market_advance_ratio: float = 0.0
+    market_cap: float = 0.0
+    float_market_cap: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -69,6 +78,8 @@ class EntryCase:
     min_position_percentile_60: float
     min_market_seal_count: int = 0
     max_market_seal_count: int | None = None
+    min_market_cap: float = 0.0
+    max_market_cap: float | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +89,8 @@ class ExitCase:
     take_profit_pct: float
     max_hold_days: int
     weak_next_open_exit_pct: float | None
+    strong_market_advance_ratio: float | None = None
+    strong_market_take_profit_pct: float | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,6 +110,37 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run a broader exploratory matrix. Default stays focused and faster.",
     )
+    parser.add_argument(
+        "--shadow-default-only",
+        action="store_true",
+        help="Only evaluate the current product shadow default entry/exit rule.",
+    )
+    parser.add_argument(
+        "--walk-forward",
+        action="store_true",
+        help=(
+            "Run a no-future-leakage walk-forward sell-rule selection. Each "
+            "period chooses an exit rule from prior samples only."
+        ),
+    )
+    parser.add_argument(
+        "--walk-forward-train-days",
+        type=int,
+        default=WALK_FORWARD_DEFAULT_TRAIN_DAYS,
+        help="Lookback calendar days used to choose each period's exit rule.",
+    )
+    parser.add_argument(
+        "--walk-forward-period-months",
+        type=int,
+        default=WALK_FORWARD_DEFAULT_PERIOD_MONTHS,
+        help="Calendar months in each out-of-sample walk-forward period.",
+    )
+    parser.add_argument(
+        "--walk-forward-min-trades",
+        type=int,
+        default=WALK_FORWARD_DEFAULT_MIN_TRADES,
+        help="Minimum prior one-position trades required before switching from the shadow default.",
+    )
     return parser.parse_args()
 
 
@@ -107,11 +151,71 @@ def main() -> int:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    universe, histories = load_cached_research_data(Path(args.cache_dir), start, end)
+    candidate_start = start
+    if args.walk_forward:
+        candidate_start = start - timedelta(
+            days=max(1, args.walk_forward_train_days)
+        )
+    universe, histories = load_cached_research_data(
+        Path(args.cache_dir),
+        candidate_start,
+        end,
+    )
     if args.limit:
         universe = universe[: args.limit]
         histories = {stock.code: histories[stock.code] for stock in universe}
-    candidates = build_board_candidates(universe, histories, start, end)
+    candidates = build_board_candidates(universe, histories, candidate_start, end)
+    if args.shadow_default_only:
+        result = evaluate_case(
+            candidates=candidates,
+            histories=histories,
+            entry_case=shadow_default_entry_case(),
+            exit_case=shadow_default_exit_case(),
+            rank_case="score",
+            position_pct=args.position_pct,
+            roundtrip_cost_pct=args.roundtrip_cost_pct,
+        )
+        report = {
+            "note": (
+                "Shadow default evaluation uses only board-day visible fields "
+                "for entry, ranking, and dynamic take-profit selection. Future "
+                "bars are used only for T+1 exits and PnL."
+            ),
+            "date_range": {"start": start.isoformat(), "end": end.isoformat()},
+            "train_validate_split": {
+                "train_end": TRAIN_END_DATE,
+                "validation_start": "2026-01-01",
+            },
+            "universe_count": len(universe),
+            "raw_candidate_count": len(candidates),
+            "shadow_default": result,
+        }
+        output_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print_shadow_default_summary(result, output_path)
+        return 0
+    if args.walk_forward:
+        report = build_walk_forward_report(
+            candidates=candidates,
+            histories=histories,
+            start=start,
+            end=end,
+            train_days=args.walk_forward_train_days,
+            period_months=args.walk_forward_period_months,
+            min_train_trades=args.walk_forward_min_trades,
+            position_pct=args.position_pct,
+            roundtrip_cost_pct=args.roundtrip_cost_pct,
+        )
+        report["universe_count"] = len(universe)
+        report["raw_candidate_count"] = len(candidates)
+        output_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print_walk_forward_summary(report, output_path)
+        return 0
     entry_cases = build_entry_cases(wide=args.wide)
     exit_cases = build_exit_cases(wide=args.wide)
     rank_cases = build_rank_cases(wide=args.wide)
@@ -351,6 +455,51 @@ def baseline_exit_case() -> ExitCase:
     )
 
 
+def shadow_default_entry_case() -> EntryCase:
+    return EntryCase(
+        case_id="shadow_balanced_v2_gain20_ma_heat20_150",
+        require_first_board=False,
+        min_turnover_amount=80_000_000.0,
+        max_recent_gain_pct=0.20,
+        max_ma20_deviation_pct=0.35,
+        min_volume_ratio_20=1.0,
+        require_ma_bullish=True,
+        min_position_percentile_60=0.0,
+        min_market_seal_count=20,
+        max_market_seal_count=150,
+        min_market_cap=5_000_000_000.0,
+        max_market_cap=80_000_000_000.0,
+    )
+
+
+def shadow_default_exit_case() -> ExitCase:
+    return ExitCase(
+        case_id="shadow_balanced_v3_stop6_target5.5_or8_adv70_hold1",
+        stop_loss_pct=0.06,
+        take_profit_pct=0.055,
+        max_hold_days=1,
+        weak_next_open_exit_pct=None,
+        strong_market_advance_ratio=0.70,
+        strong_market_take_profit_pct=0.08,
+    )
+
+
+def resolve_take_profit_pct(candidate: BoardCandidate, exit_case: ExitCase) -> float:
+    if (
+        exit_case.strong_market_advance_ratio is not None
+        and exit_case.strong_market_take_profit_pct is not None
+        and candidate.market_advance_ratio > exit_case.strong_market_advance_ratio
+    ):
+        return exit_case.strong_market_take_profit_pct
+    return exit_case.take_profit_pct
+
+
+def resolve_position_pct(candidate: BoardCandidate, exit_case: ExitCase) -> float:
+    if resolve_take_profit_pct(candidate, exit_case) > exit_case.take_profit_pct:
+        return SHADOW_STRONG_MARKET_POSITION_PCT
+    return SHADOW_BASE_POSITION_PCT
+
+
 def build_entry_cases(wide: bool) -> list[EntryCase]:
     first_board_options = (True, False)
     turnover_options = (80_000_000.0, 200_000_000.0, 500_000_000.0)
@@ -408,7 +557,7 @@ def build_entry_cases(wide: bool) -> list[EntryCase]:
 
 
 def build_exit_cases(wide: bool) -> list[ExitCase]:
-    cases = [baseline_exit_case()]
+    cases = [baseline_exit_case(), shadow_default_exit_case()]
     stop_options = (0.04, 0.05, 0.06)
     take_options = (0.05, 0.08, 0.12)
     hold_options = (1, 2, 3)
@@ -474,6 +623,19 @@ def entry_case_allows(case: EntryCase, candidate: BoardCandidate) -> bool:
         and candidate.market_seal_count > case.max_market_seal_count
     ):
         return False
+    effective_market_cap = candidate.market_cap or candidate.float_market_cap
+    if (
+        effective_market_cap > 0
+        and case.min_market_cap > 0
+        and effective_market_cap < case.min_market_cap
+    ):
+        return False
+    if (
+        effective_market_cap > 0
+        and case.max_market_cap is not None
+        and effective_market_cap > case.max_market_cap
+    ):
+        return False
     return True
 
 
@@ -508,19 +670,19 @@ def evaluate_preselected(
     position_pct: float,
     roundtrip_cost_pct: float,
 ) -> dict[str, Any]:
-    trades = [
-        trade
-        for trade in (
-            simulate_board_trade(
-                candidate=item,
-                bars=histories[item.symbol],
-                exit_case=exit_case,
-                roundtrip_cost_pct=roundtrip_cost_pct,
-            )
-            for item in daily_candidates
+    trades: list[sm.Trade] = []
+    candidates_by_trade: dict[tuple[str, str], BoardCandidate] = {}
+    for item in daily_candidates:
+        trade = simulate_board_trade(
+            candidate=item,
+            bars=histories[item.symbol],
+            exit_case=exit_case,
+            roundtrip_cost_pct=roundtrip_cost_pct,
         )
-        if trade is not None
-    ]
+        if trade is None:
+            continue
+        trades.append(trade)
+        candidates_by_trade[(trade.entry_date, trade.symbol)] = item
     one_position_trades = sm.select_one_position_trades(trades)
     summary = sm.summarize_position_trades(one_position_trades, position_pct)
     yearly = sm.summarize_position_by_year(one_position_trades, position_pct)
@@ -530,6 +692,7 @@ def evaluate_preselected(
     validation_trades = [
         item for item in one_position_trades if item.entry_date > TRAIN_END_DATE
     ]
+    suggested_position_policy = build_suggested_position_policy(exit_case)
     return {
         "entry_case": asdict(entry_case),
         "exit_case": asdict(exit_case),
@@ -541,8 +704,111 @@ def evaluate_preselected(
             position_pct,
         ),
         "yearly": yearly,
+        "suggested_position_policy": suggested_position_policy,
+        "suggested_position_summary": summarize_suggested_position_trades(
+            one_position_trades,
+            candidates_by_trade,
+            exit_case,
+        ),
+        "suggested_position_train_summary": summarize_suggested_position_trades(
+            train_trades,
+            candidates_by_trade,
+            exit_case,
+        ),
+        "suggested_position_validation_summary": summarize_suggested_position_trades(
+            validation_trades,
+            candidates_by_trade,
+            exit_case,
+        ),
+        "suggested_position_yearly": summarize_suggested_position_by_year(
+            one_position_trades,
+            candidates_by_trade,
+            exit_case,
+        ),
+        "one_position_trades": [asdict(item) for item in one_position_trades],
         "exit_reasons": summarize_exit_reasons(one_position_trades),
         "recent_samples": [asdict(item) for item in one_position_trades[-5:]],
+    }
+
+
+def build_suggested_position_policy(exit_case: ExitCase) -> dict[str, Any]:
+    return {
+        "case_id": "shadow_pos8_or12_adv70",
+        "base_position_pct": SHADOW_BASE_POSITION_PCT,
+        "strong_market_position_pct": SHADOW_STRONG_MARKET_POSITION_PCT,
+        "strong_market_advance_ratio": exit_case.strong_market_advance_ratio,
+        "activation": (
+            "Use the strong-market position only when the same board-day "
+            "market breadth condition also upgrades the take-profit target."
+        ),
+        "runtime_scope": "shadow_validation_only",
+    }
+
+
+def summarize_suggested_position_trades(
+    trades: list[sm.Trade],
+    candidates_by_trade: dict[tuple[str, str], BoardCandidate],
+    exit_case: ExitCase,
+) -> dict[str, Any]:
+    if not trades:
+        return {
+            "sample_count": 0,
+            "win_count": 0,
+            "win_rate": None,
+            "average_net_return_pct": None,
+            "median_net_return_pct": None,
+            "position_weighted_return_pct": None,
+            "max_drawdown_pct": None,
+            "average_position_pct": None,
+            "strong_position_count": 0,
+        }
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    returns = [item.net_return_pct for item in trades]
+    positions: list[float] = []
+    strong_position_count = 0
+    for trade in sorted(trades, key=lambda item: (item.entry_date, item.symbol)):
+        candidate = candidates_by_trade.get((trade.entry_date, trade.symbol))
+        position_pct = (
+            resolve_position_pct(candidate, exit_case)
+            if candidate is not None
+            else SHADOW_BASE_POSITION_PCT
+        )
+        positions.append(position_pct)
+        if position_pct > SHADOW_BASE_POSITION_PCT:
+            strong_position_count += 1
+        equity *= max(0.0, 1 + trade.net_return_pct * position_pct)
+        peak = max(peak, equity)
+        if peak > 0:
+            max_drawdown = min(max_drawdown, equity / peak - 1)
+    win_count = sum(1 for item in trades if item.net_return_pct > 0)
+    return {
+        "sample_count": len(trades),
+        "win_count": win_count,
+        "win_rate": round(win_count / len(trades), 4),
+        "average_net_return_pct": round(mean(returns), 4),
+        "median_net_return_pct": round(median(returns), 4),
+        "position_weighted_return_pct": round(equity - 1, 4),
+        "max_drawdown_pct": round(max_drawdown, 4),
+        "average_position_pct": round(mean(positions), 4),
+        "strong_position_count": strong_position_count,
+    }
+
+
+def summarize_suggested_position_by_year(
+    trades: list[sm.Trade],
+    candidates_by_trade: dict[tuple[str, str], BoardCandidate],
+    exit_case: ExitCase,
+) -> dict[str, Any]:
+    years = sorted({item.entry_date[:4] for item in trades})
+    return {
+        year: summarize_suggested_position_trades(
+            [item for item in trades if item.entry_date.startswith(year)],
+            candidates_by_trade,
+            exit_case,
+        )
+        for year in years
     }
 
 
@@ -557,7 +823,8 @@ def simulate_board_trade(
         return None
     entry_price = candidate.entry_price
     stop_price = entry_price * (1 - exit_case.stop_loss_pct)
-    target_price = entry_price * (1 + exit_case.take_profit_pct)
+    take_profit_pct = resolve_take_profit_pct(candidate, exit_case)
+    target_price = entry_price * (1 + take_profit_pct)
     last_index = min(len(bars) - 1, entry_index + max(1, exit_case.max_hold_days))
     for exit_index in range(entry_index + 1, last_index + 1):
         bar = bars[exit_index]
@@ -594,7 +861,7 @@ def simulate_board_trade(
                     roundtrip_cost_pct,
                     "stop_loss",
                 )
-        if exit_case.take_profit_pct > 0:
+        if take_profit_pct > 0:
             if bar.open >= target_price:
                 return make_trade(
                     candidate,
@@ -781,6 +1048,326 @@ def compact_profile(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_walk_forward_report(
+    candidates: list[BoardCandidate],
+    histories: dict[str, list[sm.DailyBar]],
+    start: date,
+    end: date,
+    train_days: int,
+    period_months: int,
+    min_train_trades: int,
+    position_pct: float,
+    roundtrip_cost_pct: float,
+) -> dict[str, Any]:
+    """Evaluate exit rules with a past-only rolling selection discipline."""
+
+    entry_case = shadow_default_entry_case()
+    entry_candidates = [
+        item for item in candidates if entry_case_allows(entry_case, item)
+    ]
+    daily_candidates = select_daily_top_candidates(entry_candidates, "score")
+    exit_cases = walk_forward_exit_cases()
+    default_exit = shadow_default_exit_case()
+    all_period_trades: list[sm.Trade] = []
+    candidates_by_trade: dict[tuple[str, str], BoardCandidate] = {}
+    periods: list[dict[str, Any]] = []
+    current_start = start
+    while current_start <= end:
+        period_end = min(end, add_months(current_start, max(1, period_months)) - timedelta(days=1))
+        train_start = current_start - timedelta(days=max(1, train_days))
+        train_end = current_start - timedelta(days=1)
+        train_candidates = filter_candidates_by_date(
+            daily_candidates,
+            train_start,
+            train_end,
+        )
+        test_candidates = filter_candidates_by_date(
+            daily_candidates,
+            current_start,
+            period_end,
+        )
+        chosen = choose_walk_forward_exit_case(
+            train_candidates=train_candidates,
+            histories=histories,
+            exit_cases=exit_cases,
+            default_exit=default_exit,
+            min_train_trades=min_train_trades,
+            position_pct=position_pct,
+            roundtrip_cost_pct=roundtrip_cost_pct,
+        )
+        test_trades = simulate_candidates(
+            test_candidates,
+            histories,
+            chosen["exit_case"],
+            roundtrip_cost_pct,
+        )
+        for candidate in test_candidates:
+            trade = simulate_board_trade(
+                candidate=candidate,
+                bars=histories[candidate.symbol],
+                exit_case=chosen["exit_case"],
+                roundtrip_cost_pct=roundtrip_cost_pct,
+            )
+            if trade is None:
+                continue
+            candidates_by_trade[(trade.entry_date, trade.symbol)] = candidate
+        selected_trades = sm.select_one_position_trades(test_trades)
+        all_period_trades.extend(test_trades)
+        period_summary = sm.summarize_position_trades(selected_trades, position_pct)
+        periods.append(
+            {
+                "period_start": current_start.isoformat(),
+                "period_end": period_end.isoformat(),
+                "train_start": train_start.isoformat(),
+                "train_end": train_end.isoformat(),
+                "selected_exit_case": asdict(chosen["exit_case"]),
+                "selection_reason": chosen["reason"],
+                "train_summary": chosen["train_summary"],
+                "test_raw_trade_count": len(test_trades),
+                "test_summary": period_summary,
+            }
+        )
+        current_start = period_end + timedelta(days=1)
+
+    report_candidates = filter_candidates_by_date(daily_candidates, start, end)
+    default_result = evaluate_preselected(
+        daily_candidates=report_candidates,
+        histories=histories,
+        entry_case=entry_case,
+        exit_case=default_exit,
+        rank_case="score",
+        position_pct=position_pct,
+        roundtrip_cost_pct=roundtrip_cost_pct,
+    )
+    selected = sm.select_one_position_trades(all_period_trades)
+    train_selected = [
+        item for item in selected if item.entry_date <= TRAIN_END_DATE
+    ]
+    validation_selected = [
+        item for item in selected if item.entry_date > TRAIN_END_DATE
+    ]
+    suggested_position_policy = build_suggested_position_policy(default_exit)
+    return {
+        "note": (
+            "Walk-forward mode selects each period's exit rule using only "
+            "prior board-day-visible candidates and prior exits. Future bars "
+            "inside the test period are used only after the rule is already "
+            "chosen. A challenger exit rule must beat the shadow default's "
+            "prior-window return, win rate, and drawdown before it can replace "
+            "the default."
+        ),
+        "date_range": {"start": start.isoformat(), "end": end.isoformat()},
+        "walk_forward": {
+            "train_days": train_days,
+            "period_months": period_months,
+            "min_train_trades": min_train_trades,
+            "min_return_edge": WALK_FORWARD_MIN_RETURN_EDGE,
+            "entry_case": asdict(entry_case),
+            "rank_case": "score",
+            "candidate_exit_cases": [asdict(item) for item in exit_cases],
+            "summary": sm.summarize_position_trades(selected, position_pct),
+            "train_summary": sm.summarize_position_trades(
+                train_selected,
+                position_pct,
+            ),
+            "validation_summary": sm.summarize_position_trades(
+                validation_selected,
+                position_pct,
+            ),
+            "yearly": sm.summarize_position_by_year(selected, position_pct),
+            "suggested_position_policy": suggested_position_policy,
+            "suggested_position_summary": summarize_suggested_position_trades(
+                selected,
+                candidates_by_trade,
+                default_exit,
+            ),
+            "suggested_position_train_summary": summarize_suggested_position_trades(
+                train_selected,
+                candidates_by_trade,
+                default_exit,
+            ),
+            "suggested_position_validation_summary": summarize_suggested_position_trades(
+                validation_selected,
+                candidates_by_trade,
+                default_exit,
+            ),
+            "suggested_position_yearly": summarize_suggested_position_by_year(
+                selected,
+                candidates_by_trade,
+                default_exit,
+            ),
+            "exit_reasons": summarize_exit_reasons(selected),
+            "periods": periods,
+        },
+        "shadow_default": default_result,
+    }
+
+
+def walk_forward_exit_cases() -> list[ExitCase]:
+    cases = [shadow_default_exit_case()]
+    for stop_loss in (0.04, 0.05, 0.06):
+        for take_profit in (0.05, 0.08):
+            cases.append(
+                ExitCase(
+                    case_id=(
+                        f"wf_stop{int(stop_loss * 100)}"
+                        f"_target{int(take_profit * 100)}_hold1"
+                    ),
+                    stop_loss_pct=stop_loss,
+                    take_profit_pct=take_profit,
+                    max_hold_days=1,
+                    weak_next_open_exit_pct=None,
+                )
+            )
+    return deduplicate_exit_cases(cases)
+
+
+def choose_walk_forward_exit_case(
+    train_candidates: list[BoardCandidate],
+    histories: dict[str, list[sm.DailyBar]],
+    exit_cases: list[ExitCase],
+    default_exit: ExitCase,
+    min_train_trades: int,
+    position_pct: float,
+    roundtrip_cost_pct: float,
+) -> dict[str, Any]:
+    default_train_trades = sm.select_one_position_trades(
+        simulate_candidates(
+            train_candidates,
+            histories,
+            default_exit,
+            roundtrip_cost_pct,
+        )
+    )
+    default_summary = sm.summarize_position_trades(
+        default_train_trades,
+        position_pct,
+    )
+    if not train_candidates:
+        return {
+            "exit_case": default_exit,
+            "reason": "no_prior_candidates_default_shadow",
+            "train_summary": default_summary,
+        }
+    ranked: list[tuple[float, ExitCase, dict[str, Any]]] = []
+    for exit_case in exit_cases:
+        trades = sm.select_one_position_trades(
+            simulate_candidates(
+                train_candidates,
+                histories,
+                exit_case,
+                roundtrip_cost_pct,
+            )
+        )
+        summary = sm.summarize_position_trades(trades, position_pct)
+        if summary["sample_count"] < min_train_trades:
+            continue
+        score = walk_forward_score(summary)
+        ranked.append((score, exit_case, summary))
+    if not ranked:
+        return {
+            "exit_case": default_exit,
+            "reason": "insufficient_prior_trades_default_shadow",
+            "train_summary": default_summary,
+        }
+    ranked.sort(
+        key=lambda item: (
+            item[0],
+            item[2]["position_weighted_return_pct"] or -9.0,
+            item[2]["win_rate"] or -1.0,
+            -abs(item[2]["max_drawdown_pct"] or 0.0),
+        ),
+        reverse=True,
+    )
+    _, exit_case, summary = ranked[0]
+    if exit_case.case_id != default_exit.case_id and not beats_default_in_training(
+        challenger=summary,
+        default=default_summary,
+    ):
+        return {
+            "exit_case": default_exit,
+            "reason": "default_shadow_more_stable_in_prior_window",
+            "train_summary": default_summary,
+        }
+    return {
+        "exit_case": exit_case,
+        "reason": "selected_from_prior_window",
+        "train_summary": summary,
+    }
+
+
+def beats_default_in_training(
+    challenger: dict[str, Any],
+    default: dict[str, Any],
+) -> bool:
+    challenger_return = challenger["position_weighted_return_pct"] or -1.0
+    default_return = default["position_weighted_return_pct"] or -1.0
+    challenger_win = challenger["win_rate"] or 0.0
+    default_win = default["win_rate"] or 0.0
+    challenger_drawdown = abs(challenger["max_drawdown_pct"] or 0.0)
+    default_drawdown = abs(default["max_drawdown_pct"] or 0.0)
+    return (
+        challenger_return >= default_return + WALK_FORWARD_MIN_RETURN_EDGE
+        and challenger_win >= default_win
+        and challenger_drawdown <= default_drawdown
+    )
+
+
+def walk_forward_score(summary: dict[str, Any]) -> float:
+    weighted_return = summary["position_weighted_return_pct"] or -1.0
+    win_rate = summary["win_rate"] or 0.0
+    drawdown = abs(summary["max_drawdown_pct"] or 0.0)
+    sample_bonus = min((summary["sample_count"] or 0) / 200, 1.0)
+    return round(weighted_return * 100 + win_rate * 6 + sample_bonus - drawdown * 18, 4)
+
+
+def filter_candidates_by_date(
+    candidates: list[BoardCandidate],
+    start: date,
+    end: date,
+) -> list[BoardCandidate]:
+    return [
+        item
+        for item in candidates
+        if start <= sm.parse_iso_date(item.board_date) <= end
+    ]
+
+
+def simulate_candidates(
+    candidates: list[BoardCandidate],
+    histories: dict[str, list[sm.DailyBar]],
+    exit_case: ExitCase,
+    roundtrip_cost_pct: float,
+) -> list[sm.Trade]:
+    return [
+        trade
+        for trade in (
+            simulate_board_trade(
+                candidate=item,
+                bars=histories[item.symbol],
+                exit_case=exit_case,
+                roundtrip_cost_pct=roundtrip_cost_pct,
+            )
+            for item in candidates
+        )
+        if trade is not None
+    ]
+
+
+def add_months(value: date, months: int) -> date:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, days_in_month(year, month))
+    return date(year, month, day)
+
+
+def days_in_month(year: int, month: int) -> int:
+    if month == 12:
+        return 31
+    return (date(year, month + 1, 1) - timedelta(days=1)).day
+
+
 def qualifies_result(result: dict[str, Any]) -> bool:
     summary = result["summary"]
     train = result["train_summary"]
@@ -860,6 +1447,51 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
             ),
             flush=True,
         )
+    print(f"output={output_path}", flush=True)
+
+
+def print_shadow_default_summary(result: dict[str, Any], output_path: Path) -> None:
+    summary = result["summary"]
+    train = result["train_summary"]
+    validation = result["validation_summary"]
+    suggested = result["suggested_position_summary"]
+    suggested_validation = result["suggested_position_validation_summary"]
+    print(
+        "shadow_default "
+        f"trades={summary['sample_count']} "
+        f"win={summary['win_rate']} "
+        f"return={summary['position_weighted_return_pct']} "
+        f"dd={summary['max_drawdown_pct']} "
+        f"train={train['position_weighted_return_pct']} "
+        f"validation={validation['position_weighted_return_pct']} "
+        f"suggested_return={suggested['position_weighted_return_pct']} "
+        f"suggested_validation={suggested_validation['position_weighted_return_pct']}",
+        flush=True,
+    )
+    print(f"output={output_path}", flush=True)
+
+
+def print_walk_forward_summary(report: dict[str, Any], output_path: Path) -> None:
+    walk = report["walk_forward"]
+    summary = walk["summary"]
+    train = walk["train_summary"]
+    validation = walk["validation_summary"]
+    suggested = walk["suggested_position_summary"]
+    suggested_validation = walk["suggested_position_validation_summary"]
+    default = report["shadow_default"]["summary"]
+    print(
+        "walk_forward "
+        f"trades={summary['sample_count']} "
+        f"win={summary['win_rate']} "
+        f"return={summary['position_weighted_return_pct']} "
+        f"dd={summary['max_drawdown_pct']} "
+        f"train={train['position_weighted_return_pct']} "
+        f"validation={validation['position_weighted_return_pct']} "
+        f"suggested_return={suggested['position_weighted_return_pct']} "
+        f"suggested_validation={suggested_validation['position_weighted_return_pct']} "
+        f"default_return={default['position_weighted_return_pct']}",
+        flush=True,
+    )
     print(f"output={output_path}", flush=True)
 
 

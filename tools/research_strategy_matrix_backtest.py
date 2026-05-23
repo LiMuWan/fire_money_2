@@ -90,7 +90,7 @@ def parse_args() -> argparse.Namespace:
         "--roundtrip-cost-pct",
         type=float,
         default=0.0015,
-        help="Deducted from every trade return. 0.0015 means 0.15%.",
+        help="Deducted from every trade return. 0.0015 means 0.15%%.",
     )
     parser.add_argument(
         "--position-pct",
