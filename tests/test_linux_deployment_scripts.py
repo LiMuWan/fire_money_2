@@ -59,6 +59,8 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
         self.assertIn("systemctl --no-pager --plain status firemoney-preview.service", health)
         self.assertIn("ss -ltnp", health)
         self.assertIn("curl -fsS", health)
+        self.assertIn("FIREMONEY_HEALTH_WAIT_SECONDS", health)
+        self.assertIn("preview_http_timeout", health)
         self.assertIn("grep -q \"FireMoney\"", health)
         self.assertIn("schedule-health --brief", health)
 
