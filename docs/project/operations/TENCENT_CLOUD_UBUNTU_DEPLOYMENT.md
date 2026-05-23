@@ -14,6 +14,91 @@
 - 服务配置：`/etc/firemoney/firemoney.env`
 - 运行数据：`/opt/firemoney/.firemoney/`
 
+## 快速路线
+
+优先推荐用 GitHub 分支部署，因为代码已经推到远程仓库：
+
+```text
+https://github.com/LiMuWan/fire_money_2.git
+```
+
+当前可部署分支：
+
+```text
+codex/one-to-two-core-prune
+```
+
+最快路径是：
+
+1. 腾讯云控制台重置服务器密码，并绑定 SSH 密钥。
+2. 安全组放行 `22/tcp`，如果要公网看页面再放行 `8765/tcp` 给你的固定 IP。
+3. SSH 登录服务器。
+4. 从 GitHub 拉取 `codex/one-to-two-core-prune` 到 `/opt/firemoney`。
+5. 执行 `sudo bash scripts/linux/install_firemoney_systemd.sh` 安装服务。
+6. 配置 `/etc/firemoney/firemoney.env` 里的飞书密钥。
+7. 启动 `firemoney-preview`，确认页面能打开。
+8. 跑 `doctor`、`beta-check`、`feishu-test`。
+9. 飞书测试通过后，再启动 `firemoney-beta-watch`。
+10. 用 `bash scripts/linux/check_firemoney_server.sh` 验收。
+
+如果你只想先把服务跑起来，按下面这段命令执行即可。把 `<你的服务器公网IP>` 替换成腾讯云公网 IP：
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\firemoney_tencent ubuntu@<你的服务器公网IP>
+```
+
+登录服务器后执行：
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-pip curl rsync
+sudo mkdir -p /opt/firemoney
+sudo chown ubuntu:ubuntu /opt/firemoney
+
+git clone -b codex/one-to-two-core-prune https://github.com/LiMuWan/fire_money_2.git /opt/firemoney
+cd /opt/firemoney
+sudo bash scripts/linux/install_firemoney_systemd.sh
+
+sudo systemctl start firemoney-preview
+sudo systemctl status firemoney-preview --no-pager
+curl -fsS http://127.0.0.1:8765/core_workflow.html | grep FireMoney
+```
+
+到这里，预览服务应该已经起来。接下来不要急着开值守，先配置飞书：
+
+```bash
+sudo nano /etc/firemoney/firemoney.env
+```
+
+至少确认：
+
+```text
+FEISHU_ENABLED=true
+```
+
+然后填入 webhook 或 app 机器人配置。配置完成后：
+
+```bash
+sudo systemctl restart firemoney-preview
+
+cd /opt/firemoney
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli doctor --brief --market-data-timeout-seconds 20
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli feishu-test
+```
+
+确认飞书群收到测试消息后，再启动真实模拟盘值守：
+
+```bash
+sudo systemctl start firemoney-beta-watch
+sudo systemctl status firemoney-beta-watch --no-pager
+
+cd /opt/firemoney
+bash scripts/linux/check_firemoney_server.sh
+```
+
+验收通过后，服务会开机自启；交易日只在应该发送早评、买入/卖出、晚评的时候发飞书，非交易日不发。
+
 ## 0. 先处理安全
 
 你之前把服务器默认密码发到聊天里了，这个密码必须视为已经泄露。部署前先做这几件事：
@@ -279,6 +364,48 @@ ss -ltnp 'sport = :8765'
 pgrep -af 'firemoney_preview_server|beta-start|one_to_two_cli'
 ```
 
+## 8.1 首次部署验收表
+
+首次部署完成后，逐项打勾：
+
+```text
+[ ] 已重置腾讯云默认密码
+[ ] 已绑定 SSH 密钥，确认可以用密钥登录
+[ ] 安全组只对你的固定 IP 放行 22/tcp
+[ ] 如需公网预览，8765/tcp 只对你的固定 IP 放行
+[ ] /opt/firemoney 已存在，并且是 codex/one-to-two-core-prune 分支
+[ ] /etc/firemoney/firemoney.env 已创建，权限为 600
+[ ] FEISHU_ENABLED=true
+[ ] webhook 或 app 机器人配置已填入 env 文件
+[ ] firemoney-preview.service 为 active
+[ ] curl http://127.0.0.1:8765/core_workflow.html 能看到 FireMoney
+[ ] doctor --brief 不是 blocked
+[ ] beta-check 能跑通
+[ ] feishu-test 群里能收到
+[ ] firemoney-beta-watch.service 为 active
+[ ] schedule-health --brief 能输出 ready / 非交易日 closed
+[ ] notifications --action-only 能看到飞书 sent 记录
+[ ] paper-db --brief 能读取模拟盘账本
+```
+
+对应命令：
+
+```bash
+cd /opt/firemoney
+git branch --show-current
+git log --oneline --max-count=3
+sudo stat -c "%a %U:%G %n" /etc/firemoney/firemoney.env
+systemctl is-active firemoney-preview
+systemctl is-active firemoney-beta-watch
+curl -fsS http://127.0.0.1:8765/core_workflow.html | grep FireMoney
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli doctor --brief --market-data-timeout-seconds 20
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli schedule-health --brief
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli notifications --action-only --brief --limit 20
+/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli paper-db --brief --limit 20
+bash scripts/linux/check_firemoney_server.sh
+```
+
 ## 9. 日常运维命令
 
 查看预览日志：
@@ -329,11 +456,20 @@ cd /opt/firemoney
 
 ```bash
 cd /opt/firemoney
-git pull
+git fetch origin
+git checkout codex/one-to-two-core-prune
+git pull --ff-only origin codex/one-to-two-core-prune
 /opt/firemoney/.venv/bin/python -m pip install -r requirements.txt
 sudo systemctl restart firemoney-preview
 sudo systemctl restart firemoney-beta-watch
 bash scripts/linux/check_firemoney_server.sh
+```
+
+如果你以后把代码合并到 `main`，再把上面的分支名改成：
+
+```bash
+git checkout main
+git pull --ff-only origin main
 ```
 
 如果用 Windows 部署脚本，重新执行：
