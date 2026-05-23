@@ -25,6 +25,7 @@ $Archive = Join-Path ([System.IO.Path]::GetTempPath()) "firemoney-deploy.tar.gz"
 $RemoteArchive = "/tmp/firemoney-deploy.tar.gz"
 $Target = "$User@$HostName"
 $RemoteOwner = "${User}:${User}"
+$BetaCheckReady = $false
 
 function Invoke-Checked {
     param(
@@ -103,7 +104,7 @@ if ($StartPreview) {
 
 if ($RunBetaCheck) {
     Write-Host "Running beta-check"
-    Invoke-Checked "ssh.exe" @(
+    $betaCheckOutput = & ssh.exe @(
         "-i",
         $KeyPath,
         "-o",
@@ -111,21 +112,63 @@ if ($RunBetaCheck) {
         $Target,
         "cd '$RemoteDir' && '$RemoteDir/.venv/bin/python' -B -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20"
     )
+    $betaCheckExitCode = $LASTEXITCODE
+    $betaCheckOutput | ForEach-Object { Write-Host $_ }
+    if ($betaCheckExitCode -ne 0) {
+        throw "beta-check failed with exit code $betaCheckExitCode"
+    }
+
+    $betaCheckText = $betaCheckOutput -join "`n"
+    try {
+        $betaCheckJson = $betaCheckText | ConvertFrom-Json
+        $BetaCheckReady = ($betaCheckJson.status -eq "ready")
+    }
+    catch {
+        throw "beta-check 输出不是合法 JSON，不能安全启动 beta-watch。"
+    }
+
+    if (-not $BetaCheckReady) {
+        Write-Warning "beta-check 状态不是 ready，已跳过 beta-watch 启动。请先修复飞书、交易日或体检阻断项。"
+        if ($StartBetaWatch) {
+            Invoke-Checked "ssh.exe" @(
+                "-i",
+                $KeyPath,
+                "-o",
+                "IdentitiesOnly=yes",
+                $Target,
+                "sudo systemctl stop firemoney-beta-watch || true"
+            )
+        }
+    }
 }
 
 if ($StartBetaWatch) {
-    if (-not $RunBetaCheck) {
-        Write-Warning "StartBetaWatch requested without RunBetaCheck. 确认 /etc/firemoney/firemoney.env 和 beta-check 已通过后再用于真实值守。"
+    if ($RunBetaCheck -and -not $BetaCheckReady) {
+        Write-Warning "firemoney-beta-watch 未启动：beta-check 未 ready。部署已完成，预览页可用。"
     }
-    Write-Host "Starting firemoney-beta-watch"
-    Invoke-Checked "ssh.exe" @(
-        "-i",
-        $KeyPath,
-        "-o",
-        "IdentitiesOnly=yes",
-        $Target,
-        "sudo systemctl restart firemoney-beta-watch && sudo systemctl status firemoney-beta-watch --no-pager"
-    )
+    elseif (-not $RunBetaCheck) {
+        Write-Warning "StartBetaWatch requested without RunBetaCheck. 确认 /etc/firemoney/firemoney.env 和 beta-check 已通过后再用于真实值守。"
+        Write-Host "Starting firemoney-beta-watch"
+        Invoke-Checked "ssh.exe" @(
+            "-i",
+            $KeyPath,
+            "-o",
+            "IdentitiesOnly=yes",
+            $Target,
+            "sudo systemctl restart firemoney-beta-watch && sudo systemctl status firemoney-beta-watch --no-pager"
+        )
+    }
+    else {
+        Write-Host "Starting firemoney-beta-watch"
+        Invoke-Checked "ssh.exe" @(
+            "-i",
+            $KeyPath,
+            "-o",
+            "IdentitiesOnly=yes",
+            $Target,
+            "sudo systemctl restart firemoney-beta-watch && sudo systemctl status firemoney-beta-watch --no-pager"
+        )
+    }
 }
 
 Write-Host "Deploy complete. Edit secrets only on server: sudo nano /etc/firemoney/firemoney.env"

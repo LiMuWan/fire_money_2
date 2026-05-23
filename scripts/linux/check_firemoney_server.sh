@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+APP_DIR="${FIREMONEY_APP_DIR:-/opt/firemoney}"
 PORT="${FIREMONEY_PREVIEW_PORT:-8765}"
 URL="${FIREMONEY_HEALTH_URL:-http://127.0.0.1:${PORT}/core_workflow.html}"
 WAIT_SECONDS="${FIREMONEY_HEALTH_WAIT_SECONDS:-30}"
+
+cd "$APP_DIR"
 
 echo "== systemd =="
 systemctl --no-pager --plain status firemoney-preview.service || true
@@ -15,7 +18,7 @@ ss -ltnp "sport = :$PORT" || true
 echo "== http =="
 ready=0
 for _ in $(seq 1 "$WAIT_SECONDS"); do
-  if curl -fsS --max-time 5 "$URL" >/tmp/firemoney_preview_health.html; then
+  if curl -fsS --max-time 5 "$URL" >/tmp/firemoney_preview_health.html 2>/dev/null; then
     ready=1
     break
   fi

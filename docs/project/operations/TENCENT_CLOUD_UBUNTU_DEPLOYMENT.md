@@ -533,6 +533,8 @@ curl -fsS http://127.0.0.1:8765/core_workflow.html | head
 ```
 
 如果服务器本机 `curl` 正常，但公网打不开，通常是安全组或 `FIREMONEY_PREVIEW_BIND` 问题。
+如果部署日志里出现 `preview_http_timeout`，先看 `journalctl -u firemoney-preview -n 100 --no-pager` 和
+`tail -n 100 /opt/firemoney/.firemoney/logs/firemoney_preview.log`，这通常表示预览页内容刷新还在后台执行，端口没能在健康检查窗口内就绪。
 
 ### 早评或晚评没发
 

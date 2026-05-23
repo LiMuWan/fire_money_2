@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -16,7 +18,8 @@ def build_preview(output_path: str | Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory() as temp_dir:
         data = build_preview_workflow_data(Path(temp_dir))
-        target.write_text(
+        _atomic_write_text(
+            target,
             render_one_to_two_workflow_html(
                 report=data.report,
                 watch_report=data.watch_report,
@@ -37,6 +40,20 @@ def build_preview(output_path: str | Path) -> Path:
             encoding="utf-8",
         )
     return target
+
+
+def _atomic_write_text(target: Path, content: str) -> None:
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        delete=False,
+        dir=target.parent,
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+    ) as handle:
+        handle.write(content)
+        temp_path = Path(handle.name)
+    os.replace(temp_path, target)
 
 
 if __name__ == "__main__":

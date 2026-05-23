@@ -36,6 +36,17 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
         self.assertIn("beta-start", beta)
         self.assertIn("--loop", beta)
 
+    def test_preview_start_script_serves_http_before_refreshing_content(self) -> None:
+        preview = (LINUX_SCRIPTS / "start_firemoney_preview.sh").read_text(encoding="utf-8")
+
+        self.assertIn("REFRESH_LOCK", preview)
+        self.assertIn("client.desktop.firemoney_client.preview", preview)
+        self.assertIn("scripts/linux/firemoney_preview_server.py", preview)
+        self.assertLess(
+            preview.index("client.desktop.firemoney_client.preview"),
+            preview.index("scripts/linux/firemoney_preview_server.py"),
+        )
+
     def test_installer_keeps_secrets_out_of_repo_and_enables_services(self) -> None:
         installer = (LINUX_SCRIPTS / "install_firemoney_systemd.sh").read_text(
             encoding="utf-8"
@@ -56,9 +67,12 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
             encoding="utf-8"
         )
 
+        self.assertIn("FIREMONEY_APP_DIR:-/opt/firemoney", health)
+        self.assertIn("cd \"$APP_DIR\"", health)
         self.assertIn("systemctl --no-pager --plain status firemoney-preview.service", health)
         self.assertIn("ss -ltnp", health)
         self.assertIn("curl -fsS", health)
+        self.assertIn("2>/dev/null", health)
         self.assertIn("FIREMONEY_HEALTH_WAIT_SECONDS", health)
         self.assertIn("preview_http_timeout", health)
         self.assertIn("grep -q \"FireMoney\"", health)
@@ -85,8 +99,21 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
         self.assertIn("scp.exe", script)
         self.assertIn("ssh.exe", script)
         self.assertIn("install_firemoney_systemd.sh", script)
+        self.assertIn("ConvertFrom-Json", script)
+        self.assertIn("$BetaCheckReady", script)
+        self.assertIn("systemctl stop firemoney-beta-watch", script)
         self.assertNotIn("Password", script)
         self.assertNotIn("sshpass", script)
+
+    def test_preview_generator_uses_atomic_write(self) -> None:
+        preview = (ROOT / "client" / "desktop" / "firemoney_client" / "preview.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("def _atomic_write_text", preview)
+        self.assertIn("NamedTemporaryFile", preview)
+        self.assertIn("os.replace", preview)
+        self.assertIn("_atomic_write_text(", preview)
 
 
 if __name__ == "__main__":
