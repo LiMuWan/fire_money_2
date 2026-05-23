@@ -14,6 +14,10 @@
 - 服务配置：`/etc/firemoney/firemoney.env`
 - 运行数据：`/opt/firemoney/.firemoney/`
 
+如果你只想看最短勾选版，先看这里：
+
+- [一页部署清单](D:/workspace/FireMoney/docs/project/operations/TENCENT_CLOUD_UBUNTU_DEPLOYMENT_CHECKLIST.md)
+
 ## 快速路线
 
 优先推荐用 GitHub 分支部署，因为代码已经推到远程仓库：
