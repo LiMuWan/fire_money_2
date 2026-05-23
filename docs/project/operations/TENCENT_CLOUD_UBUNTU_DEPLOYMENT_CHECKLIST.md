@@ -2,40 +2,39 @@
 
 适合你现场照着勾选，不需要翻长文。
 
-## 先确认
+## 部署前
 
-- [ ] 腾讯云实例已重置密码
-- [ ] SSH 密钥已绑定到实例
-- [ ] 安全组已放行 `22/tcp`
-- [ ] 如需公网访问，`8765/tcp` 只对你的固定 IP 放行
-- [ ] 本机私钥存在：`%USERPROFILE%\.ssh\firemoney_tencent`
+| 状态 | 动作 | 命令 / 结果 |
+|---|---|---|
+| [ ] | 重置腾讯云密码 | 控制台重置 |
+| [ ] | 绑定 SSH 密钥 | `ssh-keygen` 生成后导入腾讯云 |
+| [ ] | 放行 SSH | 安全组放行 `22/tcp` |
+| [ ] | 预览页访问控制 | `8765/tcp` 只放行你的固定 IP，或只用 SSH 隧道 |
+| [ ] | 检查本机私钥 | `%USERPROFILE%\.ssh\firemoney_tencent` |
 
 ## 一键部署
 
-在 Windows PowerShell 执行：
+| 状态 | 动作 | 命令 / 结果 |
+|---|---|---|
+| [ ] | 执行一键部署 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_tencent_ubuntu_one_click.ps1` |
+| [ ] | 默认 IP | `81.70.202.132` |
+| [ ] | 默认用户 | `ubuntu` |
+| [ ] | 默认私钥 | `%USERPROFILE%\.ssh\firemoney_tencent` |
+| [ ] | 默认分支 | `codex/one-to-two-core-prune` |
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_tencent_ubuntu_one_click.ps1
-```
+## 部署后检查
 
-默认参数：
+| 状态 | 动作 | 命令 / 结果 |
+|---|---|---|
+| [ ] | 预览服务启动 | `sudo systemctl status firemoney-preview --no-pager` |
+| [ ] | 页面可访问 | `http://127.0.0.1:8765/core_workflow.html` |
+| [ ] | doctor 通过 | `doctor --brief` 不是 `blocked` |
+| [ ] | beta-check 通过 | `beta-check` 成功 |
+| [ ] | 飞书测试收到 | `feishu-test` 成功 |
+| [ ] | 值守启动 | `sudo systemctl status firemoney-beta-watch --no-pager` |
+| [ ] | 健康检查输出 ready | `bash scripts/linux/check_firemoney_server.sh` |
 
-- IP：`81.70.202.132`
-- 用户：`ubuntu`
-- 私钥：`%USERPROFILE%\.ssh\firemoney_tencent`
-- 分支：`codex/one-to-two-core-prune`
-
-## 部署后立刻检查
-
-- [ ] `firemoney-preview` 已启动
-- [ ] `http://127.0.0.1:8765/core_workflow.html` 能看到 FireMoney
-- [ ] `doctor --brief` 不是 `blocked`
-- [ ] `beta-check` 通过
-- [ ] `feishu-test` 已收到飞书消息
-- [ ] `firemoney-beta-watch` 已启动
-- [ ] `bash scripts/linux/check_firemoney_server.sh` 输出 `ready`
-
-## 服务器上常用命令
+## 服务器常用命令
 
 ```bash
 sudo systemctl status firemoney-preview --no-pager
@@ -47,18 +46,22 @@ cd /opt/firemoney
 bash scripts/linux/check_firemoney_server.sh
 ```
 
-## 如果出问题
+## 出问题先看
 
-- 网页打不开：先看 `firemoney-preview` 和 `ss -ltnp 'sport = :8765'`
-- 早评晚评没发：先跑 `schedule-health --brief`
-- 飞书没收到：先跑 `feishu-test`
-- 值守没起来：先看 `firemoney-beta-watch`
+| 问题 | 先查什么 |
+|---|---|
+| 网页打不开 | `firemoney-preview` 和 `ss -ltnp 'sport = :8765'` |
+| 早评晚评没发 | `schedule-health --brief` |
+| 飞书没收到 | `feishu-test` |
+| 值守没起来 | `firemoney-beta-watch` |
 
-## 这次部署结束的标准
+## 结束标准
 
-- [ ] 预览页能打开
-- [ ] 飞书能收到测试消息
-- [ ] 值守服务常驻
-- [ ] 没有重复实例
-- [ ] `schedule-health` 正常
-- [ ] 你能用这一页完成下一次部署
+| 状态 | 标准 |
+|---|---|
+| [ ] | 预览页能打开 |
+| [ ] | 飞书能收到测试消息 |
+| [ ] | 值守服务常驻 |
+| [ ] | 没有重复实例 |
+| [ ] | `schedule-health` 正常 |
+| [ ] | 你能用这一页完成下一次部署 |
