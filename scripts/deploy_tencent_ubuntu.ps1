@@ -70,6 +70,16 @@ Invoke-Checked "ssh.exe" @(
     "sudo mkdir -p '$RemoteDir' && sudo chown '$RemoteOwner' '$RemoteDir'"
 )
 
+Write-Host "Stopping FireMoney services before upload"
+Invoke-Checked "ssh.exe" @(
+    "-i",
+    $KeyPath,
+    "-o",
+    "IdentitiesOnly=yes",
+    $Target,
+    "sudo systemctl stop firemoney-beta-watch.service firemoney-preview.service || true && sudo systemctl reset-failed firemoney-beta-watch.service firemoney-preview.service || true"
+)
+
 Write-Host "Uploading archive to ${Target}:$RemoteArchive"
 Invoke-Checked "scp.exe" @(
     "-i",
@@ -136,7 +146,7 @@ if ($RunBetaCheck) {
                 "-o",
                 "IdentitiesOnly=yes",
                 $Target,
-                "sudo systemctl stop firemoney-beta-watch || true"
+                "sudo systemctl stop firemoney-beta-watch.service || true && sudo systemctl reset-failed firemoney-beta-watch.service || true"
             )
         }
     }

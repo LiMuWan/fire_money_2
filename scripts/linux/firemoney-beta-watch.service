@@ -9,7 +9,7 @@ User=ubuntu
 WorkingDirectory=/opt/firemoney
 EnvironmentFile=-/etc/firemoney/firemoney.env
 ExecStart=/opt/firemoney/scripts/linux/start_firemoney_beta_watch.sh
-Restart=always
+Restart=on-failure
 RestartSec=30
 
 [Install]

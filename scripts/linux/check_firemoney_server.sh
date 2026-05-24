@@ -9,8 +9,13 @@ WAIT_SECONDS="${FIREMONEY_HEALTH_WAIT_SECONDS:-30}"
 cd "$APP_DIR"
 
 echo "== systemd =="
-systemctl --no-pager --plain status firemoney-preview.service || true
-systemctl --no-pager --plain status firemoney-beta-watch.service || true
+PREVIEW_STATE="$(systemctl is-active firemoney-preview.service || true)"
+BETA_STATE="$(systemctl is-active firemoney-beta-watch.service || true)"
+echo "firemoney-preview.service: $PREVIEW_STATE"
+echo "firemoney-beta-watch.service: $BETA_STATE"
+if [[ "$PREVIEW_STATE" != "active" ]]; then
+  systemctl --no-pager --plain status firemoney-preview.service || true
+fi
 
 echo "== listeners =="
 ss -ltnp "sport = :$PORT" || true

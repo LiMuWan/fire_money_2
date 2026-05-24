@@ -5,6 +5,10 @@ APP_DIR="${FIREMONEY_APP_DIR:-/opt/firemoney}"
 SERVICE_USER="${FIREMONEY_SERVICE_USER:-ubuntu}"
 ENV_DIR="/etc/firemoney"
 ENV_FILE="$ENV_DIR/firemoney.env"
+VENV_DIR="$APP_DIR/.venv"
+PYTHON_BIN="$VENV_DIR/bin/python"
+REQ_FILE="$APP_DIR/requirements.txt"
+REQ_STAMP="$VENV_DIR/.requirements.sha256"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Please run with sudo: sudo bash scripts/linux/install_firemoney_systemd.sh" >&2
@@ -41,10 +45,20 @@ EOF
   chown root:root "$ENV_FILE"
 fi
 
-rm -rf "$APP_DIR/.venv"
-python3 -m venv "$APP_DIR/.venv"
-"$APP_DIR/.venv/bin/python" -m pip install --upgrade pip
-"$APP_DIR/.venv/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  rm -rf "$VENV_DIR"
+  python3 -m venv "$VENV_DIR"
+fi
+
+REQ_HASH="$(sha256sum "$REQ_FILE" | awk '{print $1}')"
+CURRENT_REQ_HASH="$(cat "$REQ_STAMP" 2>/dev/null || true)"
+if [[ "$REQ_HASH" != "$CURRENT_REQ_HASH" ]]; then
+  "$PYTHON_BIN" -m pip install --upgrade pip
+  "$PYTHON_BIN" -m pip install -r "$REQ_FILE"
+  echo "$REQ_HASH" >"$REQ_STAMP"
+else
+  echo "Python dependencies unchanged; reusing $VENV_DIR."
+fi
 
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
 chmod +x "$APP_DIR/scripts/linux/start_firemoney_preview.sh"
