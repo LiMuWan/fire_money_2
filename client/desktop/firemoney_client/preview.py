@@ -36,8 +36,7 @@ def build_preview(output_path: str | Path) -> Path:
                 notification_records=data.notification_records,
                 backtest_audit=data.backtest_audit,
                 commercial_readiness_report=data.commercial_readiness_report,
-            ),
-            encoding="utf-8",
+            )
         )
     return target
 
