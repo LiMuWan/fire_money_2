@@ -2,12 +2,12 @@
 
 ## 1. Goal
 
-The client keeps the user on the one-to-two validation line. It renders service-owned state and avoids making trusted trading decisions.
+The client keeps the user on the mainline first-board validation line. It renders service-owned state and avoids making trusted trading decisions.
 
 Core line:
 
 ```text
-早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察
+今日决策 -> 模拟盘指挥单 -> 盘中买卖纪律 -> 晚评复盘 -> 收益/回撤证据
 ```
 
 ## 2. Current Skeleton

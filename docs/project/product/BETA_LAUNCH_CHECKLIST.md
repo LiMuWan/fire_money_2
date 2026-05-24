@@ -78,7 +78,7 @@ python -B tools\research_limit_up_board_profit_matrix.py --start-date 2024-01-01
 
 新增执行摩擦压力测试：`paper-backtest` 同时展示 0.15%、0.30%、0.50%、0.80%、1.00% 往返成本。1.00% 成本下全区间仍约 +182.30%，验证段约 +7.94%，但最弱的 2021 仅约 +1.71%，因此压力状态为 warning；真实盘口若预估滑点接近或超过该压力，需要降低仓位或跳过。
 
-每天可以用影子入口看封板线当天会不会出候选；它只读历史缓存，不写一进二模拟盘，不发交易指令：
+每天可以用证据入口看封板主线当天会不会出候选；它只读历史缓存，不写真实模拟盘，不发交易指令：
 
 ```powershell
 python -m client.desktop.firemoney_client.one_to_two_cli board-shadow --trade-date 2026-04-29 --brief
@@ -178,7 +178,7 @@ python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --int
 
 `beta-start` 会先运行严格 `doctor --beta` 门禁；只有策略配置、交易日、行情、本地账本、飞书 sent 记录和调度审计全部 `ready`，才会启动调度。行情体检超过 `--market-data-timeout-seconds` 会快速返回 `blocked`。失败时只输出体检报告，不写入调度状态，不产生模拟买入。
 
-本地调度器会按 08:50 早盘、盘中 `scan/auction/open/risk`、15:10 尾盘推进同一条一进二主线，并在 15:20 自动执行 `board-shadow-record`：用当日已经可见的 T+1 日线，记录上一交易日封板影子线样本到 `.firemoney/board_shadow_samples.json`，同时发飞书 shadow 复盘。这个 shadow 任务只做验证，不写入 `.firemoney/paper_trades.json`，不代表实盘交易指令。调度器会用 `.firemoney/scheduler_state.json` 防止同日重复触发，同时把每次调度结果写入 `.firemoney/scheduler_runs.json` 便于复核值守覆盖率。`schedule --beta` 仍可用于工程排查，正式上线测试优先使用 `beta-start`。
+本地调度器会按 08:50 早盘、盘中 `scan/auction/open/risk`、15:10 尾盘推进同一条主线首板流程。证据层的 `board-shadow-record` 只用于记录上一交易日封板样本到 `.firemoney/board_shadow_samples.json`，不写入 `.firemoney/paper_trades.json`，不代表实盘交易指令，也不主动发送飞书。飞书低噪音边界仍然只有早评、真实模拟买入、真实模拟卖出、晚评。调度器会用 `.firemoney/scheduler_state.json` 防止同日重复触发，同时把每次调度结果写入 `.firemoney/scheduler_runs.json` 便于复核值守覆盖率。`schedule --beta` 仍可用于工程排查，正式上线测试优先使用 `beta-start`。
 
 Beta 值守不能和 `--no-notify` 同时使用；盘中事件必须能触达到飞书。
 
@@ -219,13 +219,13 @@ python -B -m client.desktop.firemoney_client.one_to_two_cli schedule-health --br
 - 少于 30 笔闭环样本只显示观察期，不给策略边界结论。
 - 暂无真实闭环样本或未达到复盘门槛时只允许降档小仓验证，不能因为样例回测好看就恢复常态仓位。
 - 同类买点质量段样本未达到复核门槛时也只允许降档小仓验证，不能用其他买点段的收益替代本段证明。
-- 达到 30/50/100 笔后再按稳定性报告调整一进二边界。
+- 达到 30/50/100 笔后再按稳定性报告调整主线首板边界。
 - 任何时候都只做模拟盘验证，不连接真实账户，不自动下单。
 - 今日可执行候选超过 18 个时视为主线过散，只记录观察，不生成模拟买入。
 - 卖点纪律默认：结构/4% 止损，12% 第一止盈，10% 强势阈值后 2% 回撤保护，2 个交易日不走强退出。
 - 主线持续性默认：同主线候选、近涨停强度、AkShare 个股新闻和市场温度共同评分；低于 45 分则 T+1 优先退出。
 - 回测准入默认：先跑 `backtest-audit --brief`；数据窗口不足、无闭环样本直接 blocked，样本少于 30 笔只能观察。
 - 研究回测股票池少于 2500 只主板样本时必须中止或用本地历史缓存补齐，不能把缺失交易所样本的结果当作正式胜率。
-- 封板验证线进入模拟盘前必须补：封单强度、开板次数、可成交排队、分钟线滑点、主线消息持续性；未补齐前不得替代当前一进二 Beta 主线。
-- 封板影子线默认只在封板日市场封板家数 20 到 150 家之间记录样本；过冷或过热只观察，并在飞书/CLI 中展示封板家数、触板家数和上涨占比。
-- 封板影子线默认拦截近 20 日涨幅超过 20% 的高位加速板；这类票即使封住也只观察，不写入 shadow 样本。
+- 封板主线进入更高仓位前必须持续补：封单强度、开板次数、可成交排队、分钟线滑点、主线消息持续性；未补齐前不得扩大默认仓位。
+- 封板证据层默认只在封板日市场封板家数 20 到 150 家之间记录样本；过冷或过热只观察，并在 CLI/页面中展示封板家数、触板家数和上涨占比。
+- 封板证据层默认拦截近 20 日涨幅超过 20% 的高位加速板；这类票即使封住也只观察，不写入主线样本。

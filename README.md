@@ -1,216 +1,158 @@
-# FireMoney
+# FireMoney 主线首板
 
-2026-05-09 均衡主升卖点更新：模拟盘新增“主升持有模式”，只有强换手龙买点、高开仓评分、强主线连续性的持仓才会跳过 3% 基础锁盈，改用 6% 后 2% 动态回撤和 1.5% 利润地板保护；普通信号仍快速落袋。
+FireMoney 是一个面向 A 股主板 10cm 的主线首板研究与模拟盘值守项目。
 
-2026-05-09 收益质量守门更新：模拟盘入场前现在不仅看胜率和平均收益，还会检查最近闭环交易的盈利覆盖回撤达标率与平均赚撤比；只要利润没有稳定覆盖过程回撤，就自动降仓，避免用大回撤换小利润。
+项目当前只保留一条默认经营主线：`主线首板候选 -> 早盘指挥单 -> 盘中模拟买卖 -> 尾盘复盘 -> 收益与回撤证据`。它的目标不是替你自动实盘下单，而是把买点、卖点、仓位、飞书通知和回测证据放进同一条可验证闭环里。
 
-2026-05-09 守门复盘更新：`paper-db --brief` 现在会按入场守门动作分层统计闭环交易，包括守门放行满仓、守门降仓、历史未记录等，直接展示胜率、平均收益、赚撤比、盈利覆盖回撤率和下一步建议，用来判断仓位守门是不是真的帮助我们稳定赚钱。
+> 风险说明：本项目只做研究、模拟盘和工程验证，不构成投资建议，不承诺盈利。任何实盘决策都需要你独立判断并承担风险。
 
-2026-05-09 入场证据更新：模拟盘真实买入现在会把入场守门器的状态、动作、建议仓位、守门理由和同质量段历史表现写入持仓、成交与 SQLite；`paper-db --brief` 可对照“买点质量 + 守门决策 -> 最终收益”。
+---
 
-2026-05-09 模拟盘守门更新：`paper-decision` 和 `watch --phase open` 现在会把当前候选的换手龙质量段交给收益守门器；如果同质量段历史闭环表现弱，会自动降仓，如果同质量段连续收益质量失败，会暂停新开仓，避免继续用同一种亏钱买点试错。
+## 项目能做什么
 
-2026-05-08 模拟盘复盘更新：每笔模拟买入现在会把当时的换手龙买点质量分数、标签和说明一起写入 JSON 账本与 SQLite；卖出后成交记录继续保留这组买点证据，`paper-db --brief` 可直接对照“买点质量 -> 实际盈亏/赚撤比”，并按强换手龙、有效换手龙、低质量换手、历史未评分分层统计胜率和收益质量。
+- 筛选主板 10cm 主线首板候选，默认聚焦 50-800 亿市值带。
+- 生成早盘、盘中、尾盘和值守诊断报告。
+- 给出模拟盘买入、卖出、仓位、止损、止盈和取消条件。
+- 记录 JSON/SQLite 模拟盘账本，便于复盘每笔交易的收益和回撤。
+- 只向飞书推送低噪音消息：早评、真实模拟买入、真实模拟卖出、晚评。
+- 生成本地或服务器预览页，用一屏优先展示“今天买不买、卖不卖、风险在哪里”。
+- 支持腾讯云 Ubuntu systemd 部署，保证预览服务和值守服务可自启、可检查、可复盘。
 
-2026-05-08 决策线更新：`strategy-decision --brief` 作为每日经营入口，由服务端统一决定今天采用主线还是空仓。当前经营面只保留 `board-shadow-system` 和 `cash`，所有策略改动仍必须回到 2024-01-01 做 point-in-time 回测，不能用未来走势倒推买点。
+## 项目不做什么
 
-2026-05-08 买点质量更新：一进二模拟盘新增“换手龙质量”硬闸门，候选必须同时满足有效换手、封单/成交额、首封时间、竞价占比、市场温度、量比、RSI 和位置结构，低于 `72/100` 不生成模拟买入。该评分只用当时可见字段，是主升启动前买点的日线代理；后续接入 Tick/盘口后再升级成交质量证据。
+- 不连接券商账户。
+- 不自动实盘下单。
+- 不把样例数据当真实收益。
+- 不保证每笔交易盈利。
+- 不把研究线当默认经营入口。
 
-2026-05-06 经营线更新：当前产品的“值守主线”仍是主板 10cm 一进二纪律验证，但“经营主线候选”已经切换为封板波段体系。当前可直接运行 `board-shadow-system --brief` 查看这条经营线的买点、卖点、仓位和 2024 以来验证收益；在补齐分钟线/Tick、封单排队和滑点之前，它先以 shadow/体系复盘方式并行经营，不直接替代现有模拟盘值守链路。
+---
 
-2026-05-02 核心线更新：当前产品线已经收敛为 `主线首板龙头预判 -> 封板纪律确认 -> 次日一进二确认 -> 模拟盘验证 -> 尾盘复盘 -> 稳定性观察`。一进二不再作为孤立战法入口，而是作为首板候选次日强弱确认和 T+1 风险处理点。完整产品边界见 [docs/project/product/MAINLINE_FIRST_BOARD_STRATEGY.md](docs/project/product/MAINLINE_FIRST_BOARD_STRATEGY.md)。
+## 快速开始
 
-FireMoney 当前只保留一条产品主线：主板 10cm “一进二”战法验证。
+```powershell
+python -m pip install -r requirements.txt
 
-第一版目标不是自动实盘交易，而是验证战法稳定性：用 AkShare 边界接行情，筛昨日首板，判断低位/突破/压力，事件驱动模拟盘执行纪律，通过飞书通知早盘、盘中和尾盘结果，并沉淀稳定性样本。
+python -B -m client.desktop.firemoney_client.one_to_two_cli strategy-decision --sample-data --brief
+python -B -m client.desktop.firemoney_client.one_to_two_cli paper-decision --sample-data --brief
+python -B -m client.desktop.firemoney_client.preview
+```
 
-核心业务线：
+打开本地预览服务：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_core_workflow_preview.ps1
+```
+
+浏览器访问：
 
 ```text
-早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察
+http://127.0.0.1:8765/core_workflow.html
 ```
+
+如果要部署到腾讯云，请从这里开始：
+
+- [腾讯云 Ubuntu 部署手册](docs/project/operations/TENCENT_CLOUD_UBUNTU_DEPLOYMENT.md)
+- [腾讯云一页验收清单](docs/project/operations/TENCENT_CLOUD_UBUNTU_DEPLOYMENT_CHECKLIST.md)
+
+---
+
+## 文档入口
+
+FireMoney 的公开手册采用中文编号命名，阅读顺序见：
+
+- [docs/README.md](docs/README.md)
+
+推荐第一次阅读顺序：
+
+| 文档 | 用途 |
+|---|---|
+| [0-介绍.md](docs/0-介绍.md) | 项目定位、边界和当前阶段 |
+| [1-快速开始.md](docs/1-快速开始.md) | 本地运行、预览、飞书测试 |
+| [2-框架概览.md](docs/2-框架概览.md) | 客户端、服务端、共享契约和框架层 |
+| [3-1-主线策略模块.md](docs/3-1-主线策略模块.md) | 候选筛选、买点、卖点、仓位边界 |
+| [3-2-模拟盘与通知模块.md](docs/3-2-模拟盘与通知模块.md) | 模拟盘账本、飞书低噪音、复盘证据 |
+| [3-3-部署与值守模块.md](docs/3-3-部署与值守模块.md) | Windows 本地值守和腾讯云 systemd |
+| [99-运行与验证.md](docs/99-运行与验证.md) | 常用命令、自测和排障顺序 |
+| [FAQ.md](docs/FAQ.md) | 常见问题 |
+
+---
 
 ## 目录结构
 
 ```text
 client/
-  desktop/        一进二本地 CLI、预览生成和静态渲染
-  docs/           客户端设计和实现文档
+  desktop/firemoney_client/   CLI、预览生成、页面渲染和客户端适配
 
 server/
-  docs/           服务端/业务层设计和实现文档
   firemoney_server/
-    application/  一进二用例编排
-    domain/       一进二评分、拦截和风险规则
-    infrastructure/ AkShare、飞书、模拟盘、策略配置
+    application/              每日决策、模拟盘、通知、复盘和值守编排
+    domain/                   主线首板评分、拦截、仓位和风控规则
+    infrastructure/           AkShare、飞书、本地账本、配置和交易日历
 
 shared/
-  contracts/      一进二共享契约和 DTO
-  docs/           共享协议说明
+  contracts/                  客户端和服务端共享 DTO / 协议
 
-docs/
-  common/         跨项目通用原则和协作规范
-  project/        FireMoney 项目文档
-  archive/        历史参考资料
+framework/
+  config/ storage/ scheduler/ notification/
+                              可复用工程基础件，不依赖 FireMoney 业务
+
+scripts/
+  linux/                      腾讯云 Ubuntu systemd 部署和值守脚本
+  *.ps1                       Windows 本地运行、检查和部署脚本
+
+tests/
+                              主线策略、模拟盘、通知、架构边界和部署脚本测试
 ```
 
-## 当前闭环
+## 分层红线
+
+- `framework/` 不能导入 `server.firemoney_server`、`client` 或 FireMoney 交易 DTO。
+- `client/` 只展示服务端输出，不重新计算可信交易结论。
+- `server/firemoney_server/application/` 只做用例编排，不写页面渲染。
+- `server/firemoney_server/domain/` 只放纯交易规则，不读文件、不发飞书、不访问 AkShare。
+- `server/firemoney_server/infrastructure/` 负责外部系统适配，不把第三方字段泄漏给 UI。
+- 运行态、截图、SQLite、飞书密钥和本地账本都不能提交到仓库。
+
+## 运行态文件
+
+这些文件默认被 `.gitignore` 忽略：
 
 ```text
-MarketDataProvider/AkShare
--> 一进二评分与硬拦截
--> 交易日解析和阶段化 watch
--> PaperTradeStore 事件驱动模拟盘
--> 止损/T+1 风险事件和完成样本归档
--> FeishuNotifier 通知结果
--> 尾盘测评
--> 稳定性观察
+.firemoney/
+exports/
+reports/
+client/desktop/preview/*.html
+client/desktop/preview/*.png
+client/desktop/preview/*.json
+client/desktop/preview/*.sqlite3
 ```
 
-默认边界：
+预览页、模拟盘账本、通知归档和运行状态都可以重新生成，不属于源码。
 
-- 只做 A 股主板 10cm 一进二。
-- 排除 ST、退市、新股前 5 日、创业板、科创板、北交所。
-- `min_score=82`，`max_execution_score=90`；执行侧分数过高视为一致性过热，先观察不买入。10 万模拟本金，单票最多 8%，每天最多 1 笔。
-- 低位平台突破必须有市场宽度确认：昨日首板不少于 45 家，今日可执行候选不少于 6 个；可执行候选超过 18 个视为主线过散，只观察不买入。
-- 买前增加持续性确认：首板 5 日量比不低于 1.0，RSI(14) 必须在 55-85，60 日位置分位不低于 55%；资金风格目前只按成交额做“游资/机构代理”提示，不当作真实席位结论。
-- 次日开盘确认必须红盘且不高于 3.5%；默认 4%/结构止损，12% 第一止盈，强势达到 10% 后用 2% 回撤保护。
-- 当天跌破止损只发风险预警，次日仍低于止损才模拟卖出。
-- 持仓满 2 个交易日仍未走强，进入纪律退出并归档样本。
-- 稳定性统计基于完成交易样本，不再只按事件条数估算，并保留最近完成样本用于肉眼复盘。
-- 样本少于 30 笔只显示观察期，不自动给策略边界结论；达到 30/50/100 笔后才输出阶段性边界建议。
+---
 
-## 配置与本地状态
-
-- 依赖清单：`requirements.txt`
-- 一进二策略配置：`server/firemoney_server/infrastructure/config/one_to_two_strategy.zh_CN.json`
-- 模拟盘账本：`.firemoney/paper_trades.json`
-- 飞书通知归档：`.firemoney/notifications.json`
-- 调度去重状态：`.firemoney/scheduler_state.json`
-- 调度运行审计：`.firemoney/scheduler_runs.json`
-- AkShare 原始快照缓存：`.firemoney/market_data/`
-- 本地预览：`client/desktop/preview/core_workflow.html`
-
-模拟盘 Beta 上线前检查：`docs/project/product/BETA_LAUNCH_CHECKLIST.md`
-
-飞书通知只读环境变量，不写入仓库。可以用群机器人 Webhook：
-
-- `FEISHU_ENABLED=true/false`
-- `FEISHU_WEBHOOK_URL`
-- `FEISHU_WEBHOOK_SECRET` 可选
-
-也可以用飞书应用机器人：
-
-- `FEISHU_ENABLED=true`
-- `FEISHU_APP_ID`
-- `FEISHU_APP_SECRET`
-- `FEISHU_RECEIVE_ID`
-- `FEISHU_RECEIVE_ID_TYPE=chat_id`
-
-本机可把这些值写在被忽略的 `.firemoney/feishu.env`，CLI 启动时会自动读取，进程环境变量优先级更高。
-
-飞书消息由服务端业务层统一生成，并按低噪音原则只推四类交易相关消息：早评、真实模拟买入、真实模拟卖出、晚评。扫描、竞价、普通风险检查、影子线复盘和 `paper-decision` 本地指挥单只进入页面/CLI/本地审计，不主动推送飞书。`feishu-test` 仅用于 Beta 联通验证，不属于交易消息。
-
-## 本地运行
-
-首次准备真实行情入口：
-
-```powershell
-python -m pip install -r requirements.txt
-$env:FEISHU_ENABLED="true"
-$env:FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-python -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
-python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60 --market-data-timeout-seconds 20
-```
-
-应用机器人模式也可以放入 `.firemoney/feishu.env`：
-
-```text
-FEISHU_ENABLED=true
-FEISHU_APP_ID=...
-FEISHU_APP_SECRET=...
-FEISHU_RECEIVE_ID=oc_...
-FEISHU_RECEIVE_ID_TYPE=chat_id
-```
-
-```powershell
-python -m client.desktop.firemoney_client.one_to_two_cli morning --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli watch --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli eod --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli replay --brief --trade-date 2026-04-24 --holding-days 3
-python -m client.desktop.firemoney_client.one_to_two_cli backtest --start-date 2026-04-01 --end-date 2026-04-30 --max-trade-days 20
-python -m client.desktop.firemoney_client.one_to_two_cli board-shadow-system --start-date 2024-01-01 --end-date 2026-05-05 --brief
-python -m client.desktop.firemoney_client.one_to_two_cli stability
-python -m client.desktop.firemoney_client.one_to_two_cli doctor --market-data-timeout-seconds 20
-python -m client.desktop.firemoney_client.one_to_two_cli feishu-test --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli schedule --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli beta-start --market-data-timeout-seconds 20
-python -m client.desktop.firemoney_client.one_to_two_cli notifications --limit 20
-python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 20
-```
-
-运行稳定性入口：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check_firemoney_runtime.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ensure_firemoney_runtime.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\register_firemoney_runtime_watchdog.ps1
-```
-
-`check_firemoney_runtime.ps1` 只诊断：确认本地预览页 `127.0.0.1:8765/core_workflow.html` 是否 HTTP 200、是否只有一个监听实例、交易日 `beta-start --loop` 是否常驻、`schedule-health` 是否覆盖早评、09:00 指挥单、09:31 开盘确认和晚评。预览页以 HTTP 200 为主判据，端口枚举只用于发现多实例，避免 Windows 网络 cmdlet 偶发不可读时误报客户端坏了。`ensure_firemoney_runtime.ps1` 会在缺失时自动补启预览服务，并只在 A 股交易日尝试拉起 `beta-start` 值守；值守运行用进程命令行和 `FireMoneyBetaWatch` 互斥锁双保险确认，底层启动脚本继续用互斥锁和端口检查避免多实例。`register_firemoney_runtime_watchdog.ps1` 优先注册 Windows 计划任务；若系统策略拒绝，会自动退化为当前用户 Startup 快捷方式。非交易日会明确显示早评/晚评不应发送；交易日盘前的关键阶段 `pending` 是正常等待，不是漏发。
-
-腾讯云 Ubuntu 部署见 `docs/project/operations/TENCENT_CLOUD_UBUNTU_DEPLOYMENT.md`。Linux 服务器用 `firemoney-preview.service` 和 `firemoney-beta-watch.service` 两个 systemd 服务托管，统一读取 `/etc/firemoney/firemoney.env`，并用 `flock` 防止重复实例。
-
-从 Windows 本机部署到腾讯云可以用 `scripts/deploy_tencent_ubuntu.ps1`，但它只支持 SSH 私钥，不支持密码参数。服务器密码和飞书密钥都只能放在服务器或腾讯云控制台，不应进入命令历史或仓库。
-
-盘中 watch 可按阶段手动推进：
-
-```powershell
-python -m client.desktop.firemoney_client.one_to_two_cli watch --phase scan --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli watch --phase auction --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli watch --phase open --no-notify
-python -m client.desktop.firemoney_client.one_to_two_cli watch --phase risk --no-notify
-```
-
-本地调度器只推进一进二主线，会按日内时间触发早盘、`scan`、`auction`、`open`、盘中 `risk` 和尾盘，并用 `.firemoney/scheduler_state.json` 防止同一交易日同一任务重复执行，同时把每次调度结果写入 `.firemoney/scheduler_runs.json` 便于复核值守覆盖率。错过执行窗口的任务会标记为 `expired`，不会在下午补跑开盘买入。本地试跑可以固定时间：
-
-```powershell
-python -m client.desktop.firemoney_client.one_to_two_cli schedule --trade-date 2026-04-30 --at 09:31 --sample-data --no-notify --paper-store .firemoney/tmp-paper.json --scheduler-state .firemoney/tmp-scheduler.json
-python -m client.desktop.firemoney_client.one_to_two_cli beta-start --loop --interval-seconds 60 --market-data-timeout-seconds 20
-```
-
-`beta-start` 会先运行严格 `doctor --beta` 门禁；只有策略配置、交易日、行情、本地账本、飞书 sent 记录和调度审计全部 ready，才会启动本次调度。行情体检超过 `--market-data-timeout-seconds` 会快速返回 blocked，不写入调度状态，不产生模拟买入。
-
-本地看效果可以加 `--sample-data` 使用确定性样例。真实入口默认走 AkShare；AkShare 不可用时报告进入 `blocked`，不产生模拟买入。
-
-`beta-check` 是上线前一键预检，会先发送飞书测试，再运行 `doctor --beta`，不触发模拟买卖；返回 `ready` 后用 `beta-start` 值守。`doctor` 是运行前体检，只检查策略配置、行情源、本地状态文件、飞书和调度，不发送通知、不产生交易；Beta 模式会要求当前交易日已有一次 `feishu-test` 的 `sent` 记录。`feishu-test` 只验证飞书通知联通并归档结果，不触发模拟买卖。`schedule` 保留给工程排查，正式上线测试优先用 `beta-start`。`backtest` 使用隔离临时账本做历史回放，不会改写 `.firemoney/paper_trades.json`。`stability` 读取当前模拟盘已闭环样本，用来查看真实观察期累计质量。`board-shadow-system --brief` 用产品口径输出当前封板波段经营体系：买点、卖点、仓位、无未来函数边界，以及 2024 以来固定 8% 与动态 8%/12% 仓位的验证收益。两类输出都遵守样本门槛：少于 30 笔只显示观察期。
-
-查看飞书触达记录：
-
-```powershell
-python -m client.desktop.firemoney_client.one_to_two_cli notifications --action-only --limit 20
-python -m client.desktop.firemoney_client.one_to_two_cli notifications --workflow watch:open --status prepared --limit 10
-python -m client.desktop.firemoney_client.one_to_two_cli scheduler-runs --limit 10
-```
-
-重新生成预览：
-
-```powershell
-python -m client.desktop.firemoney_client.preview
-```
-
-预览页使用隔离的临时模拟盘，会展示一进二候选、开盘模拟买入、盘中止损预警、T+1 处理纪律、尾盘测评和稳定性样本，不会改写真实 `.firemoney/paper_trades.json`。
-
-运行测试：
+## 常用验证
 
 ```powershell
 python -B -m unittest discover -s tests -v
+python -B -m client.desktop.firemoney_client.one_to_two_cli doctor --brief --sample-data
+python -B -m client.desktop.firemoney_client.one_to_two_cli strategy-decision --sample-data --brief
+python -B -m client.desktop.firemoney_client.one_to_two_cli paper-decision --sample-data --brief
 ```
 
-## 开发原则
+腾讯云服务器验收：
 
-- 只保留一进二这条核心业务线。
-- 客户端只展示服务端输出，不重新计算可信交易结论。
-- 服务端/业务层承载评分、风控、模拟盘账本、通知结果和复盘结论。
-- AkShare、飞书和本地文件都在基础设施层，策略和 UI 不依赖第三方字段名。
-- 新功能必须让 `早盘判断 -> 盘中模拟 -> 尾盘复盘 -> 稳定性观察` 更清晰、更快或更可信。
+```bash
+cd /opt/firemoney
+bash scripts/linux/check_firemoney_server.sh
+```
+
+---
+
+## 开源协作原则
+
+- 先保证主线闭环可靠，再扩展研究能力。
+- 新策略不能只看收益，必须同时看最大回撤、弱年份、验证段和样本质量。
+- 任何通知改动都要保持低噪音，不把普通扫描消息推到飞书。
+- 所有密钥、密码、运行账本和截图都留在本地或服务器，不进入 Git。

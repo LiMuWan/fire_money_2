@@ -1,32 +1,60 @@
-# FireMoney Client
+# FireMoney 客户端
 
-客户端只负责一进二产品体验，不承担可信业务裁决。
+客户端只负责用户体验和展示，不承担可信交易裁决。
 
-## 职责
+---
 
-- 展示一进二专项台：候选池、位置评分、止损/T+1、模拟盘、飞书通知、尾盘测评、稳定性观察。
-- 捕获用户运行或查看意图，提供清晰状态反馈。
-- 通过 `LocalMainChainAdapter` 消费服务端/业务层输出。
-- 不直接读取 AkShare、飞书 Webhook 或 `.firemoney` 账本细节。
-- 不保留旧 demo、旁支交易流或通用交易链路 UI。
+## 模块定位
 
-## 结构
+客户端负责回答：
+
+- 今天的核心结论是什么？
+- 模拟盘指挥单怎么看？
+- 哪些候选、收益曲线、风险和证据需要展示？
+- CLI 和预览页如何把服务端结果讲清楚？
+
+客户端不负责：
+
+- 重新计算买点和卖点。
+- 直接读取 AkShare 字段。
+- 直接读写 `.firemoney` 账本。
+- 管理飞书密钥。
+
+---
+
+## 目录结构
 
 ```text
-desktop/
-  firemoney_client/
-    adapter.py        一进二客户端适配器
-    one_to_two_cli.py 早盘、盘中、尾盘、稳定性本地入口
-    preview.py        生成本地 HTML 预览
-    renderer.py       一进二静态预览渲染
-    static/           预览样式
-  preview/            生成后的本地预览文件
-docs/
-  CLIENT_ARCHITECTURE.md
+desktop/firemoney_client/
+  cli/                 CLI parser、handler、output
+  presenters/          brief、通知、高亮和信任状态展示
+  adapter.py           本地服务端适配器
+  composition.py       客户端依赖组合
+  gateway.py           未来本地/HTTP 网关边界
+  preview.py           生成预览 HTML
+  renderer.py          页面总入口
+  render_sections.py   页面区块
+  static/core.css      预览页样式
+
+desktop/preview/
+  README.md            生成物目录说明
 ```
 
-生成预览：
+---
+
+## 核心入口
 
 ```powershell
-python -m client.desktop.firemoney_client.preview
+python -B -m client.desktop.firemoney_client.one_to_two_cli strategy-decision --sample-data --brief
+python -B -m client.desktop.firemoney_client.one_to_two_cli paper-decision --sample-data --brief
+python -B -m client.desktop.firemoney_client.preview
 ```
+
+---
+
+## 边界红线
+
+1. UI 只消费 `shared/contracts` 和服务端 application 输出。
+2. 页面里出现的买卖结论必须来自服务端。
+3. 生成的 HTML、截图、JSON、SQLite 都不提交到 Git。
+4. 新页面必须先让用户一眼看懂买、卖、空仓、风险和下一步。
