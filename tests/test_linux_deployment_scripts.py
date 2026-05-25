@@ -59,6 +59,8 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
         )
 
         self.assertIn("client.desktop.firemoney_client.preview", refresh)
+        self.assertIn("client.desktop.firemoney_client.preview --live", refresh)
+        self.assertNotIn("client.desktop.firemoney_client.preview\n", refresh)
         self.assertIn("schedule-health --brief", refresh)
         self.assertIn("paper-db --brief", refresh)
         self.assertIn("paper_json_raw", refresh)

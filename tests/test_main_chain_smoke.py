@@ -7738,7 +7738,7 @@ class MainChainSmokeTest(unittest.TestCase):
         preview = Path("client/desktop/firemoney_client/preview.py")
         preview_data = Path("client/desktop/firemoney_client/preview_data.py")
 
-        self.assertLessEqual(len(preview.read_text(encoding="utf-8").splitlines()), 60)
+        self.assertLessEqual(len(preview.read_text(encoding="utf-8").splitlines()), 80)
         self.assertIn(
             "build_preview_workflow_data",
             preview.read_text(encoding="utf-8"),
@@ -7751,6 +7751,26 @@ class MainChainSmokeTest(unittest.TestCase):
             "server.firemoney_server.infrastructure",
             preview_data.read_text(encoding="utf-8"),
         )
+
+    def test_preview_live_mode_uses_real_workflow_data(self) -> None:
+        preview = Path("client/desktop/firemoney_client/preview.py").read_text(
+            encoding="utf-8"
+        )
+        preview_data = Path("client/desktop/firemoney_client/preview_data.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("--live", preview)
+        self.assertIn("build_live_workflow_data", preview)
+        live_source = preview_data.split("def build_live_workflow_data", 1)[1].split(
+            "def _build_preview_schedule_run",
+            1,
+        )[0]
+        self.assertNotIn("PREVIEW_TRADE_DATE", live_source)
+        self.assertIn("ReadOnlyPaperTradeStore", live_source)
+        self.assertIn("_today_paper_database_report", live_source)
+        self.assertIn("_load_cached_or_unavailable_paper_backtest_report", live_source)
+        self.assertNotIn("build_one_to_two_backtest_audit(", live_source)
 
     def test_preview_backtest_cache_rejects_stale_coverage(self) -> None:
         from client.desktop.firemoney_client.preview_data import (

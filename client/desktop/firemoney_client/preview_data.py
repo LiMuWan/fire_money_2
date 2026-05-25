@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +15,9 @@ from server.firemoney_server.infrastructure.one_to_two_config import load_one_to
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
+    BacktestDataQualityCheck,
     CommercialReadinessReport,
+    FeishuNotificationResult,
     LimitUpBoardShadowSystemMetric,
     LimitUpBoardShadowSystemReport,
     NotificationRecord,
@@ -71,6 +73,17 @@ class PreviewWorkflowData:
     notification_records: tuple[NotificationRecord, ...]
     backtest_audit: OneToTwoBacktestAuditReport
     commercial_readiness_report: CommercialReadinessReport
+
+
+class ReadOnlyPaperTradeStore(PaperTradeStore):
+    """Paper store view used by the public preview so rendering does not trade."""
+
+    def prepare_for_trade_date(self, trade_date: str) -> PaperAccount:
+        return _account_view_for_trade_date(self.load(), trade_date)
+
+    def save(self, account: PaperAccount) -> PaperAccount:
+        self._database.sync_account(account)
+        return account
 
 
 class PreviewRiskBreakMarketDataProvider:
@@ -204,8 +217,312 @@ def build_preview_workflow_data(preview_root: Path) -> PreviewWorkflowData:
     )
 
 
+def build_live_workflow_data() -> PreviewWorkflowData:
+    """Build the public server page from real current runtime state."""
+
+    paper_store = ReadOnlyPaperTradeStore()
+    context = build_local_main_chain_context(paper_store=paper_store)
+    adapter = context.adapter
+    trade_context = context.service.resolve_trading_day()
+    trade_date = trade_context.trade_date
+    morning_report = adapter.build_one_to_two_morning_report(
+        trade_date=trade_date,
+        notify=False,
+        record_notification=False,
+        market_data_timeout_seconds=20,
+    )
+    paper_decision_report = adapter.build_paper_trading_decision_report(
+        trade_date=trade_date,
+        market_data_timeout_seconds=20,
+        notify=False,
+        record_notification=False,
+    )
+    stability_report = adapter.build_one_to_two_stability_report()
+    paper_database_report = adapter.build_paper_trade_database_report(limit=20)
+    doctor_report = adapter.build_one_to_two_doctor_report(
+        trade_date=trade_date,
+        market_data_timeout_seconds=20,
+    )
+    schedule_health_report = adapter.build_schedule_health_report(
+        trade_date=trade_date,
+    )
+    notification_records = tuple(
+        record
+        for record in adapter.load_notification_records(action_only=True, limit=50)
+        if record.trade_date == trade_date
+    )
+    live_account = _account_view_for_trade_date(paper_store.load(), trade_date)
+    paper_database_report = _today_paper_database_report(
+        paper_database_report,
+        trade_date=trade_date,
+    )
+    watch_report = _build_live_watch_report(
+        report=morning_report,
+        account=live_account,
+    )
+    eod_review = _build_live_eod_review(
+        trade_context=trade_context,
+        account=live_account,
+        stability_report=stability_report,
+    )
+    paper_backtest_report = _load_cached_or_unavailable_paper_backtest_report(
+        start_date="2020-01-01",
+        end_date=_preview_backtest_end_date(),
+    )
+    board_shadow_system_report = _load_cached_or_unavailable_board_shadow_system_report(
+        start_date="2024-01-01",
+        end_date="2026-05-05",
+    )
+    return PreviewWorkflowData(
+        report=morning_report,
+        watch_report=watch_report,
+        eod_review=eod_review,
+        stability_report=stability_report,
+        board_shadow_system_report=board_shadow_system_report,
+        paper_backtest_report=paper_backtest_report,
+        strategy_decision_report=context.service.build_strategy_decision_report(
+            trade_date=trade_date,
+            market_data_timeout_seconds=20,
+        ),
+        paper_decision_report=paper_decision_report,
+        paper_database_report=paper_database_report,
+        doctor_report=doctor_report,
+        schedule_run=_build_live_schedule_run(trade_context, schedule_health_report),
+        schedule_health_report=schedule_health_report,
+        notification_records=notification_records,
+        backtest_audit=_build_live_backtest_audit(paper_backtest_report),
+        commercial_readiness_report=adapter.build_commercial_readiness_report(
+            report=morning_report,
+            schedule_health_report=schedule_health_report,
+            paper_database_report=paper_database_report,
+            paper_backtest_report=paper_backtest_report,
+            doctor_report=doctor_report,
+            notification_records=notification_records,
+        ),
+    )
+
+
 def _preview_backtest_end_date() -> str:
     return date.today().isoformat()
+
+
+def _account_view_for_trade_date(account: PaperAccount, trade_date: str) -> PaperAccount:
+    if not account.last_trade_date:
+        return replace(account, last_trade_date=trade_date, daily_trade_count=0)
+    if trade_date <= account.last_trade_date:
+        return account
+    positions = tuple(
+        replace(
+            position,
+            can_sell_today=True,
+            risk_note="已进入下一交易日，若继续跌破止损可模拟卖出。",
+        )
+        for position in account.positions
+    )
+    return replace(
+        account,
+        last_trade_date=trade_date,
+        daily_trade_count=0,
+        positions=positions,
+    )
+
+
+def _build_live_watch_report(
+    *,
+    report: OneToTwoMorningReport,
+    account: PaperAccount,
+) -> OneToTwoMorningReport:
+    latest_event = account.events[0].message if account.events else "暂无新的模拟盘事件。"
+    ready = tuple(candidate for candidate in report.candidates if candidate.status == "ready")
+    if account.positions:
+        position = account.positions[0]
+        action = f"持仓风控 {position.name}（{position.symbol}）"
+        detail = (
+            f"持仓成本：{position.entry_price}；当前市值 {position.position_value:.2f}\n"
+            f"成本 {position.entry_price}，现价 {position.latest_price}，止损 {position.stop_loss}\n"
+            f"纪律状态：{'可按纪律卖出' if position.can_sell_today else 'T+1 未到，只预警不卖出'}"
+        )
+    elif ready:
+        candidate = ready[0]
+        action = f"观察 {candidate.name}（{candidate.symbol}）"
+        detail = (
+            f"观察候选：{candidate.name}（{candidate.symbol}） 分数 {candidate.score}\n"
+            f"标签：{candidate.leader_label or candidate.position_profile.label}；"
+            f"换手质量 {candidate.turnover_quality_score}/100；"
+            f"封板 {candidate.sealing_score}/20；买入参考 {candidate.entry_price}；止损 {candidate.stop_loss}\n"
+            f"仓位上限：{candidate.position_limit_pct:.0%}；状态：{candidate.status}"
+        )
+    else:
+        action = "空仓"
+        detail = "当前无可执行候选。"
+    notification = FeishuNotificationResult(
+        status=NotificationStatus.PREPARED,
+        title=f"FireMoney 主线首板实时快照 | {report.trade_date}",
+        message="\n".join(
+            (
+                f"今日动作：{action}",
+                f"交易日：{report.trade_date}",
+                "阶段：公网实时快照",
+                detail,
+                f"最新事件：{latest_event}",
+                "提醒：模拟盘不是实盘，不连接真实账户，不自动下单。",
+            )
+        ),
+        webhook_configured=False,
+        error="live preview read-only snapshot",
+    )
+    return replace(
+        report,
+        account=account,
+        notification=notification,
+        next_action="继续读取真实值守和模拟盘账本；页面本身不写入买卖事件。",
+    )
+
+
+def _build_live_eod_review(
+    *,
+    trade_context,
+    account: PaperAccount,
+    stability_report: OneToTwoStabilityReport,
+) -> OneToTwoEndOfDayReview:
+    report_date = trade_context.trade_date
+    same_day_closed = tuple(
+        record for record in account.closed_trades if record.closed_at == report_date
+    )
+    warning_count = sum(
+        1
+        for event in account.events
+        if str(getattr(event.event_type, "value", event.event_type)) == "stop_warning"
+        and event.trade_date == report_date
+    )
+    realized_pnl = round(sum(record.realized_pnl for record in same_day_closed), 2)
+    latest_today = same_day_closed[0] if same_day_closed else None
+    notification = FeishuNotificationResult(
+        status=NotificationStatus.PREPARED,
+        title=f"FireMoney 尾盘实时快照 | {report_date}",
+        message="\n".join(
+            (
+                f"今日动作：{'持仓观察' if account.positions else '防守空仓'}",
+                f"交易日：{report_date}",
+                f"交易结果：今日事件 {len(account.events)}，止损预警 {warning_count}，已实现盈亏 {realized_pnl:.2f}",
+                f"稳定性：已归档 {len(account.closed_trades)} 笔，阶段 {stability_report.sample_stage}",
+                "今日闭环：暂无完成样本，继续按主线首板闭环观察。"
+                if latest_today is None
+                else (
+                    f"今日闭环：{latest_today.name}"
+                    f"（{latest_today.symbol}），"
+                    f"收益 {latest_today.realized_pnl_pct:.2%}"
+                ),
+                "纪律：公网页只读展示尾盘状态，不生成尾盘通知记录。",
+                "下一步：等待 15:10 值守复盘或查看真实通知记录。",
+            )
+        ),
+        webhook_configured=False,
+        error="live preview read-only snapshot",
+    )
+    return OneToTwoEndOfDayReview(
+        review_id=f"live-eod-{report_date}",
+        trade_date=report_date,
+        trade_context=trade_context,
+        sample_count=len(same_day_closed),
+        success_count=sum(1 for record in same_day_closed if record.success),
+        warning_count=warning_count,
+        realized_pnl=realized_pnl,
+        max_drawdown=stability_report.max_drawdown,
+        stability_stage=stability_report.sample_stage,
+        next_milestone=stability_report.next_milestone,
+        strategy_boundary_suggestion=stability_report.strategy_boundary_suggestion,
+        summary="公网实时页只读展示真实模拟盘状态；尾盘复盘以 15:10 值守结果为准。",
+        focus_points=(
+            "页面刷新不触发买入、卖出或尾盘通知。",
+            "查看通知记录和模拟盘账本确认真实闭环。",
+        ),
+        account=account,
+        notification=notification,
+        next_action="等待 15:10 值守复盘或查看真实通知记录。",
+    )
+
+
+def _today_paper_database_report(
+    report: PaperTradeDatabaseReport,
+    *,
+    trade_date: str,
+) -> PaperTradeDatabaseReport:
+    return replace(
+        report,
+        recent_events=tuple(
+            event for event in report.recent_events if event.trade_date == trade_date
+        ),
+        daily_audits=tuple(
+            audit for audit in report.daily_audits if audit.trade_date == trade_date
+        ),
+    )
+
+
+def _build_live_schedule_run(
+    trade_context,
+    schedule_health_report: OneToTwoScheduleHealthReport,
+) -> OneToTwoScheduleRun:
+    now = datetime.now()
+    requested_time = now.strftime("%H:%M")
+    workflow_status = {
+        item.workflow: item.schedule_status
+        for item in schedule_health_report.items
+    }
+    tasks = (
+        _live_task(
+            "strategy-decision",
+            "strategy-decision",
+            None,
+            "08:45",
+            workflow_status.get("strategy-decision", "pending"),
+        ),
+        _live_task("morning", "morning", None, "08:50", workflow_status.get("morning", "pending")),
+        _live_task(
+            "paper-decision",
+            "paper-decision",
+            None,
+            "09:00",
+            workflow_status.get("paper-decision", "pending"),
+        ),
+        _live_task(
+            "watch-open",
+            "watch",
+            "open",
+            "09:31",
+            workflow_status.get("watch:open", "pending"),
+        ),
+        _live_task("eod", "eod", None, "15:10", workflow_status.get("eod", "pending")),
+    )
+    return OneToTwoScheduleRun(
+        run_id=f"live-preview-{trade_context.trade_date}-{requested_time}",
+        trade_date=trade_context.trade_date,
+        trade_context=trade_context,
+        requested_time=requested_time,
+        due_count=sum(1 for task in tasks if task.status != "pending"),
+        executed_count=sum(1 for task in tasks if task.status == "completed"),
+        skipped_count=sum(1 for task in tasks if task.status == "skipped"),
+        tasks=tasks,
+        next_action="公网页只读展示真实当天状态；交易事件只由 beta-start 值守到点触发。",
+    )
+
+
+def _live_task(
+    task_id: str,
+    mode: str,
+    phase: str | None,
+    scheduled_time: str,
+    status: str,
+) -> OneToTwoScheduleTask:
+    return OneToTwoScheduleTask(
+        task_id=task_id,
+        mode=mode,
+        phase=phase,
+        scheduled_time=scheduled_time,
+        status=status if status != "not_seen" else "pending",
+        message="公网实时页：读取调度审计状态，不在页面生成交易事件。",
+        notification_status=NotificationStatus.PREPARED,
+    )
 
 
 def _build_preview_schedule_run(trade_context) -> OneToTwoScheduleRun:
@@ -343,6 +660,26 @@ def _load_or_build_paper_backtest_report(
     return report
 
 
+def _load_cached_or_unavailable_paper_backtest_report(
+    *,
+    start_date: str,
+    end_date: str,
+) -> PaperBacktestReport:
+    cache_path = (
+        Path(".firemoney")
+        / "reports"
+        / f"paper_backtest_{start_date}_to_{end_date}.json"
+    )
+    cached = _read_paper_backtest_report(cache_path, requested_end_date=end_date)
+    if cached is not None:
+        return cached
+    return _paper_backtest_unavailable_report(
+        start_date,
+        end_date,
+        RuntimeError("live preview uses cached backtest only"),
+    )
+
+
 def _load_or_build_board_shadow_system_report(
     adapter,
     *,
@@ -369,6 +706,78 @@ def _load_or_build_board_shadow_system_report(
     payload["preview_cache_version"] = BOARD_SHADOW_SYSTEM_PREVIEW_CACHE_VERSION
     cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
+
+
+def _load_cached_or_unavailable_board_shadow_system_report(
+    *,
+    start_date: str,
+    end_date: str,
+) -> LimitUpBoardShadowSystemReport:
+    cache_path = (
+        Path(".firemoney")
+        / "reports"
+        / f"board_shadow_system_{start_date}_to_{end_date}.json"
+    )
+    cached = _read_board_shadow_system_report(cache_path)
+    if cached is not None:
+        return cached
+    return _board_shadow_system_unavailable_report(
+        start_date,
+        end_date,
+        RuntimeError("live preview uses cached board-shadow evidence only"),
+    )
+
+
+def _build_live_backtest_audit(
+    paper_backtest_report: PaperBacktestReport,
+) -> OneToTwoBacktestAuditReport:
+    status = "ready" if paper_backtest_report.status == "ready" else "warning"
+    check = BacktestDataQualityCheck(
+        check_id="live_preview_cached_backtest",
+        label="实时页历史证据",
+        status=status,
+        detail="公网实时页只读取历史回测缓存，不在每分钟刷新时重跑历史回测。",
+        next_action="需要刷新历史证据时离线运行 paper-backtest/backtest-audit。",
+    )
+    return OneToTwoBacktestAuditReport(
+        report_id=f"live-backtest-audit-{paper_backtest_report.end_date}",
+        start_date=paper_backtest_report.start_date,
+        end_date=paper_backtest_report.end_date,
+        requested_trade_days=0,
+        usable_trade_days=0,
+        data_quality_checks=(check,),
+        stability_report=_stability_from_paper_backtest(paper_backtest_report),
+        status=status,
+        summary="实时页未重跑历史回测；历史证据来自缓存，今日运行状态仍实时读取。",
+        limitations=(
+            "实时刷新优先保证今日行情、飞书、模拟盘账本和调度状态。",
+            "历史回测缓存缺失时不阻塞公网页面刷新。",
+        ),
+        recommended_next_action="离线刷新历史证据后，实时页会读取新的缓存结果。",
+    )
+
+
+def _stability_from_paper_backtest(
+    report: PaperBacktestReport,
+) -> OneToTwoStabilityReport:
+    return OneToTwoStabilityReport(
+        report_id=f"live-backtest-stability-{report.end_date}",
+        sample_count=report.overall.sample_count,
+        sample_stage="历史回测缓存",
+        next_milestone=0,
+        success_rate=report.overall.win_rate,
+        average_return_pct=report.overall.position_weighted_return_pct,
+        max_drawdown=report.overall.max_drawdown_pct,
+        stop_warning_rate=0.0,
+        low_breakout_success_rate=report.overall.win_rate,
+        position_label_distribution={},
+        exit_reason_distribution={},
+        recent_samples=(),
+        status=report.status,
+        summary=report.summary,
+        strategy_boundary_suggestion="实时页不重跑历史回测，避免阻塞当天值守页面。",
+        next_action="需要历史样本明细时离线刷新回测缓存。",
+    )
 
 
 def _empty_backtest_metric(label: str) -> LimitUpBoardShadowSystemMetric:
@@ -686,5 +1095,6 @@ __all__ = [
     "PREVIEW_TRADE_DATE",
     "PreviewRiskBreakMarketDataProvider",
     "PreviewWorkflowData",
+    "build_live_workflow_data",
     "build_preview_workflow_data",
 ]

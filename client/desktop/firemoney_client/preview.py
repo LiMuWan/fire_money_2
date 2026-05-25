@@ -2,43 +2,48 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import tempfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from .preview_data import build_preview_workflow_data
+from .preview_data import build_live_workflow_data, build_preview_workflow_data
 from .renderer import render_one_to_two_workflow_html
 
 
-def build_preview(output_path: str | Path) -> Path:
+def build_preview(output_path: str | Path, *, live: bool = False) -> Path:
     """Write the current one-to-two workflow interface to an HTML file."""
 
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory() as temp_dir:
-        data = build_preview_workflow_data(Path(temp_dir))
-        _atomic_write_text(
-            target,
-            render_one_to_two_workflow_html(
-                report=data.report,
-                watch_report=data.watch_report,
-                eod_review=data.eod_review,
-                stability_report=data.stability_report,
-                board_shadow_system_report=data.board_shadow_system_report,
-                paper_backtest_report=data.paper_backtest_report,
-                strategy_decision_report=data.strategy_decision_report,
-                paper_decision_report=data.paper_decision_report,
-                paper_database_report=data.paper_database_report,
-                doctor_report=data.doctor_report,
-                schedule_run=data.schedule_run,
-                schedule_health_report=data.schedule_health_report,
-                notification_records=data.notification_records,
-                backtest_audit=data.backtest_audit,
-                commercial_readiness_report=data.commercial_readiness_report,
-            )
-        )
+    if live:
+        data = build_live_workflow_data()
+    else:
+        with TemporaryDirectory() as temp_dir:
+            data = build_preview_workflow_data(Path(temp_dir))
+    _atomic_write_text(target, _render_html(data))
     return target
+
+
+def _render_html(data) -> str:
+    return render_one_to_two_workflow_html(
+        data.report,
+        data.watch_report,
+        data.eod_review,
+        data.stability_report,
+        board_shadow_system_report=data.board_shadow_system_report,
+        paper_backtest_report=data.paper_backtest_report,
+        strategy_decision_report=data.strategy_decision_report,
+        paper_decision_report=data.paper_decision_report,
+        paper_database_report=data.paper_database_report,
+        doctor_report=data.doctor_report,
+        schedule_run=data.schedule_run,
+        schedule_health_report=data.schedule_health_report,
+        notification_records=data.notification_records,
+        backtest_audit=data.backtest_audit,
+        commercial_readiness_report=data.commercial_readiness_report,
+    )
 
 
 def _atomic_write_text(target: Path, content: str) -> None:
@@ -55,5 +60,17 @@ def _atomic_write_text(target: Path, content: str) -> None:
     os.replace(temp_path, target)
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--live", action="store_true")
+    parser.add_argument(
+        "--output",
+        default=Path("client") / "desktop" / "preview" / "core_workflow.html",
+        type=Path,
+    )
+    args = parser.parse_args()
+    build_preview(args.output, live=args.live)
+
+
 if __name__ == "__main__":
-    build_preview(Path("client") / "desktop" / "preview" / "core_workflow.html")
+    main()

@@ -16,7 +16,7 @@ cd "$APP_DIR"
 preview_ok=true
 if ! flock -n "$LOCK_FILE" bash -c '
   set -euo pipefail
-  "$0" -B -m client.desktop.firemoney_client.preview
+  "$0" -B -m client.desktop.firemoney_client.preview --live
 ' "$PYTHON" >>"$LOG_DIR/firemoney_preview_refresh.log" 2>&1; then
   preview_ok=false
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] preview_refresh_failed" >>"$LOG_DIR/firemoney_preview_refresh.log"
