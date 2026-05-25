@@ -3,6 +3,7 @@ param(
     [string]$User = "ubuntu",
     [string]$KeyPath,
     [string]$RemoteDir = "/opt/firemoney",
+    [string]$FeishuEnvPath,
     [switch]$StartPreview,
     [switch]$RunBetaCheck,
     [switch]$StartBetaWatch
@@ -19,10 +20,14 @@ if (-not $HostName) {
 if (-not (Test-Path -LiteralPath $KeyPath)) {
     throw "SSH 私钥不存在：$KeyPath"
 }
+if ($FeishuEnvPath -and -not (Test-Path -LiteralPath $FeishuEnvPath)) {
+    throw "飞书环境文件不存在：$FeishuEnvPath"
+}
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Archive = Join-Path ([System.IO.Path]::GetTempPath()) "firemoney-deploy.tar.gz"
 $RemoteArchive = "/tmp/firemoney-deploy.tar.gz"
+$RemoteFeishuEnv = "/tmp/firemoney-feishu.env"
 $Target = "$User@$HostName"
 $RemoteOwner = "${User}:${User}"
 $BetaCheckReady = $false
@@ -57,6 +62,11 @@ Invoke-Checked "tar.exe" @(
     "--exclude=build",
     "--exclude=dist",
     "--exclude=.codex_stage",
+    "--exclude=client/desktop/preview/*.html",
+    "--exclude=client/desktop/preview/*.json",
+    "--exclude=client/desktop/preview/*.sqlite3",
+    "--exclude=client/desktop/preview/*.png",
+    "--exclude=client/desktop/preview/*.tmp",
     "."
 )
 
@@ -97,8 +107,28 @@ Invoke-Checked "ssh.exe" @(
     "-o",
     "IdentitiesOnly=yes",
     $Target,
-    "tar -xzf '$RemoteArchive' -C '$RemoteDir' && sudo bash '$RemoteDir/scripts/linux/install_firemoney_systemd.sh'"
+    "rm -f '$RemoteDir/client/desktop/preview/'*.html '$RemoteDir/client/desktop/preview/'*.json '$RemoteDir/client/desktop/preview/'*.sqlite3 '$RemoteDir/client/desktop/preview/'*.png '$RemoteDir/client/desktop/preview/'*.tmp 2>/dev/null || true && tar -xzf '$RemoteArchive' -C '$RemoteDir' && sudo bash '$RemoteDir/scripts/linux/install_firemoney_systemd.sh'"
 )
+
+if ($FeishuEnvPath) {
+    Write-Host "Importing Feishu environment into /etc/firemoney/firemoney.env"
+    Invoke-Checked "scp.exe" @(
+        "-i",
+        $KeyPath,
+        "-o",
+        "IdentitiesOnly=yes",
+        $FeishuEnvPath,
+        "${Target}:$RemoteFeishuEnv"
+    )
+    Invoke-Checked "ssh.exe" @(
+        "-i",
+        $KeyPath,
+        "-o",
+        "IdentitiesOnly=yes",
+        $Target,
+        "sudo bash '$RemoteDir/scripts/linux/import_firemoney_env.sh' '$RemoteFeishuEnv' && rm -f '$RemoteFeishuEnv' && sudo systemctl daemon-reload"
+    )
+}
 
 if ($StartPreview) {
     Write-Host "Starting firemoney-preview"
@@ -120,7 +150,7 @@ if ($RunBetaCheck) {
         "-o",
         "IdentitiesOnly=yes",
         $Target,
-        "cd '$RemoteDir' && '$RemoteDir/.venv/bin/python' -B -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20"
+        "sudo '$RemoteDir/scripts/linux/run_firemoney_cli_with_env.sh' beta-check --market-data-timeout-seconds 20"
     )
     $betaCheckExitCode = $LASTEXITCODE
     $betaCheckOutput | ForEach-Object { Write-Host $_ }

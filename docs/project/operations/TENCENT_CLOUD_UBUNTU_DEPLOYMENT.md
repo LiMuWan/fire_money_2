@@ -62,8 +62,32 @@ IP: 81.70.202.132
 默认还会顺手做三件事：
 
 - 启动 `firemoney-preview`
-- 跑一次 `beta-check`
+- 如果本地存在 `.firemoney/feishu.env`，自动安全导入到云端 `/etc/firemoney/firemoney.env`
+- 用云端 systemd 环境跑一次 `beta-check`
 - 如果前两步通过，再启动 `firemoney-beta-watch`
+
+建议先在本机准备一个不会提交到 Git 的飞书环境文件：
+
+```text
+.firemoney/feishu.env
+```
+
+应用机器人示例：
+
+```text
+FEISHU_ENABLED=true
+FEISHU_APP_ID=cli_xxx
+FEISHU_APP_SECRET=xxx
+FEISHU_RECEIVE_ID=oc_xxx
+FEISHU_RECEIVE_ID_TYPE=chat_id
+```
+
+如果飞书配置放在别处，也可以显式指定：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_tencent_ubuntu_one_click.ps1 `
+  -FeishuEnvPath D:\secure\firemoney-feishu.env
+```
 
 如果你只想先把服务跑起来，按下面这段命令执行即可。把 `<你的服务器公网IP>` 替换成腾讯云公网 IP：
 
@@ -106,10 +130,12 @@ FEISHU_ENABLED=true
 sudo systemctl restart firemoney-preview
 
 cd /opt/firemoney
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli doctor --brief --market-data-timeout-seconds 20
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli feishu-test
+sudo scripts/linux/run_firemoney_cli_with_env.sh doctor --brief --market-data-timeout-seconds 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh feishu-test
+sudo scripts/linux/run_firemoney_cli_with_env.sh beta-check --market-data-timeout-seconds 20
 ```
+
+说明：`/etc/firemoney/firemoney.env` 是 root 只读的安全配置，普通 SSH 命令不会自动读取它。手动排查时请优先使用 `sudo scripts/linux/run_firemoney_cli_with_env.sh ...`，它会读取 systemd 同款环境，再以 `ubuntu` 用户运行 CLI，避免运行数据变成 root 所有。
 
 如果安装时提示 `python3.12-venv` 或 `ensurepip` 不可用，先补系统包：
 
@@ -210,6 +236,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_tencent_ubu
 - 运行服务器健康检查
 
 第一次先不要加 `-StartBetaWatch`，因为飞书密钥还没配置好。
+
+如果本机已经有 `.firemoney/feishu.env`，可以让部署脚本导入飞书配置并完成预检：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_tencent_ubuntu.ps1 `
+  -HostName <你的服务器公网IP> `
+  -User ubuntu `
+  -KeyPath $env:USERPROFILE\.ssh\firemoney_tencent `
+  -FeishuEnvPath .\.firemoney\feishu.env `
+  -StartPreview `
+  -RunBetaCheck `
+  -StartBetaWatch
+```
 
 ## 3. 手动方式：在服务器上安装
 
@@ -328,21 +367,21 @@ http://127.0.0.1:8765/core_workflow.html
 
 ```bash
 cd /opt/firemoney
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli doctor --brief --market-data-timeout-seconds 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh doctor --brief --market-data-timeout-seconds 20
 ```
 
 再跑 beta-check：
 
 ```bash
 cd /opt/firemoney
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh beta-check --market-data-timeout-seconds 20
 ```
 
 再测试飞书：
 
 ```bash
 cd /opt/firemoney
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli feishu-test --trade-date 2026-05-22
+sudo scripts/linux/run_firemoney_cli_with_env.sh feishu-test --trade-date 2026-05-22
 ```
 
 只有确认飞书收到测试消息后，再启动值守。
@@ -418,6 +457,8 @@ pgrep -af 'firemoney_preview_server|beta-start|one_to_two_cli'
 [ ] schedule-health --brief 能输出 ready / 非交易日 closed
 [ ] notifications --action-only 能看到飞书 sent 记录
 [ ] paper-db --brief 能读取模拟盘账本
+[ ] client/desktop/preview/core_workflow.html 的修改时间是今天
+[ ] client/desktop/preview/runtime_status.json 的 checked_at 是今天
 ```
 
 对应命令：
@@ -430,11 +471,12 @@ sudo stat -c "%a %U:%G %n" /etc/firemoney/firemoney.env
 systemctl is-active firemoney-preview
 systemctl is-active firemoney-beta-watch
 curl -fsS http://127.0.0.1:8765/core_workflow.html | grep FireMoney
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli doctor --brief --market-data-timeout-seconds 20
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli beta-check --market-data-timeout-seconds 20
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli schedule-health --brief
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli notifications --action-only --brief --limit 20
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli paper-db --brief --limit 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh doctor --brief --market-data-timeout-seconds 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh beta-check --market-data-timeout-seconds 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh schedule-health --brief
+sudo scripts/linux/run_firemoney_cli_with_env.sh notifications --action-only --brief --limit 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh paper-db --brief --limit 20
+ls -l client/desktop/preview/core_workflow.html client/desktop/preview/runtime_status.json
 bash scripts/linux/check_firemoney_server.sh
 ```
 
@@ -535,6 +577,16 @@ curl -fsS http://127.0.0.1:8765/core_workflow.html | head
 如果服务器本机 `curl` 正常，但公网打不开，通常是安全组或 `FIREMONEY_PREVIEW_BIND` 问题。
 如果部署日志里出现 `preview_http_timeout`，先看 `journalctl -u firemoney-preview -n 100 --no-pager` 和
 `tail -n 100 /opt/firemoney/.firemoney/logs/firemoney_preview.log`，这通常表示预览页内容刷新还在后台执行，端口没能在健康检查窗口内就绪。
+
+如果页面能打开但日期不是今天，重点看：
+
+```bash
+cd /opt/firemoney
+ls -l client/desktop/preview/core_workflow.html client/desktop/preview/runtime_status.json
+tail -n 100 .firemoney/logs/firemoney_preview_refresh.log
+```
+
+新版预览服务每 60 秒刷新一次。如果 HTML 生成失败，会写入“预览生成失败，今日禁止参考旧指挥单”的安全页，而不是继续展示旧交易指挥单。
 
 ### 早评或晚评没发
 

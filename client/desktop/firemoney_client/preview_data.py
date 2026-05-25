@@ -327,10 +327,15 @@ def _load_or_build_paper_backtest_report(
     cached = _read_paper_backtest_report(cache_path, requested_end_date=end_date)
     if cached is not None and cached.return_target is not None:
         return cached
-    report = adapter.build_paper_backtest_report(
-        start_date=start_date,
-        end_date=end_date,
-    )
+    try:
+        report = adapter.build_paper_backtest_report(
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except BaseException as exc:
+        if cached is not None:
+            return cached
+        return _paper_backtest_unavailable_report(start_date, end_date, exc)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     payload = contract_to_dict(report)
     payload["preview_cache_version"] = PAPER_BACKTEST_PREVIEW_CACHE_VERSION
@@ -352,15 +357,102 @@ def _load_or_build_board_shadow_system_report(
     cached = _read_board_shadow_system_report(cache_path)
     if cached is not None:
         return cached
-    report = adapter.build_limit_up_board_shadow_system_report(
-        start_date=start_date,
-        end_date=end_date,
-    )
+    try:
+        report = adapter.build_limit_up_board_shadow_system_report(
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except BaseException as exc:
+        return _board_shadow_system_unavailable_report(start_date, end_date, exc)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     payload = contract_to_dict(report)
     payload["preview_cache_version"] = BOARD_SHADOW_SYSTEM_PREVIEW_CACHE_VERSION
     cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
+
+
+def _empty_backtest_metric(label: str) -> LimitUpBoardShadowSystemMetric:
+    return LimitUpBoardShadowSystemMetric(
+        label=label,
+        sample_count=0,
+        win_rate=0.0,
+        position_weighted_return_pct=0.0,
+        max_drawdown_pct=0.0,
+    )
+
+
+def _paper_backtest_unavailable_report(
+    start_date: str,
+    end_date: str,
+    exc: BaseException,
+) -> PaperBacktestReport:
+    detail = str(exc) or exc.__class__.__name__
+    return PaperBacktestReport(
+        report_id=f"paper-backtest-{start_date}-to-{end_date}-unavailable",
+        start_date=start_date,
+        end_date=end_date,
+        status="blocked",
+        strategy_id="board-shadow-system",
+        summary="回测证据暂不可用，预览页仍优先刷新今日值守状态。",
+        overall=_empty_backtest_metric("回测证据不可用"),
+        train=_empty_backtest_metric("训练段不可用"),
+        validation=_empty_backtest_metric("验证段不可用"),
+        yearly=(),
+        negative_years=(),
+        weak_years=(),
+        buy_rule_summary=(
+            "研究缓存缺失或不可读时，不阻塞首页和值守状态刷新。",
+        ),
+        improvement_notes=(
+            f"回测生成失败：{detail}",
+        ),
+        no_future_leakage_notes=(
+            "当前为降级报告，没有生成新的历史回测结论。",
+        ),
+        limitations=(
+            "证据中心缺少研究缓存时，只能查看今日运行状态和模拟盘指挥，不应解读为回测通过。",
+        ),
+        next_action="先修复 .firemoney/research_cache/one_to_two_daily 或重新生成回测缓存。",
+        data_coverage_start="",
+        data_coverage_end="",
+        data_coverage_notes=(f"回测证据不可用：{detail}",),
+        friction_scenarios=(),
+        return_target=None,
+        efficiency_candidates=(),
+        monthly_stability=None,
+        monthly=(),
+        current_month_notes=("本月回测暂不可用，等待研究缓存恢复。",),
+    )
+
+
+def _board_shadow_system_unavailable_report(
+    start_date: str,
+    end_date: str,
+    exc: BaseException,
+) -> LimitUpBoardShadowSystemReport:
+    detail = str(exc) or exc.__class__.__name__
+    return LimitUpBoardShadowSystemReport(
+        report_id=f"board-shadow-system-{start_date}-to-{end_date}-unavailable",
+        start_date=start_date,
+        end_date=end_date,
+        status="blocked",
+        system_name="龙虎榜雷达",
+        summary="龙虎榜雷达证据暂不可用，预览页仍优先刷新今日值守状态。",
+        buy_rules=("研究缓存缺失或不可读时，不阻塞首页刷新。",),
+        sell_rules=(),
+        position_rules=(),
+        fixed_position_summary=_empty_backtest_metric("固定仓位不可用"),
+        fixed_position_validation=_empty_backtest_metric("固定仓位验证不可用"),
+        dynamic_position_summary=_empty_backtest_metric("动态仓位不可用"),
+        dynamic_position_validation=_empty_backtest_metric("动态仓位验证不可用"),
+        yearly_dynamic_position_returns={},
+        factor_validation_notes=(f"龙虎榜雷达生成失败：{detail}",),
+        no_future_leakage_notes=("当前为降级报告，没有生成新的历史证据结论。",),
+        limitations=(
+            "证据中心缺少研究缓存时，只能查看今日运行状态和模拟盘指挥，不应解读为证据通过。",
+        ),
+        next_action="先修复 .firemoney/research_cache/one_to_two_daily 或重新生成龙虎榜雷达缓存。",
+    )
 
 
 def _read_board_shadow_system_report(

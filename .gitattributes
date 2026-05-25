@@ -1,0 +1,2 @@
+# Keep Linux operational scripts executable on Ubuntu deployments.
+scripts/linux/* text eol=lf

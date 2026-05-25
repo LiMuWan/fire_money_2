@@ -63,6 +63,9 @@ fi
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
 chmod +x "$APP_DIR/scripts/linux/start_firemoney_preview.sh"
 chmod +x "$APP_DIR/scripts/linux/start_firemoney_beta_watch.sh"
+chmod +x "$APP_DIR/scripts/linux/refresh_firemoney_preview.sh"
+chmod +x "$APP_DIR/scripts/linux/run_firemoney_cli_with_env.sh"
+chmod +x "$APP_DIR/scripts/linux/import_firemoney_env.sh"
 
 install -m 0644 "$APP_DIR/scripts/linux/firemoney-preview.service" /etc/systemd/system/firemoney-preview.service
 install -m 0644 "$APP_DIR/scripts/linux/firemoney-beta-watch.service" /etc/systemd/system/firemoney-beta-watch.service
