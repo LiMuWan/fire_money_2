@@ -637,7 +637,34 @@ def _runtime_status_bar() -> str:
           }
           return `${statusName[data.status] || data.status || "状态未知"} · ${data.checked_at || "未记录时间"} · ${freshness}`;
         };
+        const runtimeEpoch = (data) => {
+          const epoch = Number(data && data.checked_at_epoch);
+          return Number.isFinite(epoch) && epoch > 0 ? epoch : 0;
+        };
         let runtimeRefreshTimer = null;
+        let pageRuntimeEpoch = null;
+        let lastReloadAttemptAt = 0;
+        const maybeReloadPageForFreshHtml = (data) => {
+          const epoch = runtimeEpoch(data);
+          if (!epoch || data.stale_runtime) {
+            return;
+          }
+          if (pageRuntimeEpoch === null) {
+            pageRuntimeEpoch = epoch;
+            return;
+          }
+          if (epoch <= pageRuntimeEpoch) {
+            return;
+          }
+          const now = Date.now();
+          if (now - lastReloadAttemptAt < 55000) {
+            return;
+          }
+          lastReloadAttemptAt = now;
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("v", String(epoch));
+          window.location.replace(nextUrl.toString());
+        };
         const showRuntimeUnavailable = () => {
             root.dataset.tone = "warning";
             headline.textContent = "等待值守写入实时状态";
@@ -665,6 +692,7 @@ def _runtime_status_bar() -> str:
           applyScheduleToTrustCard(data, scheduleText, beta);
           applyPaperDbToTrustCard(data.paper_db);
           applyRuntimeGateToCockpit(data);
+          maybeReloadPageForFreshHtml(data);
         };
         const refreshRuntimeStatus = () => {
           const url = `runtime_status.json?ts=${Date.now()}`;

@@ -135,6 +135,15 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
         self.assertIn("grep -q \"FireMoney\"", health)
         self.assertIn("schedule-health --brief", health)
 
+    def test_preview_http_server_disables_browser_cache(self) -> None:
+        server = (LINUX_SCRIPTS / "firemoney_preview_server.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("def end_headers", server)
+        self.assertIn('Cache-Control", "no-store, max-age=0"', server)
+        self.assertIn('Pragma", "no-cache"', server)
+
     def test_windows_runtime_check_covers_beta_watch_loop(self) -> None:
         script = (ROOT / "scripts" / "check_firemoney_runtime.ps1").read_text(
             encoding="utf-8"
