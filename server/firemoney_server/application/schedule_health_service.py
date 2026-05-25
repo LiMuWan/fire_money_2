@@ -317,6 +317,9 @@ class ScheduleHealthService:
         workflow: str,
         trade_date: str,
     ) -> str:
+        completed_key: tuple[str, str] | None = None
+        latest_not_skipped_status = "not_seen"
+        latest_not_skipped_key: tuple[str, str] | None = None
         latest_status = "not_seen"
         latest_key: tuple[str, str] | None = None
         for record in runs:
@@ -334,9 +337,23 @@ class ScheduleHealthService:
                     str(record.get("created_at", "")),
                     str(record.get("record_id", "")),
                 )
+                status = str(task.get("status", "unknown"))
                 if latest_key is None or key > latest_key:
                     latest_key = key
-                    latest_status = str(task.get("status", "unknown"))
+                    latest_status = status
+                if status == "completed" and (
+                    completed_key is None or key > completed_key
+                ):
+                    completed_key = key
+                if status != "skipped" and (
+                    latest_not_skipped_key is None or key > latest_not_skipped_key
+                ):
+                    latest_not_skipped_key = key
+                    latest_not_skipped_status = status
+        if completed_key is not None:
+            return "completed"
+        if latest_not_skipped_key is not None:
+            return latest_not_skipped_status
         return latest_status
 
     @staticmethod

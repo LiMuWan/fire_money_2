@@ -3393,8 +3393,100 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertEqual(report.status, "ready")
             self.assertGreater(report.scheduler_run_count, 30)
             workflow_status = {item.workflow: item.schedule_status for item in report.items}
-            self.assertEqual(workflow_status["paper-decision"], "skipped")
-            self.assertEqual(workflow_status["watch:open"], "skipped")
+            self.assertEqual(workflow_status["paper-decision"], "completed")
+            self.assertEqual(workflow_status["watch:open"], "completed")
+
+    def test_schedule_health_keeps_expired_open_blocked_after_later_skips(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scheduler_run_store = SchedulerRunStore(root / "scheduler_runs.json")
+            context = TradingDayContext(
+                requested_date="2026-04-30",
+                trade_date="2026-04-30",
+                previous_trade_date="2026-04-29",
+                next_trade_date="2026-05-06",
+                is_trading_day=True,
+                note="test",
+            )
+            scheduler_run_store.append(
+                OneToTwoScheduleRun(
+                    run_id="late-start",
+                    trade_date="2026-04-30",
+                    trade_context=context,
+                    requested_time="15:30",
+                    due_count=2,
+                    executed_count=0,
+                    skipped_count=2,
+                    tasks=(
+                        OneToTwoScheduleTask(
+                            task_id="paper-decision",
+                            mode="paper-decision",
+                            phase=None,
+                            scheduled_time="09:00",
+                            status="expired",
+                            message="missed execution window; not backfilled",
+                            notification_status=NotificationStatus.PREPARED,
+                        ),
+                        OneToTwoScheduleTask(
+                            task_id="watch-open",
+                            mode="watch",
+                            phase="open",
+                            scheduled_time="09:31",
+                            status="expired",
+                            message="missed execution window; not backfilled",
+                            notification_status=NotificationStatus.PREPARED,
+                        ),
+                    ),
+                    next_action="late",
+                )
+            )
+            scheduler_run_store.append(
+                OneToTwoScheduleRun(
+                    run_id="later-idle",
+                    trade_date="2026-04-30",
+                    trade_context=context,
+                    requested_time="15:31",
+                    due_count=2,
+                    executed_count=0,
+                    skipped_count=2,
+                    tasks=(
+                        OneToTwoScheduleTask(
+                            task_id="paper-decision",
+                            mode="paper-decision",
+                            phase=None,
+                            scheduled_time="09:00",
+                            status="skipped",
+                            message="already completed",
+                            notification_status=NotificationStatus.PREPARED,
+                        ),
+                        OneToTwoScheduleTask(
+                            task_id="watch-open",
+                            mode="watch",
+                            phase="open",
+                            scheduled_time="09:31",
+                            status="skipped",
+                            message="already completed",
+                            notification_status=NotificationStatus.PREPARED,
+                        ),
+                    ),
+                    next_action="already done",
+                )
+            )
+            health_service = ScheduleHealthService(
+                trading_calendar=WeekdayTradingCalendar(),
+                notification_store=NotificationRecordStore(root / "notifications.json"),
+                scheduler_run_store=scheduler_run_store,
+                now_provider=lambda: datetime(2026, 4, 30, 16, 0),
+            )
+
+            report = health_service.build_report(trade_date="2026-04-30")
+
+            status_by_workflow = {
+                item.workflow: item.schedule_status for item in report.items
+            }
+            self.assertEqual(report.status, "blocked")
+            self.assertEqual(status_by_workflow["paper-decision"], "expired")
+            self.assertEqual(status_by_workflow["watch:open"], "expired")
 
     def test_schedule_health_blocks_prepared_required_notification_after_window(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -8370,6 +8462,9 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertIn("真实账本优先于静态样例", html)
             self.assertIn("runtime-chip", html)
             self.assertIn("runtime-next", html)
+            self.assertIn("setInterval(refreshRuntimeStatus, 30000)", html)
+            self.assertIn("runtimeFreshnessLabel", html)
+            self.assertIn("runtime_status.json?ts=", html)
             self.assertIn("renderRuntimeChips", html)
             self.assertIn('makeChip("交易"', html)
             self.assertIn("小仓验证", html)

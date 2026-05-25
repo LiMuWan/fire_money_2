@@ -61,6 +61,8 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
         self.assertIn("client.desktop.firemoney_client.preview", refresh)
         self.assertIn("schedule-health --brief", refresh)
         self.assertIn("paper-db --brief", refresh)
+        self.assertIn("paper_json_raw", refresh)
+        self.assertIn("closed_trade_count", refresh)
         self.assertIn("runtime_status.json", refresh)
         self.assertIn("auto_refreshed_preview", refresh)
         self.assertIn("firemoney_preview_refresh.log", refresh)

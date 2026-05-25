@@ -17,6 +17,7 @@
 | 状态 | 动作 | 命令 / 结果 |
 |---|---|---|
 | [ ] | 执行一键部署 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_tencent_ubuntu_one_click.ps1` |
+| [ ] | 本机飞书配置 | `.firemoney/feishu.env` 存在时会自动导入云端 `/etc/firemoney/firemoney.env` |
 | [ ] | 默认 IP | `81.70.202.132` |
 | [ ] | 默认用户 | `ubuntu` |
 | [ ] | 默认私钥 | `%USERPROFILE%\.ssh\firemoney_tencent` |
@@ -43,9 +44,9 @@
 cd /opt/firemoney && \
 sudo systemctl status firemoney-preview --no-pager && \
 sudo systemctl status firemoney-beta-watch --no-pager && \
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli schedule-health --brief && \
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli notifications --action-only --brief --limit 20 && \
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli paper-db --brief --limit 20 && \
+sudo scripts/linux/run_firemoney_cli_with_env.sh schedule-health --brief && \
+sudo scripts/linux/run_firemoney_cli_with_env.sh notifications --action-only --brief --limit 20 && \
+sudo scripts/linux/run_firemoney_cli_with_env.sh paper-db --brief --limit 20 && \
 bash scripts/linux/check_firemoney_server.sh
 ```
 
@@ -64,9 +65,9 @@ bash scripts/linux/check_firemoney_server.sh
 sudo systemctl status firemoney-preview --no-pager
 sudo systemctl status firemoney-beta-watch --no-pager
 cd /opt/firemoney
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli schedule-health --brief
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli notifications --action-only --brief --limit 20
-/opt/firemoney/.venv/bin/python -B -m client.desktop.firemoney_client.one_to_two_cli paper-db --brief --limit 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh schedule-health --brief
+sudo scripts/linux/run_firemoney_cli_with_env.sh notifications --action-only --brief --limit 20
+sudo scripts/linux/run_firemoney_cli_with_env.sh paper-db --brief --limit 20
 bash scripts/linux/check_firemoney_server.sh
 ```
 

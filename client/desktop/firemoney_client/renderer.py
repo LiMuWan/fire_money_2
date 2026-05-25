@@ -245,9 +245,44 @@ def _runtime_status_bar() -> str:
           const dd = String(now.getDate()).padStart(2, "0");
           return `${yyyy}-${mm}-${dd}`;
         };
+        const parseCheckedAt = (data) => {
+          const epoch = Number(data.checked_at_epoch);
+          if (Number.isFinite(epoch) && epoch > 0) {
+            return new Date(epoch * 1000);
+          }
+          const raw = String(data.checked_at || "").trim();
+          if (!raw) {
+            return null;
+          }
+          const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+          const parsed = new Date(normalized);
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
         const isRuntimeStale = (data) => {
           const date = checkedDate(data);
           return !date || date !== todayKey();
+        };
+        const runtimeAgeSeconds = (data) => {
+          const checked = parseCheckedAt(data);
+          if (!checked) {
+            return Infinity;
+          }
+          return Math.max(0, Math.round((Date.now() - checked.getTime()) / 1000));
+        };
+        const runtimeFreshnessLabel = (data) => {
+          const age = runtimeAgeSeconds(data);
+          if (!Number.isFinite(age)) {
+            return "未知";
+          }
+          if (age < 60) {
+            return `${age}秒前`;
+          }
+          const minutes = Math.floor(age / 60);
+          if (minutes < 60) {
+            return `${minutes}分钟前`;
+          }
+          const hours = Math.floor(minutes / 60);
+          return `${hours}小时前`;
         };
         const normalizeRuntimeData = (data) => {
           if (!isRuntimeStale(data)) {
@@ -307,6 +342,7 @@ def _runtime_status_bar() -> str:
           const chips = [
             makeChip("交易", tradeValue, tradeTone),
             data.stale_runtime ? makeChip("状态", "已过期", "danger") : null,
+            makeChip("刷新", runtimeFreshnessLabel(data), runtimeAgeSeconds(data) > 180 ? "warning" : "success"),
             makeChip("早评", morning),
             makeChip("晚评", eod),
             makeChip("真实账本", paperValue, paper.tone),
@@ -489,7 +525,12 @@ def _runtime_status_bar() -> str:
           const paperTone = paper.tone || "neutral";
           const runtimeBlocked = data.status === "blocked";
           const paperWeak = paperTone === "warning" || paperTone === "danger";
+          const existingGate = document.querySelector(".workbench-side .runtime-gate-panel");
           if (!runtimeBlocked && !paperWeak) {
+            delete cockpit.dataset.realGate;
+            if (existingGate) {
+              existingGate.remove();
+            }
             return;
           }
           const title = cockpit.querySelector(".cockpit-primary h2");
@@ -537,10 +578,14 @@ def _runtime_status_bar() -> str:
                 : "指挥单降级：真实收益未达标，只能小仓验证";
             }
             Array.from(commandPanel.children).forEach((child) => {
-              if (child.tagName !== "SUMMARY") {
+              if (child.tagName !== "SUMMARY" && !child.classList.contains("runtime-gate-panel")) {
                 child.remove();
               }
             });
+            const previousGate = commandPanel.querySelector(".runtime-gate-panel");
+            if (previousGate) {
+              previousGate.remove();
+            }
             const section = document.createElement("section");
             section.className = "panel one-to-two-panel runtime-gate-panel";
             const h2 = document.createElement("h2");
@@ -583,37 +628,17 @@ def _runtime_status_bar() -> str:
         const runtimeHeadline = (data) => {
           const findings = Array.isArray(data.findings) ? data.findings : [];
           const httpOk = findings.includes("preview_http_200");
+          const freshness = runtimeFreshnessLabel(data);
           if (data.stale_runtime) {
-            return `运行状态已过期 · ${data.checked_at || "未记录时间"}`;
+            return `运行状态已过期 · ${data.checked_at || "未记录时间"} · ${freshness}`;
           }
           if (data.status === "blocked" && httpOk) {
-            return `服务正常，但有通知阻断 · ${data.checked_at || "未记录时间"}`;
+            return `服务正常，但有通知阻断 · ${data.checked_at || "未记录时间"} · ${freshness}`;
           }
-          return `${statusName[data.status] || data.status || "状态未知"} · ${data.checked_at || "未记录时间"}`;
+          return `${statusName[data.status] || data.status || "状态未知"} · ${data.checked_at || "未记录时间"} · ${freshness}`;
         };
-        fetch("runtime_status.json", { cache: "no-store" })
-          .then((response) => {
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-            return response.json();
-          })
-          .then((data) => {
-            data = normalizeRuntimeData(data || {});
-            const tone = data.status === "blocked" ? "danger" : data.status === "warning" ? "warning" : "success";
-            root.dataset.tone = tone;
-            headline.textContent = runtimeHeadline(data);
-            const beta = data.beta_watch ? `Beta值守：${data.beta_watch}` : "Beta值守：未知";
-            const scheduleText = data.schedule_health
-              ? renderSchedule(data.schedule_health)
-              : renderRawSchedule(data.schedule_health_raw);
-            const paperText = renderPaperDb(data.paper_db);
-            renderRuntimeChips(data, paperText, beta);
-            applyScheduleToTrustCard(data, scheduleText, beta);
-            applyPaperDbToTrustCard(data.paper_db);
-            applyRuntimeGateToCockpit(data);
-          })
-          .catch(() => {
+        let runtimeRefreshTimer = null;
+        const showRuntimeUnavailable = () => {
             root.dataset.tone = "warning";
             headline.textContent = "等待值守写入实时状态";
             detail.textContent = "";
@@ -625,7 +650,41 @@ def _runtime_status_bar() -> str:
             next.className = "runtime-next";
             next.textContent = "下一步：保持 FireMoneyRuntimeWatchdog 开机自启，等待下一次健康检查。";
             detail.appendChild(next);
-          });
+        };
+        const applyRuntimeData = (data) => {
+          data = normalizeRuntimeData(data || {});
+          const tone = data.status === "blocked" ? "danger" : data.status === "warning" ? "warning" : "success";
+          root.dataset.tone = tone;
+          headline.textContent = runtimeHeadline(data);
+          const beta = data.beta_watch ? `Beta值守：${data.beta_watch}` : "Beta值守：未知";
+          const scheduleText = data.schedule_health
+            ? renderSchedule(data.schedule_health)
+            : renderRawSchedule(data.schedule_health_raw);
+          const paperText = renderPaperDb(data.paper_db);
+          renderRuntimeChips(data, paperText, beta);
+          applyScheduleToTrustCard(data, scheduleText, beta);
+          applyPaperDbToTrustCard(data.paper_db);
+          applyRuntimeGateToCockpit(data);
+        };
+        const refreshRuntimeStatus = () => {
+          const url = `runtime_status.json?ts=${Date.now()}`;
+          fetch(url, { cache: "no-store" })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+              return response.json();
+            })
+            .then(applyRuntimeData)
+            .catch(showRuntimeUnavailable);
+        };
+        refreshRuntimeStatus();
+        runtimeRefreshTimer = window.setInterval(refreshRuntimeStatus, 30000);
+        window.addEventListener("beforeunload", () => {
+          if (runtimeRefreshTimer) {
+            window.clearInterval(runtimeRefreshTimer);
+          }
+        });
       })();
     </script>
     """

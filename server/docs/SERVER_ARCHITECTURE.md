@@ -131,7 +131,7 @@ MarketDataProvider/AkShare
 - Notification failures return structured results and do not stop strategy execution.
 - Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `stability`, `doctor`, `beta-check`, `beta-start`, `feishu-test`, `schedule`, `notifications`, `scheduler-runs`, `strategy-decision`, and `paper-decision`.
 - `stability` reads the current `.firemoney/paper_trades.json` closed samples and returns `OneToTwoStabilityReport` without mutating live state.
-- `doctor` returns one-to-two runtime readiness checks and treats missing market data as `blocked`; disabled Feishu is only a `warning` because notifications must not block simulation.
+- `doctor` returns one-to-two runtime readiness checks and treats missing market data as `blocked`; in strict Beta mode, disabled or unverified Feishu is also `blocked` because morning/eod delivery is part of the value-watch contract. Non-Beta diagnostics may still treat notification configuration as a softer local warning.
 - Current AkShare integration covers daily bars and news. Minute bars / Tick / queue-quality validation are the next data-layer upgrade required before claiming stable pre-main-rise entries.
 - `notifications` reads recent `.firemoney/notifications.json` records with optional workflow/status/limit filters, so Feishu delivery can be audited without opening the preview page. Use `--action-only` to show the low-noise action stream: morning review, real paper buy, real paper sell, and end-of-day review.
 - `feishu-test` sends or prepares a non-trading connectivity message and records it as `feishu:test`; it must not create paper-trading events.
