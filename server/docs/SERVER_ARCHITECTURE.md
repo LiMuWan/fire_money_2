@@ -65,6 +65,7 @@ server/firemoney_server/
 - `infrastructure` owns data sources, files, webhook adapters, caches, and config loading.
 - `shared/contracts` is the stable public language for the client.
 - Intraday minute bars and tick/order-book snapshots should enter through the same `MarketDataProvider` boundary instead of leaking new vendor APIs into the domain or client.
+- Real broker execution adapters, including QMT/MiniQMT, do not belong in the server strategy layer. The server emits paper-trading command sheets and shared broker-order DTOs only; local client infrastructure owns vendor SDK imports, account connectivity, dry-run order planning, and any explicitly armed live submission.
 
 ## 4. Product Chain
 
@@ -129,7 +130,7 @@ MarketDataProvider/AkShare
 - Paper-backtest evidence lives in `application/paper_backtest_service.py`; it owns yearly/monthly validation, friction scenarios, return-target checks, efficiency challengers, and data-coverage notes. `MainChainService.build_paper_backtest_report()` only delegates, so the live paper ledger and daily watch flow stay separate from historical validation.
 - Notification results are appended to `.firemoney/notifications.json` for review. Internal workflow reuse must not duplicate records, so `watch` suppresses its internal morning-report record.
 - Notification failures return structured results and do not stop strategy execution.
-- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `stability`, `doctor`, `beta-check`, `beta-start`, `feishu-test`, `schedule`, `notifications`, `scheduler-runs`, `strategy-decision`, and `paper-decision`.
+- Local entry modes are exposed by `client.desktop.firemoney_client.one_to_two_cli`: `morning`, `watch`, `eod`, `backtest`, `stability`, `doctor`, `beta-check`, `beta-start`, `feishu-test`, `schedule`, `notifications`, `scheduler-runs`, `strategy-decision`, `paper-decision`, `qmt-check`, and `qmt-plan`.
 - `stability` reads the current `.firemoney/paper_trades.json` closed samples and returns `OneToTwoStabilityReport` without mutating live state.
 - `doctor` returns one-to-two runtime readiness checks and treats missing market data as `blocked`; in strict Beta mode, disabled or unverified Feishu is also `blocked` because morning/eod delivery is part of the value-watch contract. Non-Beta diagnostics may still treat notification configuration as a softer local warning.
 - Current AkShare integration covers daily bars and news. Minute bars / Tick / queue-quality validation are the next data-layer upgrade required before claiming stable pre-main-rise entries.
@@ -140,6 +141,7 @@ MarketDataProvider/AkShare
 - `strategy-decision` is a lightweight read-only daily selector. It reads the validated evidence snapshot, chooses the main operating line, keeps the research side line in watch-only status, and must not recompute the heavy board-shadow backtest during scheduler ticks.
 - Daily strategy selection lives in `application/strategy_decision_service.py`; it turns `exports/strategy_decision_snapshot.json` or the built-in audited fallback into a `StrategyDecisionReport`. `MainChainService` delegates to it so future strategy modules can be swapped without touching paper-trading state transitions.
 - `paper-decision` is the read-only paper-trading command sheet. It consumes the daily strategy decision, morning candidates, and paper account state, then emits at most one simulated buy plan with entry, stop, take-profit, cancellation, and sell rules. It stays local and must not mutate `.firemoney/paper_trades.json`; only `watch --phase open` writes a paper buy and triggers a buy notification.
+- `qmt-check` and `qmt-plan` are client-side bridge commands. They must consume service-owned reports instead of recomputing buy/sell decisions, and they must keep QMT SDK access behind a local adapter so Tencent Cloud preview and server workflows never depend on a logged-in Windows trading terminal.
 - Paper-decision orchestration lives in `application/paper_decision_service.py`; it builds the command-sheet report and notification preview from prepared candidates/account state while delegating ledger mutation to watch/open and watch/risk.
 - Paper-decision discipline wording and command-sheet message body live in `application/paper_decision_text.py`; it is presentation copy only and must not import storage, Feishu, market data, or `MainChainService`.
 - Paper buy and holding instruction DTO construction lives in `application/paper_instruction_builder.py`; it depends on entry/exit policies and settings, but does not read/write ledgers, send notifications, or decide whether watch may write events.

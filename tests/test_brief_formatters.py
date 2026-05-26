@@ -4,12 +4,17 @@ import unittest
 
 from client.desktop.firemoney_client.cli.output import emit_result
 from client.desktop.firemoney_client.presenters.brief_formatters import (
+    format_broker_connection_brief,
+    format_broker_order_plan_brief,
     format_doctor_brief,
     format_morning_brief,
     format_scheduler_runs_brief,
     format_watch_brief,
 )
 from shared.contracts import (
+    BrokerConnectionReport,
+    BrokerOrderPlan,
+    BrokerPosition,
     FeishuNotificationResult,
     NotificationStatus,
     OneToTwoCandidate,
@@ -372,6 +377,69 @@ class BriefFormatterTest(unittest.TestCase):
         self.assertEqual(len(output), 1)
         self.assertIn("FireMoney 调度审计", output[0])
         self.assertNotIn('"records"', output[0])
+
+    def test_qmt_connection_brief_is_human_readable(self) -> None:
+        text = format_broker_connection_brief(
+            BrokerConnectionReport(
+                broker="qmt",
+                status="ready",
+                account_id="12345678",
+                cash=10000.0,
+                available_cash=9000.0,
+                total_asset=12000.0,
+                market_value=2000.0,
+                positions=(
+                    BrokerPosition(
+                        symbol="600001.SH",
+                        name="北辰科技",
+                        quantity=100,
+                        available_quantity=0,
+                        market_value=1052.0,
+                        cost_price=10.52,
+                        latest_price=10.52,
+                    ),
+                ),
+                message="QMT 已连接。",
+                next_action="先跑 qmt-plan。",
+            )
+        )
+
+        self.assertIn("FireMoney QMT 连接检查：ready", text)
+        self.assertIn("账号：12345678", text)
+        self.assertIn("北辰科技（600001.SH）", text)
+        self.assertNotIn('"positions"', text)
+
+    def test_cli_brief_routes_qmt_plan_to_formatter(self) -> None:
+        output: list[str] = []
+
+        emit_result(
+            BrokerOrderPlan(
+                broker="qmt",
+                status="ready",
+                dry_run=True,
+                trade_date="2026-05-26",
+                action="buy",
+                symbol="600001.SH",
+                name="北辰科技",
+                side="buy",
+                quantity=100,
+                price=10.52,
+                price_type="FIX_PRICE",
+                account_id="12345678",
+                summary="QMT dry-run 拟委托。",
+                warnings=("严格 T+1",),
+                next_action="核对后再提交。",
+            ),
+            mode="qmt-plan",
+            brief=True,
+            printer=output.append,
+        )
+
+        self.assertEqual(len(output), 1)
+        self.assertIn("FireMoney QMT 拟委托：ready", output[0])
+        self.assertIn("北辰科技（600001.SH）", output[0])
+        self.assertIn("严格 T+1", output[0])
+        self.assertNotIn('"summary"', output[0])
 
 
 if __name__ == "__main__":

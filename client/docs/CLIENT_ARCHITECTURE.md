@@ -17,8 +17,9 @@ client/desktop/firemoney_client/
   adapter.py        adapter from client to the one-to-two service
   cli/              local CLI parser, handlers, scheduler runner, runtime, and output adapters
   composition.py    local service/adapter composition root
+  broker/           local-only broker gateways, currently QMT dry-run/check adapters
   gateway.py        client-facing gateway protocol for local and future remote adapters
-  one_to_two_cli.py local command entry for morning/watch/eod/backtest/stability/doctor/beta-check/beta-start/feishu-test/schedule/notifications/strategy-decision/paper-decision/paper-db
+  one_to_two_cli.py local command entry for morning/watch/eod/backtest/stability/doctor/beta-check/beta-start/feishu-test/schedule/notifications/strategy-decision/paper-decision/qmt-check/qmt-plan/paper-db
   presenters/       CLI/HTML presentation helpers and summary builders
   preview.py        local HTML preview generator
   preview_data.py   isolated sample data and report assembly for preview generation
@@ -42,6 +43,7 @@ client/desktop/firemoney_client/
 - Keep preview-only service setup and seeded sample data in `preview_data.py`; `preview.py` should only write the rendered HTML file.
 - `--sample-data` is always isolated from the live paper ledger by default. CLI sample runs use `.firemoney/sample/` unless the caller explicitly passes `--paper-store`, `--paper-db`, `--notification-store`, or scheduler paths; when a custom sample paper store is provided, its SQLite mirror stays beside that JSON file.
 - Future remote execution must go through an adapter/gateway boundary; UI code must not import FireMoney infrastructure stores or vendor adapters directly.
+- Real broker connectivity is local infrastructure only. QMT/MiniQMT integration lives under `broker/`, imports `xtquant` lazily, and is exposed through explicit CLI commands: `qmt-check` for local account/position readiness and `qmt-plan` for converting the service-owned paper command sheet into a dry-run order plan. Live submission is never default; it requires both `--qmt-submit` and `FIREMONEY_QMT_ALLOW_LIVE=true`.
 - Keep `gateway.py` server-free and aligned with the full public surface of `LocalMainChainAdapter`; local implementation details belong in `adapter.py` and service wiring belongs in `composition.py`.
 - Future minute-bar / Tick / queue-quality outputs still belong to the service layer; the client should render them as evidence, not derive trusted execution judgments locally.
 - Keep old demos, CSV order flows, receipt import screens, and generic dashboards out of the default product surface.

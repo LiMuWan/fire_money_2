@@ -27,6 +27,8 @@ def build_one_to_two_parser() -> argparse.ArgumentParser:
             "k92-emotion",
             "k92-backtest",
             "paper-decision",
+            "qmt-check",
+            "qmt-plan",
             "paper-db",
             "execution-quality",
             "stability",
@@ -58,6 +60,27 @@ def build_one_to_two_parser() -> argparse.ArgumentParser:
     parser.add_argument("--at", default=None, help="schedule mode clock time, HH:MM.")
     parser.add_argument("--paper-store", default=None, help="Optional paper ledger path.")
     parser.add_argument("--paper-db", default=None, help="Optional paper SQLite database path.")
+    parser.add_argument(
+        "--qmt-path",
+        default=None,
+        help="Optional MiniQMT userdata_mini path; defaults to FIREMONEY_QMT_PATH.",
+    )
+    parser.add_argument(
+        "--qmt-account",
+        default=None,
+        help="Optional QMT stock account id; defaults to FIREMONEY_QMT_ACCOUNT_ID.",
+    )
+    parser.add_argument(
+        "--qmt-session-id",
+        type=int,
+        default=None,
+        help="Optional QMT session id; defaults to FIREMONEY_QMT_SESSION_ID or current time.",
+    )
+    parser.add_argument(
+        "--qmt-submit",
+        action="store_true",
+        help="Submit qmt-plan to QMT; also requires FIREMONEY_QMT_ALLOW_LIVE=true.",
+    )
     parser.add_argument(
         "--cache-dir",
         default=None,

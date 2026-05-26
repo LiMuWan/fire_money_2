@@ -13,6 +13,7 @@ from server.firemoney_server.application.beta_rehearsal import (
 )
 from shared.contracts import contract_to_dict
 
+from ..broker.qmt_gateway import QmtBrokerGateway
 from ..composition import LocalMainChainContext
 
 UNHANDLED = object()
@@ -34,6 +35,8 @@ HANDLED_MODES = frozenset(
         "k92-emotion",
         "k92-backtest",
         "paper-decision",
+        "qmt-check",
+        "qmt-plan",
         "paper-db",
         "execution-quality",
         "stability",
@@ -152,6 +155,18 @@ def run_report_command(args: Namespace, context: LocalMainChainContext) -> Any:
             market_data_timeout_seconds=args.market_data_timeout_seconds,
             notify=False,
         )
+    if args.mode == "qmt-check":
+        return _build_qmt_gateway(args).check()
+    if args.mode == "qmt-plan":
+        paper_report = adapter.build_paper_trading_decision_report(
+            trade_date=args.trade_date,
+            market_data_timeout_seconds=args.market_data_timeout_seconds,
+            notify=False,
+        )
+        return _build_qmt_gateway(args).plan_paper_decision(
+            paper_report,
+            submit=args.qmt_submit,
+        )
     if args.mode == "paper-db":
         return adapter.build_paper_trade_database_report(
             database_path=args.paper_db,
@@ -236,6 +251,14 @@ def _write_report_cache(report: Any, report_cache: str | None) -> None:
     path.write_text(
         json.dumps(contract_to_dict(report), ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+
+
+def _build_qmt_gateway(args: Namespace) -> QmtBrokerGateway:
+    return QmtBrokerGateway(
+        qmt_path=args.qmt_path,
+        account_id=args.qmt_account,
+        session_id=args.qmt_session_id,
     )
 
 

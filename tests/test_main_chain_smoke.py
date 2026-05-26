@@ -7873,6 +7873,26 @@ class MainChainSmokeTest(unittest.TestCase):
                 "--brief",
             ]
         )
+        qmt_check_args = parser.parse_args(
+            [
+                "qmt-check",
+                "--qmt-path",
+                "C:/qmt/userdata_mini",
+                "--qmt-account",
+                "12345678",
+                "--qmt-session-id",
+                "20260526",
+                "--brief",
+            ]
+        )
+        qmt_plan_args = parser.parse_args(
+            [
+                "qmt-plan",
+                "--trade-date",
+                "2026-05-26",
+                "--qmt-submit",
+            ]
+        )
 
         self.assertEqual(paper_args.mode, "paper-decision")
         self.assertTrue(paper_args.sample_data)
@@ -7891,6 +7911,14 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(missed_args.mode, "missed-opportunities")
         self.assertEqual(missed_args.start_date, "2026-05-01")
         self.assertEqual(missed_args.end_date, "2026-05-05")
+        self.assertEqual(qmt_check_args.mode, "qmt-check")
+        self.assertEqual(qmt_check_args.qmt_path, "C:/qmt/userdata_mini")
+        self.assertEqual(qmt_check_args.qmt_account, "12345678")
+        self.assertEqual(qmt_check_args.qmt_session_id, 20260526)
+        self.assertTrue(qmt_check_args.brief)
+        self.assertEqual(qmt_plan_args.mode, "qmt-plan")
+        self.assertEqual(qmt_plan_args.trade_date, "2026-05-26")
+        self.assertTrue(qmt_plan_args.qmt_submit)
 
         parser_module = Path("client/desktop/firemoney_client/cli/parser.py")
         tree = ast.parse(parser_module.read_text(encoding="utf-8"))
@@ -7904,6 +7932,127 @@ class MainChainSmokeTest(unittest.TestCase):
                 continue
             for module in modules:
                 self.assertFalse(module.startswith(forbidden), module)
+
+    def test_qmt_gateway_is_local_lazy_and_safe_by_default(self) -> None:
+        from client.desktop.firemoney_client.broker.qmt_gateway import (
+            QMT_ACCOUNT_ID_ENV,
+            QMT_PATH_ENV,
+            QmtBrokerGateway,
+            to_qmt_symbol,
+        )
+
+        source = Path(
+            "client/desktop/firemoney_client/broker/qmt_gateway.py"
+        ).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        imports: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imports.append(node.module or "")
+        self.assertNotIn("xtquant.xttrader", imports)
+        self.assertNotIn("xtquant.xttype", imports)
+        self.assertNotIn("xtquant.xtconstant", imports)
+
+        self.assertEqual(to_qmt_symbol("600001"), "600001.SH")
+        self.assertEqual(to_qmt_symbol("000001"), "000001.SZ")
+        with patch.dict(os.environ, {QMT_PATH_ENV: "", QMT_ACCOUNT_ID_ENV: ""}, clear=False):
+            report = QmtBrokerGateway().check()
+        self.assertEqual(report.status, "blocked")
+        self.assertIn(QMT_PATH_ENV, report.message)
+        self.assertTrue(report.dry_run)
+
+    def test_qmt_gateway_turns_paper_decision_into_dry_run_order_plan(self) -> None:
+        from client.desktop.firemoney_client.broker.qmt_gateway import (
+            QMT_ALLOW_LIVE_ENV,
+            QmtBrokerGateway,
+        )
+
+        report = PaperTradingDecisionReport(
+            report_id="paper-2026-05-26",
+            trade_date="2026-05-26",
+            status="ready_to_buy",
+            market_regime="trend_main_rise_day",
+            execution_track="board_shadow_system_execution",
+            selected_strategy_id="board-shadow-system",
+            selected_action="operate_when_signal_exists",
+            evidence_end_date="2026-05-25",
+            should_buy=True,
+            instruction=PaperTradingInstruction(
+                action="buy",
+                strategy_id="board-shadow-system",
+                symbol="600001",
+                name="北辰科技",
+                timing="early_session",
+                entry_window="09:31-09:45",
+                entry_trigger="确认开盘承接",
+                entry_price=10.52,
+                stop_loss=10.1,
+                first_take_profit_price=11.78,
+                planned_stop_risk_pct=0.0399,
+                planned_first_target_return_pct=0.1198,
+                planned_reward_risk_ratio=3.0,
+                max_intratrade_drawdown_budget_pct=0.1198,
+                position_pct=0.12,
+                cash_budget=1052.0,
+                quantity=100,
+                confidence="high",
+                rationale="测试指令",
+                invalidation_rules=(),
+                sell_rules=(),
+                risk_notes=("跌破止损撤退",),
+                next_check_time="09:31",
+            ),
+            holding_instruction=None,
+            candidate_count=5,
+            ready_count=1,
+            blocked_count=4,
+            account_equity=10000.0,
+            account_cash=10000.0,
+            existing_position_count=0,
+            guard_decision=PaperTradingGuardDecision(
+                status="ready",
+                action="allow",
+                review_sample_count=30,
+                win_rate=0.6,
+                average_return_pct=0.02,
+                max_drawdown_pct=0.05,
+                consecutive_losses=0,
+                consecutive_quality_failures=0,
+                average_profit_drawdown_ratio=1.5,
+                risk_quality_pass_rate=0.7,
+                suggested_position_pct=0.12,
+                reasons=(),
+                next_action="按计划观察",
+            ),
+            summary="测试模拟盘",
+            decision_rules=(),
+            next_action="09:31 复核",
+        )
+
+        plan = QmtBrokerGateway(account_id="12345678").plan_paper_decision(report)
+
+        self.assertEqual(plan.status, "ready")
+        self.assertTrue(plan.dry_run)
+        self.assertFalse(plan.submitted)
+        self.assertEqual(plan.symbol, "600001.SH")
+        self.assertEqual(plan.side, "buy")
+        self.assertEqual(plan.quantity, 100)
+        self.assertEqual(plan.price, 10.52)
+        self.assertIn("dry-run", plan.summary)
+        self.assertIn("跌破止损撤退", plan.warnings)
+
+        with patch.dict(os.environ, {QMT_ALLOW_LIVE_ENV: ""}, clear=False):
+            blocked = QmtBrokerGateway(
+                qmt_path="C:/qmt/userdata_mini",
+                account_id="12345678",
+            ).plan_paper_decision(report, submit=True)
+
+        self.assertEqual(blocked.status, "blocked")
+        self.assertFalse(blocked.dry_run)
+        self.assertFalse(blocked.submitted)
+        self.assertIn(QMT_ALLOW_LIVE_ENV, blocked.summary)
 
     def test_missed_opportunity_report_flags_uncaptured_profitable_backtest_trades(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

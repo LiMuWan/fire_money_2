@@ -15,6 +15,7 @@ Code entry point:
 - `shared/contracts/__init__.py` is the public import surface for client and server code.
 - `shared/contracts/trading.py` keeps the core workflow contracts and re-exports grouped subcontracts for backward compatibility.
 - `shared/contracts/paper_database.py` owns the SQLite paper-ledger report contracts so the shared layer does not grow into one unbounded file.
+- `shared/contracts/broker.py` owns broker gateway health and order-plan DTOs used by local adapters such as QMT.
 
 Module boundary:
 
@@ -190,6 +191,17 @@ Rules represented by the contracts:
 - non-trading requested dates are `closed` and do not generate market scans or simulated trades
 - scheduler audit records persist the JSON-friendly schedule run payload for local review
 
+### `BrokerConnectionReport`, `BrokerOrderPlan`, `BrokerPosition`
+
+Describe local broker-gateway status and explicit order plans without making the strategy server depend on a vendor SDK.
+
+Rules represented by the contracts:
+
+- `BrokerConnectionReport` is a readiness/account snapshot, not a buy/sell decision.
+- `BrokerOrderPlan` is generated from a service-owned paper command sheet and is dry-run by default.
+- Real submission state is explicit through `dry_run`, `submitted`, and `order_id`.
+- Broker DTOs use project-owned names and must not leak raw QMT objects into client output or tests.
+
 ## 3. State Enums
 
 - `OneToTwoEventType`: one-to-two morning scan, candidate selected, auction confirmed, paper buy, stop warning, T+1 sell, end-of-day review, and blocked events.
@@ -207,4 +219,4 @@ Rules represented by the contracts:
 - Stability stages and boundary suggestions are calculated by the service layer at 30/50/100 sample gates.
 - Doctor output reuses shared one-to-two runtime checks; clients display it but must not use it to infer hidden infrastructure details.
 - AkShare and Feishu details stay behind infrastructure adapters. Shared contracts use project-owned field names only.
-- One-to-two paper trading is simulation only; these contracts do not represent real account orders or unattended live trading.
+- One-to-two paper trading remains simulation-first. Broker order contracts represent explicit local gateway plans; they are not permission for unattended live trading.

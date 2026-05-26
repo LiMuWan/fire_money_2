@@ -1,5 +1,6 @@
 """Public one-to-two contracts shared by the FireMoney client and server."""
 
+from .broker import BrokerConnectionReport, BrokerOrderPlan, BrokerPosition
 from .trading import (
     BreakoutStructureProfile,
     FeishuNotificationResult,
@@ -72,6 +73,9 @@ from .trading import (
 )
 
 __all__ = [
+    "BrokerConnectionReport",
+    "BrokerOrderPlan",
+    "BrokerPosition",
     "FeishuNotificationResult",
     "BreakoutStructureProfile",
     "LimitUpBoardShadowCandidate",

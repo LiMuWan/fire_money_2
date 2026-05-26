@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from shared.contracts import (
+    BrokerConnectionReport,
+    BrokerOrderPlan,
     K92EmotionLiquidityReport,
     LimitUpBoardShadowSystemReport,
     MissedOpportunityReport,
@@ -712,6 +714,51 @@ def format_paper_trading_decision_brief(report: PaperTradingDecisionReport) -> s
     lines.append("决策纪律：")
     lines.extend(f"- {item}" for item in report.decision_rules)
     lines.append(f"下一步：{report.next_action}")
+    return "\n".join(lines)
+
+
+def format_broker_connection_brief(report: BrokerConnectionReport) -> str:
+    lines = [
+        f"FireMoney QMT 连接检查：{report.status}",
+        f"账号：{report.account_id or '-'}",
+        report.message,
+        (
+            f"资金：可用 {report.available_cash:.2f}，现金 {report.cash:.2f}，"
+            f"总资产 {report.total_asset:.2f}，市值 {report.market_value:.2f}"
+        ),
+        f"持仓：{len(report.positions)}",
+    ]
+    lines.extend(
+        (
+            f"- {_stock_label(position.name, position.symbol)} {position.quantity} 股，"
+            f"可用 {position.available_quantity}，市值 {position.market_value:.2f}"
+        )
+        for position in report.positions
+    )
+    if report.raw_error:
+        lines.append(f"错误：{report.raw_error}")
+    lines.append(f"下一步：{report.next_action}")
+    return "\n".join(lines)
+
+
+def format_broker_order_plan_brief(plan: BrokerOrderPlan) -> str:
+    lines = [
+        f"FireMoney QMT 拟委托：{plan.status}",
+        f"交易日：{plan.trade_date}",
+        f"账号：{plan.account_id or '-'}",
+        plan.summary,
+        (
+            f"委托：{plan.side or '-'} {_stock_label(plan.name, plan.symbol)} "
+            f"{plan.quantity} 股，价格 {plan.price:.2f}，价格类型 {plan.price_type}"
+        ),
+        f"dry-run：{plan.dry_run}",
+    ]
+    if plan.order_id:
+        lines.append(f"委托号：{plan.order_id}")
+    if plan.warnings:
+        lines.append("风控提示：")
+        lines.extend(f"- {item}" for item in plan.warnings)
+    lines.append(f"下一步：{plan.next_action}")
     return "\n".join(lines)
 
 
