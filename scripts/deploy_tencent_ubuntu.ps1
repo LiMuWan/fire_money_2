@@ -88,10 +88,17 @@ if (Test-Path -LiteralPath $ReportsDir) {
 }
 if ($ReportFiles.Count -gt 0) {
     Write-Host "Packaging public report caches from .firemoney/reports"
+    $RootFullPath = (Resolve-Path -LiteralPath $Root).ProviderPath
+    $RootFullPath = $RootFullPath.TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
     $ReportRelativePaths = $ReportFiles |
         Sort-Object FullName -Unique |
         ForEach-Object {
-            $relative = [System.IO.Path]::GetRelativePath($Root, $_.FullName)
+            $FileFullPath = (Resolve-Path -LiteralPath $_.FullName).ProviderPath
+            if (-not $FileFullPath.StartsWith($RootFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Report cache path is outside project root: $FileFullPath"
+            }
+            $relative = $FileFullPath.Substring($RootFullPath.Length)
+            $relative = $relative.TrimStart([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
             $relative -replace "\\", "/"
         }
     $ReportTarArguments = @(
