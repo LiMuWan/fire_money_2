@@ -2354,7 +2354,7 @@ body.has-modal-open {
 
 .backtest-visuals {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(200px, 0.5fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 9px 0;
 }
@@ -2368,6 +2368,7 @@ body.has-modal-open {
 }
 
 .backtest-snapshot-card .backtest-chart,
+.backtest-snapshot-card .backtest-month-card,
 .backtest-snapshot-card .yearly-return-bars {
   padding: 8px;
 }
@@ -2419,6 +2420,7 @@ body.has-modal-open {
 }
 
 .backtest-chart,
+.backtest-month-card,
 .yearly-return-bars {
   border: 1px solid rgba(31, 122, 90, 0.18);
   border-radius: 14px;
@@ -2426,6 +2428,33 @@ body.has-modal-open {
     linear-gradient(180deg, rgba(223, 241, 233, 0.42), rgba(255, 255, 255, 0.94)),
     var(--surface);
   padding: 11px;
+}
+
+.backtest-month-card {
+  display: grid;
+  align-content: start;
+  min-height: 120px;
+}
+
+.backtest-month-card[data-status="warning"] {
+  border-color: rgba(166, 106, 24, 0.26);
+  background:
+    linear-gradient(180deg, rgba(246, 234, 216, 0.44), rgba(255, 255, 255, 0.94)),
+    var(--surface);
+}
+
+.backtest-month-card[data-status="blocked"] {
+  border-color: rgba(180, 75, 69, 0.24);
+  background:
+    linear-gradient(180deg, rgba(243, 221, 221, 0.42), rgba(255, 255, 255, 0.94)),
+    var(--surface);
+}
+
+.backtest-month-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .backtest-chart.is-empty {

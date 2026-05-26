@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from shared.contracts import (
@@ -1454,14 +1455,27 @@ def render_board_shadow_system_panel(system_report) -> str:
     """
 
 
-def _render_backtest_equity_curve(report: PaperBacktestReport) -> str:
-    if not report.monthly:
+def _render_backtest_equity_curve(
+    report: PaperBacktestReport,
+    *,
+    title: str,
+    subtitle: str,
+    months: tuple[Any, ...],
+    empty_text: str,
+    overall_return_pct: float,
+    max_drawdown_pct: float,
+) -> str:
+    if not months:
+        note = report.current_month_notes[0] if report.current_month_notes else empty_text
         return """
           <div class="backtest-chart is-empty">
-            <strong>收益曲线</strong>
-            <span>暂无月度收益样本，暂不能绘制曲线。</span>
+            <strong>{title}</strong>
+            <span>{message}</span>
           </div>
-        """
+        """.format(
+            title=_text(title),
+            message=_text(_translate_misc_text(note)),
+        )
     width = 720
     height = 220
     pad_left = 44
@@ -1470,7 +1484,7 @@ def _render_backtest_equity_curve(report: PaperBacktestReport) -> str:
     pad_bottom = 34
     equity = 1.0
     points: list[tuple[str, float, float, str]] = []
-    for item in report.monthly:
+    for item in months:
         equity *= max(0.0, 1 + item.position_weighted_return_pct)
         points.append((item.month, equity, item.position_weighted_return_pct, item.status))
     equities = [1.0, *(item[1] for item in points)]
@@ -1520,10 +1534,10 @@ def _render_backtest_equity_curve(report: PaperBacktestReport) -> str:
       <div class="backtest-chart">
         <div class="chart-head">
           <div>
-            <strong>收益曲线（月度复利）</strong>
-            <span>{_text(report.start_date)} -> {_text(report.end_date)}</span>
+            <strong>{_text(title)}</strong>
+            <span>{_text(subtitle)}</span>
           </div>
-          <b>{last_equity:.2f}x</b>
+          <b>{overall_return_pct:.2%}</b>
         </div>
         <svg class="equity-chart" viewBox="0 0 {width} {height}" role="img" aria-label="模拟盘买入算法月度收益曲线">
           {grid_html}
@@ -1536,9 +1550,43 @@ def _render_backtest_equity_curve(report: PaperBacktestReport) -> str:
         <div class="chart-metrics">
           <span>最佳月 {_text(best_month[0])} {best_month[2]:.2%}</span>
           <span>最差月 {_text(worst_month[0])} {worst_month[2]:.2%}</span>
-          <span>最大回撤 {report.overall.max_drawdown_pct:.2%}</span>
+          <span>区间回撤 {max_drawdown_pct:.2%}</span>
           <span>最新状态 {_text(_paper_backtest_status_name(last_status))}</span>
         </div>
+      </div>
+    """
+
+
+def _render_backtest_current_month_card(report: PaperBacktestReport) -> str:
+    requested_month = _requested_backtest_month(report)
+    current_month = next(
+        (item for item in report.monthly if item.month == requested_month),
+        None,
+    )
+    note = report.current_month_notes[0] if report.current_month_notes else "本月回测状态等待更新。"
+    if current_month is None:
+        return f"""
+          <div class="backtest-month-card" data-status="warning">
+            <div class="chart-head">
+              <div>
+                <strong>本月回测数据</strong>
+                <span>{_text(requested_month or report.end_date)}</span>
+              </div>
+              <b>待更新</b>
+            </div>
+            <p>{_text(_translate_misc_text(note))}</p>
+          </div>
+        """
+    return f"""
+      <div class="backtest-month-card" data-status="{_text(current_month.status)}">
+        <div class="chart-head">
+          <div>
+            <strong>本月回测数据</strong>
+            <span>{_text(current_month.month)}</span>
+          </div>
+          <b>{current_month.position_weighted_return_pct:.2%}</b>
+        </div>
+        <p>{_text(_translate_misc_text(note))}</p>
       </div>
     """
 
@@ -1574,12 +1622,74 @@ def _render_yearly_return_bars(report: PaperBacktestReport) -> str:
 
 
 def _render_backtest_visuals(report: PaperBacktestReport) -> str:
+    history_months = tuple(report.monthly)
+    current_year = _requested_backtest_month(report)[:4]
+    yearly_months = tuple(
+        item for item in report.monthly if current_year and item.month.startswith(current_year)
+    )
+    current_year_metric = next(
+        (item for item in report.yearly if item.year == current_year),
+        None,
+    )
+    current_year_return = (
+        current_year_metric.position_weighted_return_pct
+        if current_year_metric is not None
+        else _compound_monthly_return(yearly_months)
+    )
+    current_year_drawdown = (
+        current_year_metric.max_drawdown_pct
+        if current_year_metric is not None
+        else _monthly_curve_drawdown(yearly_months)
+    )
     return f"""
       <div class="backtest-visuals">
-        {_render_backtest_equity_curve(report)}
+        {_render_backtest_equity_curve(
+          report,
+          title="历史回测数据",
+          subtitle=f"{report.start_date} -> {report.end_date}",
+          months=history_months,
+          empty_text="历史回测缓存暂无月度样本，不能绘制全区间曲线。",
+          overall_return_pct=report.overall.position_weighted_return_pct,
+          max_drawdown_pct=report.overall.max_drawdown_pct,
+        )}
+        {_render_backtest_equity_curve(
+          report,
+          title="本年度回测数据",
+          subtitle=current_year or "年度待确认",
+          months=yearly_months,
+          empty_text=f"{current_year or '本年度'} 暂无月度收益样本。",
+          overall_return_pct=current_year_return,
+          max_drawdown_pct=current_year_drawdown,
+        )}
+        {_render_backtest_current_month_card(report)}
         {_render_yearly_return_bars(report)}
       </div>
     """
+
+
+def _requested_backtest_month(report: PaperBacktestReport) -> str:
+    if len(report.end_date) >= 7:
+        return report.end_date[:7]
+    return date.today().isoformat()[:7]
+
+
+def _compound_monthly_return(months: tuple[Any, ...]) -> float:
+    equity = 1.0
+    for item in months:
+        equity *= max(0.0, 1 + item.position_weighted_return_pct)
+    return equity - 1.0
+
+
+def _monthly_curve_drawdown(months: tuple[Any, ...]) -> float:
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    for item in months:
+        equity *= max(0.0, 1 + item.position_weighted_return_pct)
+        peak = max(peak, equity)
+        if peak > 0:
+            max_drawdown = min(max_drawdown, equity / peak - 1)
+    return max_drawdown
 
 
 def render_backtest_snapshot(report: PaperBacktestReport | None) -> str:
