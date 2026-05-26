@@ -26,7 +26,9 @@ if ($FeishuEnvPath -and -not (Test-Path -LiteralPath $FeishuEnvPath)) {
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Archive = Join-Path ([System.IO.Path]::GetTempPath()) "firemoney-deploy.tar.gz"
+$ReportsArchive = Join-Path ([System.IO.Path]::GetTempPath()) "firemoney-reports.tar.gz"
 $RemoteArchive = "/tmp/firemoney-deploy.tar.gz"
+$RemoteReportsArchive = "/tmp/firemoney-reports.tar.gz"
 $RemoteFeishuEnv = "/tmp/firemoney-feishu.env"
 $Target = "$User@$HostName"
 $RemoteOwner = "${User}:${User}"
@@ -47,6 +49,9 @@ Set-Location $Root
 
 if (Test-Path -LiteralPath $Archive) {
     Remove-Item -LiteralPath $Archive -Force
+}
+if (Test-Path -LiteralPath $ReportsArchive) {
+    Remove-Item -LiteralPath $ReportsArchive -Force
 }
 
 Write-Host "Packaging FireMoney from $Root"
@@ -69,6 +74,32 @@ Invoke-Checked "tar.exe" @(
     "--exclude=client/desktop/preview/*.tmp",
     "."
 )
+
+$ReportsDir = Join-Path (Join-Path $Root ".firemoney") "reports"
+$ReportPatterns = @(
+    "paper_backtest_*.json",
+    "board_shadow_system_*.json"
+)
+$ReportFiles = @()
+if (Test-Path -LiteralPath $ReportsDir) {
+    foreach ($pattern in $ReportPatterns) {
+        $ReportFiles += Get-ChildItem -LiteralPath $ReportsDir -Filter $pattern -File
+    }
+}
+if ($ReportFiles.Count -gt 0) {
+    Write-Host "Packaging public report caches from .firemoney/reports"
+    $ReportRelativePaths = $ReportFiles |
+        Sort-Object FullName -Unique |
+        ForEach-Object {
+            $relative = [System.IO.Path]::GetRelativePath($Root, $_.FullName)
+            $relative -replace "\\", "/"
+        }
+    $ReportTarArguments = @(
+        "-czf",
+        $ReportsArchive
+    ) + $ReportRelativePaths
+    Invoke-Checked "tar.exe" $ReportTarArguments
+}
 
 Write-Host "Preparing remote directory $RemoteDir on $Target"
 Invoke-Checked "ssh.exe" @(
@@ -100,6 +131,18 @@ Invoke-Checked "scp.exe" @(
     "${Target}:$RemoteArchive"
 )
 
+if (Test-Path -LiteralPath $ReportsArchive) {
+    Write-Host "Uploading public report caches to ${Target}:$RemoteReportsArchive"
+    Invoke-Checked "scp.exe" @(
+        "-i",
+        $KeyPath,
+        "-o",
+        "IdentitiesOnly=yes",
+        $ReportsArchive,
+        "${Target}:$RemoteReportsArchive"
+    )
+}
+
 Write-Host "Installing systemd services on $Target"
 Invoke-Checked "ssh.exe" @(
     "-i",
@@ -109,6 +152,18 @@ Invoke-Checked "ssh.exe" @(
     $Target,
     "rm -f '$RemoteDir/client/desktop/preview/'*.html '$RemoteDir/client/desktop/preview/'*.json '$RemoteDir/client/desktop/preview/'*.sqlite3 '$RemoteDir/client/desktop/preview/'*.png '$RemoteDir/client/desktop/preview/'*.tmp 2>/dev/null || true && tar -xzf '$RemoteArchive' -C '$RemoteDir' && sudo bash '$RemoteDir/scripts/linux/install_firemoney_systemd.sh'"
 )
+
+if (Test-Path -LiteralPath $ReportsArchive) {
+    Write-Host "Installing public report caches on $Target"
+    Invoke-Checked "ssh.exe" @(
+        "-i",
+        $KeyPath,
+        "-o",
+        "IdentitiesOnly=yes",
+        $Target,
+        "mkdir -p '$RemoteDir/.firemoney/reports' && tar -xzf '$RemoteReportsArchive' -C '$RemoteDir' && rm -f '$RemoteReportsArchive'"
+    )
+}
 
 if ($FeishuEnvPath) {
     Write-Host "Importing Feishu environment into /etc/firemoney/firemoney.env"

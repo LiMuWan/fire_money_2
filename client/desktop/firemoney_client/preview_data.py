@@ -665,19 +665,82 @@ def _load_cached_or_unavailable_paper_backtest_report(
     start_date: str,
     end_date: str,
 ) -> PaperBacktestReport:
-    cache_path = (
-        Path(".firemoney")
-        / "reports"
-        / f"paper_backtest_{start_date}_to_{end_date}.json"
-    )
+    cache_path = _paper_backtest_cache_path(start_date=start_date, end_date=end_date)
     cached = _read_paper_backtest_report(cache_path, requested_end_date=end_date)
     if cached is not None:
         return cached
+    latest_cached = _read_latest_paper_backtest_report(
+        start_date=start_date,
+        requested_end_date=end_date,
+    )
+    if latest_cached is not None:
+        return latest_cached
     return _paper_backtest_unavailable_report(
         start_date,
         end_date,
         RuntimeError("live preview uses cached backtest only"),
     )
+
+
+def _paper_backtest_cache_path(*, start_date: str, end_date: str) -> Path:
+    return (
+        Path(".firemoney")
+        / "reports"
+        / f"paper_backtest_{start_date}_to_{end_date}.json"
+    )
+
+
+def _read_latest_paper_backtest_report(
+    *,
+    start_date: str,
+    requested_end_date: str,
+) -> PaperBacktestReport | None:
+    reports_dir = Path(".firemoney") / "reports"
+    prefix = f"paper_backtest_{start_date}_to_"
+    candidates = sorted(
+        (
+            path
+            for path in reports_dir.glob(f"{prefix}*.json")
+            if "_refreshed" not in path.stem
+        ),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    for path in candidates:
+        cached = _read_paper_backtest_report(
+            path,
+            requested_end_date=requested_end_date,
+            allow_partial_current_month=True,
+        )
+        if cached is not None:
+            return _with_requested_backtest_month_note(
+                cached,
+                requested_end_date=requested_end_date,
+            )
+    return None
+
+
+def _with_requested_backtest_month_note(
+    report: PaperBacktestReport,
+    *,
+    requested_end_date: str,
+) -> PaperBacktestReport:
+    requested_month = requested_end_date[:7] if len(requested_end_date) >= 7 else ""
+    if not requested_month:
+        return report
+    current_month = next((item for item in report.monthly if item.month == requested_month), None)
+    if current_month is not None:
+        note = (
+            f"本月回测：{current_month.month} 已纳入，收益 "
+            f"{current_month.position_weighted_return_pct:.2%}，"
+            f"{current_month.conclusion}。"
+        )
+    else:
+        note = (
+            f"本月回测：当前读取最近历史缓存 {report.end_date}；"
+            f"{requested_month} 尚未完整纳入，历史和本年度曲线仍可参考。"
+        )
+    return replace(report, current_month_notes=(note,))
 
 
 def _load_or_build_board_shadow_system_report(
@@ -921,6 +984,7 @@ def _read_paper_backtest_report(
     path: Path,
     *,
     requested_end_date: str | None = None,
+    allow_partial_current_month: bool = False,
 ) -> PaperBacktestReport | None:
     if not path.exists():
         return None
@@ -929,10 +993,19 @@ def _read_paper_backtest_report(
         if payload.get("preview_cache_version") != PAPER_BACKTEST_PREVIEW_CACHE_VERSION:
             return None
         current_month_notes = tuple(str(item) for item in payload.get("current_month_notes", ()))
-        if current_month_notes and any("尚未完整纳入" in item for item in current_month_notes):
+        if (
+            not allow_partial_current_month
+            and current_month_notes
+            and any("尚未完整纳入" in item for item in current_month_notes)
+        ):
             return None
         coverage_end = str(payload.get("data_coverage_end") or "")
-        if requested_end_date and coverage_end and coverage_end[:7] < requested_end_date[:7]:
+        if (
+            not allow_partial_current_month
+            and requested_end_date
+            and coverage_end
+            and coverage_end[:7] < requested_end_date[:7]
+        ):
             return None
         return _paper_backtest_report_from_dict(payload)
     except Exception:

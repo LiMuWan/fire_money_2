@@ -7800,6 +7800,99 @@ class MainChainSmokeTest(unittest.TestCase):
                 )
             )
 
+    def test_live_preview_uses_latest_backtest_cache_for_history_when_today_missing(self) -> None:
+        from client.desktop.firemoney_client.preview_data import (
+            PAPER_BACKTEST_PREVIEW_CACHE_VERSION,
+            _load_cached_or_unavailable_paper_backtest_report,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            reports = root / ".firemoney" / "reports"
+            reports.mkdir(parents=True)
+            payload = {
+                "preview_cache_version": PAPER_BACKTEST_PREVIEW_CACHE_VERSION,
+                "report_id": "paper-backtest-2020-01-01-to-2026-05-25",
+                "start_date": "2020-01-01",
+                "end_date": "2026-05-25",
+                "status": "ready",
+                "strategy_id": "board-shadow-system",
+                "summary": "cached history",
+                "overall": {
+                    "label": "overall",
+                    "sample_count": 10,
+                    "win_rate": 0.6,
+                    "position_weighted_return_pct": 0.42,
+                    "max_drawdown_pct": -0.03,
+                },
+                "train": {
+                    "label": "train",
+                    "sample_count": 8,
+                    "win_rate": 0.6,
+                    "position_weighted_return_pct": 0.36,
+                    "max_drawdown_pct": -0.02,
+                },
+                "validation": {
+                    "label": "validation",
+                    "sample_count": 2,
+                    "win_rate": 0.5,
+                    "position_weighted_return_pct": 0.06,
+                    "max_drawdown_pct": -0.01,
+                },
+                "yearly": [
+                    {
+                        "year": "2026",
+                        "sample_count": 2,
+                        "win_rate": 0.5,
+                        "average_return_pct": 0.02,
+                        "median_return_pct": 0.02,
+                        "position_weighted_return_pct": 0.06,
+                        "max_drawdown_pct": -0.01,
+                        "status": "ready",
+                        "conclusion": "年度正收益且回撤受控",
+                    }
+                ],
+                "negative_years": [],
+                "weak_years": [],
+                "buy_rule_summary": [],
+                "improvement_notes": [],
+                "no_future_leakage_notes": [],
+                "limitations": [],
+                "next_action": "keep",
+                "data_coverage_start": "2020-01-01",
+                "data_coverage_end": "2026-05-22",
+                "data_coverage_notes": [],
+                "monthly": [
+                    {
+                        "month": "2026-04",
+                        "position_weighted_return_pct": 0.04,
+                        "status": "ready",
+                        "conclusion": "月度正收益",
+                    }
+                ],
+                "current_month_notes": [
+                    "本月回测：请求到 2026-05-25，但日线研究缓存只覆盖到 2026-05-22，2026-05 尚未完整纳入战法回测。"
+                ],
+            }
+            (reports / "paper_backtest_2020-01-01_to_2026-05-25.json").write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
+            previous = Path.cwd()
+            try:
+                os.chdir(root)
+                report = _load_cached_or_unavailable_paper_backtest_report(
+                    start_date="2020-01-01",
+                    end_date="2026-05-26",
+                )
+            finally:
+                os.chdir(previous)
+
+        self.assertEqual(report.status, "ready")
+        self.assertEqual(report.overall.position_weighted_return_pct, 0.42)
+        self.assertEqual(report.monthly[0].month, "2026-04")
+        self.assertIn("最近历史缓存", report.current_month_notes[0])
+
     def test_cli_brief_formatters_do_not_import_server_layers(self) -> None:
         forbidden = ("server.firemoney_server",)
         presenter_files = (
