@@ -201,20 +201,16 @@ class AkshareMarketDataProvider:
         try:
             import akshare as ak  # type: ignore
         except Exception:
-            if self._fallback is not None and hasattr(self._fallback, "load_full_market_rows"):
-                return self._fallback.load_full_market_rows(trade_date)
-            return ()
+            return self._fallback_trend_rows(trade_date)
 
         try:
             spot = ak.stock_zh_a_spot_em()
             self._cache_payload(trade_date, "stock_zh_a_spot_em", spot)
         except Exception:
-            if self._fallback is not None and hasattr(self._fallback, "load_full_market_rows"):
-                return self._fallback.load_full_market_rows(trade_date)
-            return ()
+            return self._fallback_trend_rows(trade_date)
         rows = self._trend_rows_from_spot(spot, trade_date)
-        if not rows and self._fallback is not None and hasattr(self._fallback, "load_full_market_rows"):
-            return self._fallback.load_full_market_rows(trade_date)
+        if not rows:
+            return self._fallback_trend_rows(trade_date)
         return rows
 
     def load_fundamental_snapshot(self, symbol: str) -> FundamentalSnapshot | None:
@@ -667,6 +663,13 @@ class AkshareMarketDataProvider:
             raise MarketDataUnavailable("AkShare market data is unavailable")
         return self._fallback.load_one_to_two_rows(trade_date)
 
+    def _fallback_trend_rows(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        rows = self._trend_rows_from_cached_spot(trade_date)
+        if rows:
+            return rows
+        one_to_two_rows = self._cached_or_fallback_rows(trade_date)
+        return tuple(self._trend_row_from_one_to_two_row(row) for row in one_to_two_rows)
+
     def _rows_from_previous_pool(
         self,
         previous_pool: Any,
@@ -889,9 +892,69 @@ class AkshareMarketDataProvider:
                     theme=industry,
                     is_st="ST" in name.upper(),
                     is_delisting="退" in name,
+                    data_source="full_market_spot",
                 )
             )
         return tuple(rows)
+
+    def _trend_rows_from_cached_spot(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        cache_file = self._cache_dir / f"{trade_date}_stock_zh_a_spot_em.json"
+        if not cache_file.exists():
+            return ()
+        try:
+            records = json.loads(cache_file.read_text(encoding="utf-8"))
+        except Exception:
+            return ()
+        rows = self._trend_rows_from_records(records, trade_date, data_source="cached_full_market_spot")
+        return rows
+
+    def _trend_rows_from_records(
+        self,
+        records: list[dict[str, Any]],
+        trade_date: str,
+        *,
+        data_source: str,
+    ) -> tuple[MarketTrendRow, ...]:
+        class _Records:
+            def to_dict(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+                return records
+
+        rows = self._trend_rows_from_spot(_Records(), trade_date)
+        return tuple(
+            MarketTrendRow(
+                **{
+                    **row.__dict__,
+                    "data_source": data_source,
+                }
+            )
+            for row in rows
+        )
+
+    @staticmethod
+    def _trend_row_from_one_to_two_row(row: OneToTwoMarketRow) -> MarketTrendRow:
+        change_pct = (
+            (row.latest_price - row.previous_close) / row.previous_close * 100
+            if row.previous_close > 0
+            else 0.0
+        )
+        return MarketTrendRow(
+            symbol=row.symbol,
+            name=row.name,
+            trade_date=row.trade_date,
+            board=row.board,
+            latest_price=row.latest_price,
+            previous_close=row.previous_close,
+            change_pct=change_pct,
+            turnover_amount=row.turnover_amount,
+            turnover_rate=row.turnover_rate,
+            market_cap=row.market_cap,
+            float_market_cap=row.float_market_cap,
+            industry=row.theme,
+            theme=row.theme,
+            is_st=row.is_st,
+            is_delisting=row.is_delisting,
+            data_source="one_to_two_candidate_fallback",
+        )
 
     def _history_profile(
         self,

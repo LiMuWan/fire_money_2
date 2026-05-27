@@ -58,6 +58,7 @@ class MarketTrendRow:
     theme: str = ""
     is_st: bool = False
     is_delisting: bool = False
+    data_source: str = "full_market_spot"
 
 
 @dataclass(frozen=True)

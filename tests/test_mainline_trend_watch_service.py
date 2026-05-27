@@ -76,6 +76,20 @@ class FakeTrendProvider:
         return None
 
 
+class FallbackTrendProvider(FakeTrendProvider):
+    def load_full_market_rows(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        rows = super().load_full_market_rows(trade_date)
+        return tuple(
+            MarketTrendRow(
+                **{
+                    **row.__dict__,
+                    "data_source": "one_to_two_candidate_fallback",
+                }
+            )
+            for row in rows[:1]
+        )
+
+
 def _bars(
     end_date: str,
     *,
@@ -139,6 +153,18 @@ class MainlineTrendWatchServiceTest(unittest.TestCase):
             any("追" in risk or "偏高" in risk for risk in high_item.risks),
             high_item.risks,
         )
+
+    def test_degraded_data_is_explicit_when_full_market_snapshot_falls_back(self) -> None:
+        service = MainlineTrendWatchService(market_data_provider=FallbackTrendProvider())
+
+        report = service.build_report(trade_date="2026-05-27", limit=3)
+
+        self.assertIn("degraded_data", report.summary)
+        self.assertTrue(
+            any("不是完整全市场覆盖" in item for item in report.limitations),
+            report.limitations,
+        )
+        self.assertEqual(report.items[0].symbol, "603256")
 
 
 if __name__ == "__main__":

@@ -143,6 +143,9 @@ class MainlineTrendWatchService:
         scan_limit: int = 24,
     ) -> MainlineTrendWatchReport:
         rows = self._load_market_rows(trade_date)
+        degraded_data = bool(rows) and all(
+            row.data_source != "full_market_spot" for row in rows
+        )
         candidates = self._coarse_filter(rows, scan_limit=max(scan_limit, limit * 2))
         if not candidates:
             return MainlineTrendWatchReport(
@@ -192,17 +195,19 @@ class MainlineTrendWatchService:
                 report_id=f"mainline-trend-watch-{trade_date}",
                 trade_date=trade_date,
                 status="empty",
-                summary="全市场已有快照，但候选缺少足够日线/资金/逻辑证据；先不讲主升故事。",
+                summary=self._summary_prefix(degraded_data)
+                + "候选缺少足够日线/资金/逻辑证据；先不讲主升故事。",
                 items=(),
                 rules=self._rules(),
-                limitations=self._limitations(),
+                limitations=self._limitations(degraded_data),
                 next_action="补齐候选日线和基础财务快照后，再给主升根因评分。",
             )
 
         prime_count = sum(1 for item in items if item.status == "prime_watch")
         wait_count = sum(1 for item in items if item.status == "wait_entry")
         summary = (
-            f"全市场主升根因扫描：从 {len(rows)} 只股票粗筛 {len(candidates)} 只，"
+            self._summary_prefix(degraded_data)
+            + f"从 {len(rows)} 只股票粗筛 {len(candidates)} 只，"
             f"输出 {len(items)} 只观察；{prime_count} 只逻辑/价值/资金共振，"
             f"{wait_count} 只只等买点。"
         )
@@ -213,7 +218,7 @@ class MainlineTrendWatchService:
             summary=summary,
             items=tuple(items),
             rules=self._rules(),
-            limitations=self._limitations(),
+            limitations=self._limitations(degraded_data),
             next_action="先看主升根因是否扎实，再看回踩/突破买点；没有产业逻辑、业绩承接和资金持续性，不因为涨了就追。",
         )
 
@@ -773,12 +778,24 @@ class MainlineTrendWatchService:
         )
 
     @staticmethod
-    def _limitations() -> tuple[str, ...]:
-        return (
+    def _limitations(degraded_data: bool = False) -> tuple[str, ...]:
+        items = [
             "财务快照依赖行情源可用性；缺失时只给待确认价值结论，不伪装成确定性基本面。",
             "产业逻辑第一版来自行业/名称/题材关键词，后续应接入公告、研报摘要和板块强度。",
             "该模块是主升研究雷达，不改变主板10cm首板模拟盘这条已验证核心链路。",
-        )
+        ]
+        if degraded_data:
+            items = [
+                "当前全市场快照不可用，已降级到缓存或当日候选池；这不是完整全市场覆盖。",
+                *items,
+            ]
+        return tuple(items)
+
+    @staticmethod
+    def _summary_prefix(degraded_data: bool) -> str:
+        if degraded_data:
+            return "全市场主升根因扫描（degraded_data）："
+        return "全市场主升根因扫描："
 
     @staticmethod
     def _start_date(trade_date: str, lookback_days: int) -> str:
