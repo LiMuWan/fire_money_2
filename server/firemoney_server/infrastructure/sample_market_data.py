@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from server.firemoney_server.domain.one_to_two_types import (
+    FundamentalSnapshot,
     HistoricalPriceBar,
     IntradayPriceBar,
+    MarketTrendRow,
     OneToTwoMarketRow,
     TickSnapshot,
 )
@@ -412,12 +416,168 @@ class SampleMarketDataProvider:
             ),
         )
 
+    def load_full_market_rows(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        return (
+            MarketTrendRow(
+                symbol="603256",
+                name="宏和科技",
+                trade_date=trade_date,
+                board="主板",
+                latest_price=12.18,
+                previous_close=11.86,
+                change_pct=2.7,
+                turnover_amount=680_000_000,
+                turnover_rate=7.8,
+                market_cap=10_800_000_000,
+                float_market_cap=8_900_000_000,
+                industry="电子布 PCB",
+                theme="AI服务器PCB上游电子布",
+            ),
+            MarketTrendRow(
+                symbol="300502",
+                name="新易盛",
+                trade_date=trade_date,
+                board="创业板",
+                latest_price=97.6,
+                previous_close=94.3,
+                change_pct=3.5,
+                turnover_amount=3_900_000_000,
+                turnover_rate=8.6,
+                market_cap=71_000_000_000,
+                float_market_cap=61_000_000_000,
+                industry="通信设备",
+                theme="AI算力 CPO 光模块",
+            ),
+            MarketTrendRow(
+                symbol="600011",
+                name="龙翼智能",
+                trade_date=trade_date,
+                board="主板",
+                latest_price=18.7,
+                previous_close=18.3,
+                change_pct=2.2,
+                turnover_amount=520_000_000,
+                turnover_rate=5.4,
+                market_cap=22_000_000_000,
+                float_market_cap=14_000_000_000,
+                industry="机器人",
+                theme="具身智能机器人",
+            ),
+            MarketTrendRow(
+                symbol="600004",
+                name="安泰材料",
+                trade_date=trade_date,
+                board="主板",
+                latest_price=8.8,
+                previous_close=8.72,
+                change_pct=0.9,
+                turnover_amount=90_000_000,
+                turnover_rate=2.1,
+                market_cap=3_800_000_000,
+                float_market_cap=2_400_000_000,
+                industry="材料",
+                theme="同题材跟风",
+            ),
+            MarketTrendRow(
+                symbol="600002",
+                name="金岭高科",
+                trade_date=trade_date,
+                board="主板",
+                latest_price=16.5,
+                previous_close=15.0,
+                change_pct=10.0,
+                turnover_amount=1_400_000_000,
+                turnover_rate=17.0,
+                market_cap=22_000_000_000,
+                float_market_cap=15_000_000_000,
+                industry="半导体",
+                theme="高位加速",
+            ),
+            MarketTrendRow(
+                symbol="688888",
+                name="晶桥半导",
+                trade_date=trade_date,
+                board="科创板",
+                latest_price=41.2,
+                previous_close=40.9,
+                change_pct=0.7,
+                turnover_amount=760_000_000,
+                turnover_rate=4.2,
+                market_cap=28_000_000_000,
+                float_market_cap=13_000_000_000,
+                industry="半导体材料",
+                theme="先进封装材料",
+            ),
+        )
+
+    def load_fundamental_snapshot(self, symbol: str) -> FundamentalSnapshot | None:
+        snapshots = {
+            "603256": FundamentalSnapshot(
+                symbol="603256",
+                name="宏和科技",
+                report_date="2026Q1",
+                roe_pct=8.4,
+                revenue_growth_pct=18.0,
+                net_profit_growth_pct=42.0,
+                gross_margin_pct=28.5,
+                debt_ratio_pct=32.0,
+                pe_ttm=38.0,
+                pb=3.2,
+                summary="sample",
+            ),
+            "300502": FundamentalSnapshot(
+                symbol="300502",
+                name="新易盛",
+                report_date="2026Q1",
+                roe_pct=19.5,
+                revenue_growth_pct=58.0,
+                net_profit_growth_pct=96.0,
+                gross_margin_pct=43.0,
+                debt_ratio_pct=18.0,
+                pe_ttm=47.0,
+                pb=9.6,
+                summary="sample",
+            ),
+            "600011": FundamentalSnapshot(
+                symbol="600011",
+                name="龙翼智能",
+                report_date="2026Q1",
+                roe_pct=6.8,
+                revenue_growth_pct=12.0,
+                net_profit_growth_pct=15.0,
+                gross_margin_pct=24.0,
+                debt_ratio_pct=45.0,
+                pe_ttm=52.0,
+                pb=3.8,
+                summary="sample",
+            ),
+            "688888": FundamentalSnapshot(
+                symbol="688888",
+                name="晶桥半导",
+                report_date="2026Q1",
+                roe_pct=9.8,
+                revenue_growth_pct=31.0,
+                net_profit_growth_pct=36.0,
+                gross_margin_pct=35.0,
+                debt_ratio_pct=28.0,
+                pe_ttm=44.0,
+                pb=4.5,
+                summary="sample",
+            ),
+        }
+        return snapshots.get(symbol)
+
     def load_price_bars(
         self,
         symbol: str,
         start_date: str,
         end_date: str,
     ) -> tuple[HistoricalPriceBar, ...]:
+        generated = self._generated_price_bars(symbol, end_date)
+        if generated:
+            return tuple(
+                bar for bar in generated if start_date <= bar.trade_date <= end_date
+            )
         sample_bars = {
             "600001": (
                 HistoricalPriceBar(
@@ -462,6 +622,61 @@ class SampleMarketDataProvider:
         return tuple(
             bar for bar in bars if start_date <= bar.trade_date <= end_date
         )
+
+    def _generated_price_bars(
+        self,
+        symbol: str,
+        end_date: str,
+    ) -> tuple[HistoricalPriceBar, ...]:
+        specs = {
+            "603256": (7.8, 12.18, 0.12, 680_000_000),
+            "300502": (42.0, 97.6, 0.34, 3_900_000_000),
+            "600011": (12.8, 18.7, 0.18, 520_000_000),
+            "600002": (7.0, 16.5, 0.42, 1_400_000_000),
+            "688888": (26.0, 41.2, 0.16, 760_000_000),
+        }
+        spec = specs.get(symbol)
+        if spec is None:
+            return ()
+        start_price, end_price, wave, latest_amount = spec
+        try:
+            end = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError:
+            return ()
+        bars: list[HistoricalPriceBar] = []
+        total_days = 130
+        for index in range(total_days):
+            trade_date = (end - timedelta(days=total_days - index - 1)).isoformat()
+            progress = index / (total_days - 1)
+            trend = start_price + (end_price - start_price) * progress
+            cycle = ((index % 17) - 8) / 8 * wave
+            close = max(1.0, trend * (1 + cycle * 0.08))
+            if symbol == "300502" and index > 105:
+                close *= 1 + (index - 105) * 0.01
+            if symbol == "600002" and index > 100:
+                close *= 1 + (index - 100) * 0.018
+            if index == total_days - 1:
+                close = end_price
+            open_price = close * (0.99 + (index % 5) * 0.004)
+            high = max(open_price, close) * 1.025
+            low = min(open_price, close) * 0.975
+            amount_base = latest_amount * (0.55 + progress * 0.35)
+            if index == total_days - 1:
+                amount = latest_amount
+            else:
+                amount = amount_base * (0.9 + (index % 9) * 0.03)
+            bars.append(
+                HistoricalPriceBar(
+                    trade_date=trade_date,
+                    open_price=round(open_price, 2),
+                    high_price=round(high, 2),
+                    low_price=round(low, 2),
+                    close_price=round(close, 2),
+                    volume=round(amount / max(close, 0.01), 0),
+                    amount=round(amount, 2),
+                )
+            )
+        return tuple(bars)
 
     def load_intraday_bars(
         self,

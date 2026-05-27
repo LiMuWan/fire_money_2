@@ -7,6 +7,7 @@ from typing import Any
 
 from shared.contracts import (
     CommercialReadinessReport,
+    MainlineTrendWatchReport,
     NotificationRecord,
     OneToTwoBacktestAuditReport,
     OneToTwoDoctorReport,
@@ -271,6 +272,70 @@ def render_mainline_continuity(report: OneToTwoMorningReport) -> str:
         """
         for theme, item in list(by_theme.items())[:3]
     )
+
+
+def render_mainline_trend_watch_panel(report: MainlineTrendWatchReport | None) -> str:
+    if report is None:
+        return ""
+    if not report.items:
+        return f"""
+      <section class="panel one-to-two-panel trend-watch-panel" data-status="{_text(report.status)}">
+        <h2>全市场主升根因扫描</h2>
+        <p class="next-action">{_text(_translate_misc_text(report.summary))}</p>
+        <ul class="detail-list compact">
+          <li>先看结论：没有足够证据时不讲主升故事，也不生成买点。</li>
+          <li>下一步：{_text(_translate_misc_text(report.next_action))}</li>
+        </ul>
+      </section>
+        """
+    rule_items = "".join(
+        f"<li>规则：{_text(_translate_misc_text(rule))}</li>" for rule in report.rules
+    )
+    cards = "".join(
+        f"""
+        <article class="one-to-two-card trend-watch-card" data-status="{_text(item.status)}">
+          <div class="candidate-head">
+            <div>
+              <div class="candidate-name">{_text(item.name)}</div>
+              <div class="candidate-code">{_text(item.name)}（{_text(item.symbol)}） / {_text(item.theme)}</div>
+            </div>
+            <div class="candidate-score">{item.score:.1f}</div>
+          </div>
+          <div class="tags">
+            <span class="tag">{_text(item.action)}</span>
+            <span class="tag">逻辑 {item.logic_score:.0f}</span>
+            <span class="tag">价值 {item.value_score:.0f}</span>
+            <span class="tag">资金 {item.capital_attraction_score:.0f}</span>
+            <span class="tag">持续 {item.sustainability_score:.0f}</span>
+            <span class="tag">买点 {item.timing_score:.0f}</span>
+          </div>
+          <ul class="detail-list compact">
+            <li>主升逻辑：{_text(item.logic)}</li>
+            <li>价值承接：{_text(item.value_case)}</li>
+            <li>资金吸引：{_text(item.capital_case)}</li>
+            <li>持续根源：{_text(item.sustainability_case)}</li>
+            <li>买点计划：{_text(item.entry_plan)}</li>
+            <li>结构：现价 {item.latest_price:.2f}，10日 {item.ma10:.2f}，20日 {item.ma20:.2f}，120日位置 {item.position_percentile_120:.0%}，近20日 {item.recent_gain_pct:.1%}</li>
+            {"".join(f"<li>证据：{_text(reason)}</li>" for reason in item.reasons[:2])}
+            {"".join(f"<li>风险：{_text(risk)}</li>" for risk in item.risks[:2])}
+          </ul>
+        </article>
+        """
+        for item in report.items
+    )
+    return f"""
+      <section class="panel one-to-two-panel trend-watch-panel" data-status="{_text(report.status)}">
+        <h2>全市场主升根因扫描</h2>
+        <p class="next-action">{_text(_translate_misc_text(report.summary))}</p>
+        <div class="trend-watch-grid">
+          {cards}
+        </div>
+        <ul class="detail-list compact">
+          {rule_items}
+          <li>下一步：{_text(_translate_misc_text(report.next_action))}</li>
+        </ul>
+      </section>
+    """
 
 
 def render_schedule_panel(
@@ -1955,6 +2020,7 @@ __all__ = [
     "render_home_execution_panel",
     "render_mainline_candidates",
     "render_mainline_continuity",
+    "render_mainline_trend_watch_panel",
     "render_notification_message",
     "render_notification_records",
     "render_one_to_two_candidates",

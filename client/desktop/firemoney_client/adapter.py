@@ -9,6 +9,7 @@ from shared.contracts import (
     LimitUpBoardShadowReport,
     LimitUpBoardShadowStabilityReport,
     LimitUpBoardShadowSystemReport,
+    MainlineTrendWatchReport,
     MissedOpportunityReport,
     NotificationRecord,
     NotificationStatus,
@@ -96,6 +97,16 @@ class LocalMainChainAdapter:
         trade_date: str | None = None,
     ) -> OneToTwoScheduleHealthReport:
         return self._service.build_schedule_health_report(trade_date=trade_date)
+
+    def build_mainline_trend_watch_report(
+        self,
+        trade_date: str | None = None,
+        limit: int = 12,
+    ) -> MainlineTrendWatchReport:
+        return self._service.build_mainline_trend_watch_report(
+            trade_date=trade_date,
+            limit=limit,
+        )
 
     def send_one_to_two_feishu_test(
         self,

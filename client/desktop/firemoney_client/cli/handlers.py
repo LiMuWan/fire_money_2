@@ -34,6 +34,7 @@ HANDLED_MODES = frozenset(
         "strategy-decision",
         "k92-emotion",
         "k92-backtest",
+        "mainline-trend",
         "paper-decision",
         "qmt-check",
         "qmt-plan",
@@ -149,6 +150,11 @@ def run_report_command(args: Namespace, context: LocalMainChainContext) -> Any:
         )
         _write_report_cache(report, args.report_cache)
         return report
+    if args.mode == "mainline-trend":
+        return adapter.build_mainline_trend_watch_report(
+            trade_date=args.trade_date,
+            limit=max(1, args.limit),
+        )
     if args.mode == "paper-decision":
         return adapter.build_paper_trading_decision_report(
             trade_date=args.trade_date,

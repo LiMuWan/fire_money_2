@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from server.firemoney_server.domain.one_to_two_types import (
+    FundamentalSnapshot,
     HistoricalPriceBar,
     IntradayPriceBar,
+    MarketTrendRow,
     OneToTwoMarketRow,
     TickSnapshot,
 )
@@ -37,6 +39,14 @@ class MarketDataProvider(Protocol):
         symbols: tuple[str, ...],
     ) -> tuple[MainlineNewsItem, ...]:
         """Load normalized mainline news items for continuity review."""
+        ...
+
+    def load_full_market_rows(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        """Load normalized full-market rows for trend-root scanning."""
+        ...
+
+    def load_fundamental_snapshot(self, symbol: str) -> FundamentalSnapshot | None:
+        """Load a best-effort fundamental snapshot."""
         ...
 
     def load_price_bars(
@@ -184,8 +194,63 @@ class AkshareMarketDataProvider:
         if news:
             return tuple(news[:8])
         if self._fallback is not None and hasattr(self._fallback, "load_mainline_news"):
-            return self._fallback.load_mainline_news(theme, symbols)
+                return self._fallback.load_mainline_news(theme, symbols)
         return ()
+
+    def load_full_market_rows(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        try:
+            import akshare as ak  # type: ignore
+        except Exception:
+            if self._fallback is not None and hasattr(self._fallback, "load_full_market_rows"):
+                return self._fallback.load_full_market_rows(trade_date)
+            return ()
+
+        try:
+            spot = ak.stock_zh_a_spot_em()
+            self._cache_payload(trade_date, "stock_zh_a_spot_em", spot)
+        except Exception:
+            if self._fallback is not None and hasattr(self._fallback, "load_full_market_rows"):
+                return self._fallback.load_full_market_rows(trade_date)
+            return ()
+        rows = self._trend_rows_from_spot(spot, trade_date)
+        if not rows and self._fallback is not None and hasattr(self._fallback, "load_full_market_rows"):
+            return self._fallback.load_full_market_rows(trade_date)
+        return rows
+
+    def load_fundamental_snapshot(self, symbol: str) -> FundamentalSnapshot | None:
+        if self._fallback is not None and hasattr(self._fallback, "load_fundamental_snapshot"):
+            fallback_snapshot = self._fallback.load_fundamental_snapshot(symbol)
+        else:
+            fallback_snapshot = None
+        try:
+            import akshare as ak  # type: ignore
+        except Exception:
+            return fallback_snapshot
+
+        try:
+            indicator = ak.stock_financial_abstract_ths(symbol=symbol)
+            self._cache_payload("latest", f"stock_financial_abstract_ths_{symbol}", indicator)
+        except Exception:
+            return fallback_snapshot
+        records = getattr(indicator, "to_dict", lambda *_args, **_kwargs: [])("records")
+        if not records:
+            return fallback_snapshot
+        item = records[0]
+        name = self._first_text(item, ("股票简称", "名称", "name"))
+        return FundamentalSnapshot(
+            symbol=symbol,
+            name=name,
+            report_date=self._first_text(item, ("报告期", "报告日期", "date")),
+            roe_pct=self._first_float(item, ("净资产收益率", "ROE", "roe")),
+            revenue_growth_pct=self._first_float(item, ("营业总收入同比增长率", "营收同比", "revenue_growth")),
+            net_profit_growth_pct=self._first_float(item, ("净利润同比增长率", "归母净利润同比", "net_profit_growth")),
+            gross_margin_pct=self._first_float(item, ("销售毛利率", "毛利率", "gross_margin")),
+            debt_ratio_pct=self._first_float(item, ("资产负债率", "debt_ratio")),
+            pe_ttm=self._first_float(item, ("市盈率TTM", "PE(TTM)", "pe_ttm")),
+            pb=self._first_float(item, ("市净率", "PB", "pb")),
+            dividend_yield_pct=self._first_float(item, ("股息率", "dividend_yield")),
+            summary="AkShare 同花顺财务摘要",
+        )
 
     def load_price_bars(
         self,
@@ -779,6 +844,51 @@ class AkshareMarketDataProvider:
                     float_market_cap=self._normalize_market_cap(
                         self._first_float(item, ("流通市值", "流通市值(元)", "流通市值(亿)"))
                     ),
+                )
+            )
+        return tuple(rows)
+
+    def _trend_rows_from_spot(self, spot: Any, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        rows: list[MarketTrendRow] = []
+        records = getattr(spot, "to_dict", lambda *_args, **_kwargs: [])("records")
+        for item in records:
+            symbol = str(item.get("代码", "")).strip()
+            name = str(item.get("名称", "")).strip()
+            latest = self._first_float(item, ("最新价", "最新"))
+            previous_close = self._first_float(item, ("昨收", "昨日收盘价"))
+            if not symbol or not name or latest <= 0 or previous_close <= 0:
+                continue
+            industry = self._first_text(
+                item,
+                ("所处行业", "行业", "所属行业", "板块"),
+            )
+            rows.append(
+                MarketTrendRow(
+                    symbol=symbol,
+                    name=name,
+                    trade_date=trade_date,
+                    board=self._board(symbol),
+                    latest_price=latest,
+                    previous_close=previous_close,
+                    change_pct=self._first_float(item, ("涨跌幅", "涨幅")),
+                    turnover_amount=self._first_float(item, ("成交额", "成交金额")),
+                    turnover_rate=self._first_float(item, ("换手率",)),
+                    market_cap=self._normalize_market_cap(
+                        self._first_float(
+                            item,
+                            ("总市值", "总市值(元)", "总市值(亿)"),
+                        )
+                    ),
+                    float_market_cap=self._normalize_market_cap(
+                        self._first_float(
+                            item,
+                            ("流通市值", "流通市值(元)", "流通市值(亿)"),
+                        )
+                    ),
+                    industry=industry,
+                    theme=industry,
+                    is_st="ST" in name.upper(),
+                    is_delisting="退" in name,
                 )
             )
         return tuple(rows)

@@ -7,6 +7,7 @@ from client.desktop.firemoney_client.presenters.brief_formatters import (
     format_broker_connection_brief,
     format_broker_order_plan_brief,
     format_doctor_brief,
+    format_mainline_trend_watch_brief,
     format_morning_brief,
     format_scheduler_runs_brief,
     format_watch_brief,
@@ -16,6 +17,8 @@ from shared.contracts import (
     BrokerOrderPlan,
     BrokerPosition,
     FeishuNotificationResult,
+    MainlineTrendWatchItem,
+    MainlineTrendWatchReport,
     NotificationStatus,
     OneToTwoCandidate,
     OneToTwoExitPlan,
@@ -58,6 +61,60 @@ def _account() -> PaperAccount:
         positions=(),
         events=(),
         closed_trades=(),
+    )
+
+
+def _trend_watch_report() -> MainlineTrendWatchReport:
+    return MainlineTrendWatchReport(
+        report_id="mainline-trend-watch-2026-05-27",
+        trade_date="2026-05-27",
+        status="watch_only",
+        summary="全市场主升根因扫描：输出 1 只观察。",
+        items=(
+            MainlineTrendWatchItem(
+                symbol="603256",
+                name="宏和科技",
+                board="主板",
+                theme="AI服务器PCB上游",
+                status="prime_watch",
+                action="主升共振观察",
+                score=82.0,
+                latest_price=12.18,
+                ma5=11.9,
+                ma10=11.6,
+                ma20=10.9,
+                high_60=12.5,
+                low_20=10.8,
+                recent_gain_pct=0.18,
+                distance_to_ma10_pct=0.05,
+                distance_to_high_60_pct=-0.03,
+                volume_ratio_5=1.4,
+                position_percentile_120=0.62,
+                distance_to_ma20_pct=0.12,
+                base_tightness_pct=0.18,
+                turnover_amount=680_000_000,
+                logic_score=88,
+                value_score=72,
+                capital_attraction_score=76,
+                sustainability_score=80,
+                timing_score=74,
+                pullback_entry_low=11.2,
+                pullback_entry_high=11.9,
+                breakout_price=12.63,
+                stop_loss=10.55,
+                logic="AI服务器PCB升级带来电子布需求弹性。",
+                value_case="价值：ROE 8.4%，净利增速 42.0%。",
+                capital_case="资金：成交额 6.8亿，换手 7.8%。",
+                sustainability_case="持续：趋势多头，业绩接力。",
+                entry_plan="等 11.20-11.90 缩量回踩后再转强。",
+                reasons=("主线逻辑清楚",),
+                risks=("缺财务快照时需复核",),
+                next_action="列入主升观察池。",
+            ),
+        ),
+        rules=("全市场扫描只输出观察，不写入模拟盘。",),
+        limitations=("财务快照依赖行情源。",),
+        next_action="先看主升根因，再看买点。",
     )
 
 
@@ -377,6 +434,26 @@ class BriefFormatterTest(unittest.TestCase):
         self.assertEqual(len(output), 1)
         self.assertIn("FireMoney 调度审计", output[0])
         self.assertNotIn('"records"', output[0])
+
+    def test_mainline_trend_watch_brief_explains_root(self) -> None:
+        text = format_mainline_trend_watch_brief(_trend_watch_report())
+
+        self.assertIn("FireMoney 全市场主升根因扫描：watch_only", text)
+        self.assertIn("宏和科技（603256）", text)
+        self.assertIn("逻辑/价值/资金/持续/买点", text)
+        self.assertIn("AI服务器PCB升级", text)
+        self.assertIn("等 11.20-11.90", text)
+        self.assertNotIn('"items"', text)
+
+    def test_cli_brief_routes_mainline_trend_to_formatter(self) -> None:
+        output: list[str] = []
+
+        emit_result(_trend_watch_report(), mode="mainline-trend", brief=True, printer=output.append)
+
+        self.assertEqual(len(output), 1)
+        self.assertIn("全市场主升根因扫描", output[0])
+        self.assertIn("宏和科技（603256）", output[0])
+        self.assertNotIn('"report_id"', output[0])
 
     def test_qmt_connection_brief_is_human_readable(self) -> None:
         text = format_broker_connection_brief(

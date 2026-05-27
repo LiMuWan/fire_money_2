@@ -6,6 +6,7 @@ from pathlib import Path
 
 from shared.contracts import (
     CommercialReadinessReport,
+    MainlineTrendWatchReport,
     NotificationRecord,
     OneToTwoBacktestAuditReport,
     OneToTwoDoctorReport,
@@ -33,6 +34,7 @@ from .render_sections import (
     render_home_execution_panel,
     render_mainline_candidates,
     render_mainline_continuity,
+    render_mainline_trend_watch_panel,
     render_notification_message,
     render_notification_records,
     render_one_to_two_position,
@@ -794,6 +796,7 @@ def render_one_to_two_workflow_html(
     notification_records: tuple[NotificationRecord, ...] = (),
     backtest_audit: OneToTwoBacktestAuditReport | None = None,
     commercial_readiness_report: CommercialReadinessReport | None = None,
+    trend_watch_report: MainlineTrendWatchReport | None = None,
 ) -> str:
     css = (_STATIC_DIR / "core.css").read_text(encoding="utf-8")
     account = watch_report.account
@@ -828,6 +831,12 @@ def render_one_to_two_workflow_html(
           {render_candidate_carousel(report)}
         </section>
             """,
+        ),
+        (
+            "主升根因",
+            "全市场扫描，分析逻辑、价值、资金和买点",
+            "evidence-trend-watch",
+            render_mainline_trend_watch_panel(trend_watch_report),
         ),
         (
             "持仓风险",

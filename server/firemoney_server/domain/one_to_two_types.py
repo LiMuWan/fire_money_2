@@ -42,6 +42,41 @@ class OneToTwoMarketRow:
 
 
 @dataclass(frozen=True)
+class MarketTrendRow:
+    symbol: str
+    name: str
+    trade_date: str
+    board: str
+    latest_price: float
+    previous_close: float
+    change_pct: float
+    turnover_amount: float
+    turnover_rate: float
+    market_cap: float
+    float_market_cap: float
+    industry: str = ""
+    theme: str = ""
+    is_st: bool = False
+    is_delisting: bool = False
+
+
+@dataclass(frozen=True)
+class FundamentalSnapshot:
+    symbol: str
+    name: str
+    report_date: str
+    roe_pct: float = 0.0
+    revenue_growth_pct: float = 0.0
+    net_profit_growth_pct: float = 0.0
+    gross_margin_pct: float = 0.0
+    debt_ratio_pct: float = 0.0
+    pe_ttm: float = 0.0
+    pb: float = 0.0
+    dividend_yield_pct: float = 0.0
+    summary: str = ""
+
+
+@dataclass(frozen=True)
 class HistoricalPriceBar:
     trade_date: str
     open_price: float
@@ -145,8 +180,10 @@ class OneToTwoSettings(Protocol):
 
 
 __all__ = [
+    "FundamentalSnapshot",
     "HistoricalPriceBar",
     "IntradayPriceBar",
+    "MarketTrendRow",
     "OneToTwoMarketRow",
     "OneToTwoSettings",
     "TickSnapshot",

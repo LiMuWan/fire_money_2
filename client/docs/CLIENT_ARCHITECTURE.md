@@ -19,7 +19,7 @@ client/desktop/firemoney_client/
   composition.py    local service/adapter composition root
   broker/           local-only broker gateways, currently QMT dry-run/check adapters
   gateway.py        client-facing gateway protocol for local and future remote adapters
-  one_to_two_cli.py local command entry for morning/watch/eod/backtest/stability/doctor/beta-check/beta-start/feishu-test/schedule/notifications/strategy-decision/paper-decision/qmt-check/qmt-plan/paper-db
+  one_to_two_cli.py local command entry for morning/watch/eod/backtest/stability/doctor/beta-check/beta-start/feishu-test/schedule/notifications/strategy-decision/mainline-trend/paper-decision/qmt-check/qmt-plan/paper-db
   presenters/       CLI/HTML presentation helpers and summary builders
   preview.py        local HTML preview generator
   preview_data.py   isolated sample data and report assembly for preview generation
@@ -32,6 +32,7 @@ client/desktop/firemoney_client/
 ## 3. Client Responsibilities
 
 - Render candidate pool, position labels, stop loss, strict T+1 risk notes, runtime doctor checks, paper-account state, paper database metrics, local schedule state, daily strategy decision, paper-trading command sheet, Feishu notification status, notification records, end-of-day review with stability guidance, and stability observation with recent closed samples.
+- Render the service-owned whole-market main-rise root report as evidence only: show logic, value support, capital attraction, sustainability, entry plan, and cancellation risk without turning it into a default buy route.
 - The decision cockpit summary is normalized in `presenters/decision_presenter.py`; HTML rendering should consume the presenter output instead of recomputing buy/sell/hold labels inline.
 - The default preview renders notification records through the same action-only filter used by CLI, so legacy scan/auction/paper-decision noise does not crowd out morning, buy, sell, and end-of-day messages. Notification display names are normalized in `presenters/notification_presenter.py` so CLI and preview use the same buy/sell action wording.
 - Notification message lines are semantically highlighted through `shared/notification_highlight.py`: buy points, sell points, stop-loss/risk, profit/drawdown, discipline, and next actions use distinct colors so morning/eod cards can be scanned quickly without changing the service-owned plain text.

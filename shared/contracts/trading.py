@@ -774,6 +774,60 @@ class K92EmotionLiquidityReport:
 
 
 @dataclass(frozen=True)
+class MainlineTrendWatchItem:
+    symbol: str
+    name: str
+    board: str
+    theme: str
+    status: str
+    action: str
+    score: float
+    latest_price: float
+    ma5: float
+    ma10: float
+    ma20: float
+    high_60: float
+    low_20: float
+    recent_gain_pct: float
+    distance_to_ma10_pct: float
+    distance_to_high_60_pct: float
+    volume_ratio_5: float
+    position_percentile_120: float
+    distance_to_ma20_pct: float
+    base_tightness_pct: float
+    turnover_amount: float
+    logic_score: float
+    value_score: float
+    capital_attraction_score: float
+    sustainability_score: float
+    timing_score: float
+    pullback_entry_low: float
+    pullback_entry_high: float
+    breakout_price: float
+    stop_loss: float
+    logic: str
+    value_case: str
+    capital_case: str
+    sustainability_case: str
+    entry_plan: str
+    reasons: tuple[str, ...]
+    risks: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
+class MainlineTrendWatchReport:
+    report_id: str
+    trade_date: str
+    status: str
+    summary: str
+    items: tuple[MainlineTrendWatchItem, ...]
+    rules: tuple[str, ...]
+    limitations: tuple[str, ...]
+    next_action: str
+
+
+@dataclass(frozen=True)
 class PaperTradingInstruction:
     action: str
     strategy_id: str

@@ -84,6 +84,9 @@ from server.firemoney_server.application.morning_report_service import (
 from server.firemoney_server.application.mainline_continuity_service import (
     MainlineContinuityService,
 )
+from server.firemoney_server.application.mainline_trend_watch_service import (
+    MainlineTrendWatchService,
+)
 from server.firemoney_server.application.stability_review_service import (
     StabilityReviewService,
 )
@@ -112,6 +115,7 @@ from shared.contracts import (
     LimitUpBoardShadowReport,
     LimitUpBoardShadowStabilityReport,
     LimitUpBoardShadowSystemReport,
+    MainlineTrendWatchReport,
     NotificationStatus,
     NotificationRecord,
     MissedOpportunityReport,
@@ -224,6 +228,9 @@ class MainChainService:
         )
         self._mainline_continuity_service = MainlineContinuityService(
             settings=self._one_to_two_settings,
+            market_data_provider=self._market_data_provider,
+        )
+        self._mainline_trend_watch_service = MainlineTrendWatchService(
             market_data_provider=self._market_data_provider,
         )
         self._paper_instruction_builder = PaperInstructionBuilder(
@@ -378,6 +385,22 @@ class MainChainService:
         """Explain required morning/eod notification coverage."""
 
         return self._schedule_health_service.build_report(trade_date=trade_date)
+
+    def build_mainline_trend_watch_report(
+        self,
+        trade_date: str | None = None,
+        limit: int = 12,
+    ) -> MainlineTrendWatchReport:
+        """Build a watch-only whole-market mainline trend-root report."""
+
+        trade_context = self._trading_calendar.resolve(
+            trade_date or self._default_trade_date()
+        )
+        return self._mainline_trend_watch_service.build_report(
+            trade_date=trade_context.trade_date,
+            limit=max(1, limit),
+            scan_limit=max(8, min(max(1, limit) * 2, 24)),
+        )
 
     def build_one_to_two_morning_report(
         self,

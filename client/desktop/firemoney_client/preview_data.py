@@ -20,6 +20,7 @@ from shared.contracts import (
     FeishuNotificationResult,
     LimitUpBoardShadowSystemMetric,
     LimitUpBoardShadowSystemReport,
+    MainlineTrendWatchReport,
     NotificationRecord,
     NotificationStatus,
     OneToTwoBacktestAuditReport,
@@ -67,6 +68,7 @@ class PreviewWorkflowData:
     strategy_decision_report: StrategyDecisionReport
     paper_decision_report: PaperTradingDecisionReport
     paper_database_report: PaperTradeDatabaseReport
+    trend_watch_report: MainlineTrendWatchReport
     doctor_report: OneToTwoDoctorReport
     schedule_run: OneToTwoScheduleRun
     schedule_health_report: OneToTwoScheduleHealthReport
@@ -109,6 +111,15 @@ class PreviewRiskBreakMarketDataProvider:
 
     def load_mainline_news(self, theme: str, symbols: tuple[str, ...]):
         return self._base_provider.load_mainline_news(theme, symbols)
+
+    def load_full_market_rows(self, trade_date: str):
+        return self._base_provider.load_full_market_rows(trade_date)
+
+    def load_price_bars(self, symbol: str, start_date: str, end_date: str):
+        return self._base_provider.load_price_bars(symbol, start_date, end_date)
+
+    def load_fundamental_snapshot(self, symbol: str):
+        return self._base_provider.load_fundamental_snapshot(symbol)
 
 
 def build_preview_workflow_data(preview_root: Path) -> PreviewWorkflowData:
@@ -198,6 +209,10 @@ def build_preview_workflow_data(preview_root: Path) -> PreviewWorkflowData:
         ),
         paper_decision_report=paper_decision_report,
         paper_database_report=paper_database_report,
+        trend_watch_report=risk_adapter.build_mainline_trend_watch_report(
+            trade_date=PREVIEW_TRADE_DATE,
+            limit=12,
+        ),
         doctor_report=doctor_report,
         schedule_run=_build_preview_schedule_run(one_to_two_report.trade_context),
         schedule_health_report=schedule_health_report,
@@ -286,6 +301,10 @@ def build_live_workflow_data() -> PreviewWorkflowData:
         ),
         paper_decision_report=paper_decision_report,
         paper_database_report=paper_database_report,
+        trend_watch_report=adapter.build_mainline_trend_watch_report(
+            trade_date=trade_date,
+            limit=12,
+        ),
         doctor_report=doctor_report,
         schedule_run=_build_live_schedule_run(trade_context, schedule_health_report),
         schedule_health_report=schedule_health_report,

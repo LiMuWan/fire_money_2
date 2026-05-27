@@ -37,6 +37,7 @@ def _render_html(data) -> str:
         strategy_decision_report=data.strategy_decision_report,
         paper_decision_report=data.paper_decision_report,
         paper_database_report=data.paper_database_report,
+        trend_watch_report=data.trend_watch_report,
         doctor_report=data.doctor_report,
         schedule_run=data.schedule_run,
         schedule_health_report=data.schedule_health_report,

@@ -9,6 +9,7 @@ from shared.contracts import (
     BrokerOrderPlan,
     K92EmotionLiquidityReport,
     LimitUpBoardShadowSystemReport,
+    MainlineTrendWatchReport,
     MissedOpportunityReport,
     OneToTwoBetaLaunchPlan,
     OneToTwoDoctorReport,
@@ -314,6 +315,38 @@ def format_k92_emotion_liquidity_brief(report: K92EmotionLiquidityReport) -> str
     lines.extend(f"- {item}" for item in report.rules)
     lines.append("限制：")
     lines.extend(f"- {item}" for item in report.limitations)
+    lines.append(f"下一步：{report.next_action}")
+    return "\n".join(lines)
+
+
+def format_mainline_trend_watch_brief(report: MainlineTrendWatchReport) -> str:
+    lines = [
+        f"FireMoney 全市场主升根因扫描：{report.status}",
+        f"交易日：{report.trade_date}",
+        report.summary,
+    ]
+    if report.items:
+        lines.append("候选：")
+    for index, item in enumerate(report.items[:8], start=1):
+        lines.extend(
+            [
+                (
+                    f"{index}. {_stock_label(item.name, item.symbol)} "
+                    f"{item.action} 综合 {item.score:.1f}"
+                ),
+                (
+                    f"   逻辑/价值/资金/持续/买点：{item.logic_score:.0f}/"
+                    f"{item.value_score:.0f}/{item.capital_attraction_score:.0f}/"
+                    f"{item.sustainability_score:.0f}/{item.timing_score:.0f}"
+                ),
+                f"   主线：{item.theme}；{item.logic}",
+                f"   价值：{item.value_case}",
+                f"   资金：{item.capital_case}",
+                f"   买点：{item.entry_plan}",
+            ]
+        )
+    if not report.items:
+        lines.append("候选：无")
     lines.append(f"下一步：{report.next_action}")
     return "\n".join(lines)
 
@@ -976,6 +1009,7 @@ __all__ = [
     "format_doctor_brief",
     "format_execution_quality_brief",
     "format_historical_replay_brief",
+    "format_mainline_trend_watch_brief",
     "format_missed_opportunities_brief",
     "format_morning_brief",
     "format_notifications_brief",

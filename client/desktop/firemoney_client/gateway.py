@@ -11,6 +11,7 @@ from shared.contracts import (
     LimitUpBoardShadowReport,
     LimitUpBoardShadowStabilityReport,
     LimitUpBoardShadowSystemReport,
+    MainlineTrendWatchReport,
     MissedOpportunityReport,
     NotificationRecord,
     NotificationStatus,
@@ -70,6 +71,12 @@ class MainChainGateway(Protocol):
         self,
         trade_date: str | None = None,
     ) -> OneToTwoScheduleHealthReport: ...
+
+    def build_mainline_trend_watch_report(
+        self,
+        trade_date: str | None = None,
+        limit: int = 12,
+    ) -> MainlineTrendWatchReport: ...
 
     def send_one_to_two_feishu_test(
         self,

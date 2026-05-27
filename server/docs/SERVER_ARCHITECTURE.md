@@ -18,6 +18,7 @@ server/firemoney_server/
     execution_quality_service.py intraday minute/Tick execution-quality evidence
     historical_replay_service.py isolated historical replay, backtest, and data-quality audit
     mainline_continuity_service.py live mainline breadth/news continuity enrichment
+    mainline_trend_watch_service.py whole-market watch-only main-rise root scanner
     morning_report_service.py morning candidate report and low-noise notification orchestration
     notification_orchestrator.py low-noise delivery rules and notification audit orchestration
     one_to_two_scheduler.py local due-job scheduler for the one-to-two loop
@@ -109,6 +110,7 @@ MarketDataProvider/AkShare
 - Morning-report orchestration lives in `application/morning_report_service.py`; it resolves the trading date, prepares the account view, loads market rows, adapts mainline candidates, and prepares/records only the morning notification boundary.
 - Watch report wrapping lives in `application/watch_report_service.py`; it delegates state changes to `WatchPhaseService`, asks `notification_orchestrator` whether the event is action-worthy, and records only eligible watch buy/sell notifications.
 - Mainline continuity enrichment lives in `application/mainline_continuity_service.py`; it uses live breadth/news evidence to enrich candidates for watch decisions, without writing paper positions or sending notifications.
+- Whole-market main-rise root scanning lives in `application/mainline_trend_watch_service.py`; it reads full-market spot rows, daily bars, and optional financial snapshots to score industry logic, value support, capital attraction, trend sustainability, and entry timing. It is research-only evidence: it must not write paper positions, send buy/sell notifications, connect QMT, or change the default mainboard 10cm paper-trading line.
 - Completed exits create `PaperTradeRecord` samples. Stability metrics use these closed trade records, not raw event counts.
 - The paper-trading guard treats consecutive low-quality closes as a hard stop: if recent closed trades fail to cover intratrade drawdown for the configured streak, new paper entries are blocked even when the final P/L was slightly positive.
 - Stability review also reports position-label distribution, exit-reason distribution, and capped recent closed samples so strategy quality can be judged by sample composition, not only headline win rate.

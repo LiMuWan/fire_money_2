@@ -26,6 +26,7 @@ def build_one_to_two_parser() -> argparse.ArgumentParser:
             "strategy-decision",
             "k92-emotion",
             "k92-backtest",
+            "mainline-trend",
             "paper-decision",
             "qmt-check",
             "qmt-plan",
