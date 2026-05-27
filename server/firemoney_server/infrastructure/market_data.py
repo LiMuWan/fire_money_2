@@ -225,21 +225,21 @@ class AkshareMarketDataProvider:
             self._cache_payload(trade_date, "stock_zh_a_spot_em", spot)
             rows = self._trend_rows_from_spot(spot, trade_date)
         except Exception:
+            rows = self._load_sina_full_market_rows(trade_date)
+            if rows:
+                return rows
             rows = self._load_alternative_full_market_rows(ak, trade_date)
             if rows:
                 self._trend_snapshot_cache.remember(trade_date, rows)
-                return rows
-            rows = self._load_sina_full_market_rows(trade_date)
-            if rows:
                 return rows
             cached_stale = self._trend_snapshot_cache.load(trade_date, allow_stale=True)
             if cached_stale is not None:
                 return cached_stale
             return self._fallback_trend_rows(trade_date)
         if not rows:
-            rows = self._load_alternative_full_market_rows(ak, trade_date)
-        if not rows:
             rows = self._load_sina_full_market_rows(trade_date)
+        if not rows:
+            rows = self._load_alternative_full_market_rows(ak, trade_date)
         if not rows:
             cached_stale = self._trend_snapshot_cache.load(trade_date, allow_stale=True)
             if cached_stale is not None:
@@ -905,7 +905,9 @@ class AkshareMarketDataProvider:
         rows: list[MarketTrendRow] = []
         records = getattr(spot, "to_dict", lambda *_args, **_kwargs: [])("records")
         for item in records:
-            symbol = str(item.get("代码") or item.get("code") or "").strip()
+            symbol = self._normalize_symbol(
+                str(item.get("代码") or item.get("code") or "").strip()
+            )
             name = str(item.get("名称") or item.get("name") or "").strip()
             latest = self._first_float(item, ("最新价", "最新", "trade", "price"))
             previous_close = self._first_float(
@@ -1173,6 +1175,16 @@ class AkshareMarketDataProvider:
         if symbol.startswith(("8", "4")):
             return "北交所"
         return "主板"
+
+    @staticmethod
+    def _normalize_symbol(symbol: str) -> str:
+        raw = symbol.strip()
+        if raw.isdigit() and len(raw) == 6:
+            return raw
+        suffix = raw[-6:]
+        if suffix.isdigit():
+            return suffix
+        return raw
 
     def _format_time(self, value: Any) -> str:
         raw = str(value or "").strip().replace(":", "")

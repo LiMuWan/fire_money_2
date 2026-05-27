@@ -1889,7 +1889,7 @@ class MainChainSmokeTest(unittest.TestCase):
                 raise RuntimeError("eastmoney blocked")
 
             def stock_zh_a_spot(self) -> object:
-                raise RuntimeError("alternative blocked")
+                raise AssertionError("sina should be tried before legacy akshare spot")
 
         class FakeSinaClient:
             def __init__(self) -> None:
@@ -1932,6 +1932,29 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertEqual(fake_sina.calls, 1)
         self.assertEqual(first[0].data_source, "full_market_spot_sina")
         self.assertEqual(second[0].data_source, "full_market_spot_cache")
+
+    def test_full_market_spot_normalizes_prefixed_stock_codes(self) -> None:
+        class FakeFrame:
+            def to_dict(self, orient: str) -> list[dict[str, object]]:
+                if orient != "records":
+                    raise AssertionError(f"unexpected orient: {orient}")
+                return [
+                    {
+                        "code": "sz300308",
+                        "name": "中际旭创",
+                        "trade": "1094.18",
+                        "settlement": "1050.00",
+                        "amount": "28060000000",
+                        "changepercent": "4.21",
+                    }
+                ]
+
+        provider = AkshareMarketDataProvider()
+
+        rows = provider._trend_rows_from_spot(FakeFrame(), "2026-05-28")
+
+        self.assertEqual(rows[0].symbol, "300308")
+        self.assertEqual(rows[0].board, "创业板")
 
     def test_sample_market_data_provider_exposes_intraday_scaffolding(self) -> None:
         provider = SampleMarketDataProvider()
