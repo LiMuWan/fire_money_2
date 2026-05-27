@@ -58,8 +58,13 @@ class PaperEventLike(Protocol):
 class PaperClosedTradeLike(Protocol):
     symbol: str
     name: str
+    opened_at: str
+    closed_at: str
+    entry_price: float
     exit_price: float
     quantity: int
+    entry_amount: float
+    exit_amount: float
     exit_reason: str
     holding_trade_days: int
     realized_pnl: float
@@ -213,6 +218,75 @@ def _account_line(account: PaperAccountLike) -> str:
         f"账户：1万小账户，本金 {initial_cash:.2f}，权益 {account.equity:.2f}，"
         f"现金 {account.cash:.2f}，持仓 {len(account.positions)}"
     )
+
+
+def _period_closed_trades(
+    closed_trades: Sequence[PaperClosedTradeLike],
+    period_prefix: str,
+) -> tuple[PaperClosedTradeLike, ...]:
+    return tuple(
+        trade
+        for trade in closed_trades
+        if str(getattr(trade, "closed_at", "")).startswith(period_prefix)
+    )
+
+
+def _realized_pnl_sum(closed_trades: Sequence[PaperClosedTradeLike]) -> float:
+    return sum(float(getattr(trade, "realized_pnl", 0.0)) for trade in closed_trades)
+
+
+def _period_return_pct(realized_pnl: float, account: PaperAccountLike) -> float:
+    initial_cash = float(getattr(account, "initial_cash", 0.0) or 0.0)
+    return realized_pnl / initial_cash if initial_cash > 0 else 0.0
+
+
+def _win_rate(closed_trades: Sequence[PaperClosedTradeLike]) -> float:
+    if not closed_trades:
+        return 0.0
+    wins = sum(1 for trade in closed_trades if float(getattr(trade, "realized_pnl", 0.0)) > 0)
+    return wins / len(closed_trades)
+
+
+def _sell_period_summary_lines(
+    *,
+    latest_closed_sample: PaperClosedTradeLike,
+    account: PaperAccountLike,
+) -> list[str]:
+    closed_at = str(getattr(latest_closed_sample, "closed_at", ""))
+    month_prefix = closed_at[:7]
+    year_prefix = closed_at[:4]
+    month_trades = _period_closed_trades(account.closed_trades, month_prefix)
+    year_trades = _period_closed_trades(account.closed_trades, year_prefix)
+    total_trades = tuple(account.closed_trades)
+    month_pnl = _realized_pnl_sum(month_trades)
+    year_pnl = _realized_pnl_sum(year_trades)
+    total_pnl = _realized_pnl_sum(total_trades)
+    lines = [
+        (
+            f"本笔结算：买入 {latest_closed_sample.entry_price:.2f}，"
+            f"卖出 {latest_closed_sample.exit_price:.2f}；"
+            f"买入金额 {latest_closed_sample.entry_amount:.2f}，"
+            f"卖出金额 {latest_closed_sample.exit_amount:.2f}。"
+        ),
+    ]
+    if month_prefix:
+        lines.append(
+            f"本月收益：{month_prefix} 已闭环 {len(month_trades)} 笔，"
+            f"已实现 {month_pnl:.2f} ({_period_return_pct(month_pnl, account):.2%})，"
+            f"胜率 {_win_rate(month_trades):.2%}。"
+        )
+    if year_prefix:
+        lines.append(
+            f"本年收益：{year_prefix} 已闭环 {len(year_trades)} 笔，"
+            f"已实现 {year_pnl:.2f} ({_period_return_pct(year_pnl, account):.2%})，"
+            f"胜率 {_win_rate(year_trades):.2%}。"
+        )
+    lines.append(
+        f"累计收益：已闭环 {len(total_trades)} 笔，"
+        f"已实现 {total_pnl:.2f} ({_period_return_pct(total_pnl, account):.2%})，"
+        f"胜率 {_win_rate(total_trades):.2%}。"
+    )
+    return lines
 
 
 def _candidate_action_line(candidate: CandidateLike) -> str:
@@ -431,6 +505,10 @@ def one_to_two_watch_notification_message(
                 f"卖出价：{latest_closed_sample.exit_price}；数量 {latest_closed_sample.quantity} 股",
                 f"退出原因：{_exit_reason_label(latest_closed_sample.exit_reason)}；持仓 {latest_closed_sample.holding_trade_days} 日",
                 f"实现盈亏：{latest_closed_sample.realized_pnl:.2f} ({latest_closed_sample.realized_pnl_pct:.2%})",
+                *_sell_period_summary_lines(
+                    latest_closed_sample=latest_closed_sample,
+                    account=account,
+                ),
                 (
                     f"收益质量：顺风 {latest_closed_sample.max_favorable_pct:.2%}，"
                     f"回撤 {latest_closed_sample.max_adverse_pct:.2%}，"

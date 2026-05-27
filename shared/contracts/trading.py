@@ -23,6 +23,7 @@ from .paper_database import (
     PaperTradeDatabaseReport,
     PaperTradeDatabaseTrade,
     PaperTradeGuardBucket,
+    PaperTradePeriodReturn,
     PaperTradeQualityBucket,
 )
 

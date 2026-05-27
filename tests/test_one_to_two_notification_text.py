@@ -75,8 +75,13 @@ class Event:
 class ClosedTrade:
     symbol: str = "600001"
     name: str = "样本股份"
+    opened_at: str = "2026-05-08"
+    closed_at: str = "2026-05-09"
+    entry_price: float = 10.52
     exit_price: float = 11.2
     quantity: int = 300
+    entry_amount: float = 3156.0
+    exit_amount: float = 3360.0
     exit_reason: str = "main_rise_runner_trailing_lock"
     holding_trade_days: int = 2
     realized_pnl: float = 204.0
@@ -238,8 +243,57 @@ class OneToTwoNotificationTextTest(unittest.TestCase):
         self.assertIn("模拟卖出：样本股份（600001）", message)
         self.assertIn("退出原因：主升回撤保护止盈", message)
         self.assertNotIn("main_rise_runner_trailing_lock", message)
+        self.assertIn("本笔结算：买入 10.52，卖出 11.20", message)
+        self.assertIn("买入金额 3156.00，卖出金额 3360.00", message)
+        self.assertIn("本月收益：2026-05 已闭环 1 笔", message)
+        self.assertIn("本年收益：2026 已闭环 1 笔", message)
+        self.assertIn("累计收益：已闭环 1 笔", message)
         self.assertIn("收益质量：顺风 8.00%", message)
         self.assertIn("提醒：模拟盘不是实盘", message)
+
+    def test_watch_sell_message_summarizes_period_returns(self) -> None:
+        message = one_to_two_watch_notification_message(
+            phase="risk",
+            trade_date="2026-05-27",
+            ready=(),
+            account=Account(
+                events=(Event("take_profit"),),
+                closed_trades=(
+                    ClosedTrade(
+                        symbol="000509",
+                        name="华塑控股",
+                        opened_at="2026-05-26",
+                        closed_at="2026-05-27",
+                        entry_price=4.70,
+                        exit_price=4.74,
+                        quantity=200,
+                        entry_amount=940.0,
+                        exit_amount=948.0,
+                        realized_pnl=8.0,
+                        realized_pnl_pct=0.0085,
+                    ),
+                    ClosedTrade(
+                        closed_at="2026-05-12",
+                        realized_pnl=204.0,
+                        realized_pnl_pct=0.0646,
+                    ),
+                    ClosedTrade(
+                        closed_at="2026-04-30",
+                        realized_pnl=-40.0,
+                        realized_pnl_pct=-0.012,
+                    ),
+                ),
+            ),
+            latest_event="模拟卖出已写入",
+            sell_event_types={"take_profit"},
+            stop_warning_event_type="stop_warning",
+        )
+
+        self.assertIn("实现盈亏：8.00 (0.85%)", message)
+        self.assertIn("本笔结算：买入 4.70，卖出 4.74", message)
+        self.assertIn("本月收益：2026-05 已闭环 2 笔，已实现 212.00 (2.12%)", message)
+        self.assertIn("本年收益：2026 已闭环 3 笔，已实现 172.00 (1.72%)", message)
+        self.assertIn("累计收益：已闭环 3 笔，已实现 172.00 (1.72%)", message)
 
     def test_watch_risk_holding_does_not_repeat_buy_message(self) -> None:
         message = one_to_two_watch_notification_message(

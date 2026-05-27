@@ -801,6 +801,26 @@ def format_paper_trade_database_brief(report: PaperTradeDatabaseReport) -> str:
         )
     else:
         lines.append("每日运行审计：暂无买入、卖出、阻断或预警事件。")
+    if report.monthly_returns:
+        lines.append("月度收益：")
+        lines.extend(
+            (
+                f"- {item.period} 闭环 {item.trade_count} 笔，"
+                f"已实现 {item.realized_pnl:.2f} ({item.realized_return_pct:.2%})，"
+                f"胜率 {item.win_rate:.2%}，平均单笔 {item.average_trade_return_pct:.2%}"
+            )
+            for item in report.monthly_returns[:6]
+        )
+    if report.yearly_returns:
+        lines.append("年度收益：")
+        lines.extend(
+            (
+                f"- {item.period} 闭环 {item.trade_count} 笔，"
+                f"已实现 {item.realized_pnl:.2f} ({item.realized_return_pct:.2%})，"
+                f"胜率 {item.win_rate:.2%}，平均单笔 {item.average_trade_return_pct:.2%}"
+            )
+            for item in report.yearly_returns[:6]
+        )
     if report.recent_trades:
         lines.append("最近闭环交易：")
         lines.extend(

@@ -130,6 +130,16 @@ class PaperTradeDailyAudit:
 
 
 @dataclass(frozen=True)
+class PaperTradePeriodReturn:
+    period: str
+    trade_count: int
+    realized_pnl: float
+    realized_return_pct: float
+    win_rate: float
+    average_trade_return_pct: float
+
+
+@dataclass(frozen=True)
 class PaperTradeDatabaseReport:
     report_id: str
     database_path: str
@@ -155,6 +165,8 @@ class PaperTradeDatabaseReport:
     guard_buckets: tuple[PaperTradeGuardBucket, ...]
     next_action: str
     daily_audits: tuple[PaperTradeDailyAudit, ...] = ()
+    monthly_returns: tuple[PaperTradePeriodReturn, ...] = ()
+    yearly_returns: tuple[PaperTradePeriodReturn, ...] = ()
 
 
 __all__ = [
@@ -164,5 +176,6 @@ __all__ = [
     "PaperTradeDatabaseReport",
     "PaperTradeDatabaseTrade",
     "PaperTradeGuardBucket",
+    "PaperTradePeriodReturn",
     "PaperTradeQualityBucket",
 ]

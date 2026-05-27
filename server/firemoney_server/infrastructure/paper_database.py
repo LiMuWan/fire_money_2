@@ -20,6 +20,7 @@ from shared.contracts import (
     PaperTradeDatabaseReport,
     PaperTradeDatabaseTrade,
     PaperTradeGuardBucket,
+    PaperTradePeriodReturn,
     PaperTradeQualityBucket,
 )
 
@@ -413,6 +414,7 @@ class PaperTradeDatabase:
                 """,
                 (snapshot["account_id"],),
             ).fetchone()
+            initial_cash = float(snapshot["initial_cash"] or 0.0)
             quality_buckets = self._build_quality_buckets(
                 connection,
                 str(snapshot["account_id"]),
@@ -426,6 +428,20 @@ class PaperTradeDatabase:
                 str(snapshot["account_id"]),
                 limit,
             )
+            monthly_returns = self._build_period_returns(
+                connection,
+                str(snapshot["account_id"]),
+                initial_cash=initial_cash,
+                period_length=7,
+                limit=12,
+            )
+            yearly_returns = self._build_period_returns(
+                connection,
+                str(snapshot["account_id"]),
+                initial_cash=initial_cash,
+                period_length=4,
+                limit=8,
+            )
             snapshot_count = int(
                 connection.execute("select count(*) from account_snapshots").fetchone()[0]
             )
@@ -437,7 +453,6 @@ class PaperTradeDatabase:
             )
             closed_count = int(aggregate["closed_count"])
             total_pnl = float(aggregate["total_pnl"])
-            initial_cash = float(snapshot["initial_cash"] or 0.0)
             win_rate = float(aggregate["wins"]) / closed_count if closed_count else 0.0
             return PaperTradeDatabaseReport(
                 report_id=f"paper-trade-database-{snapshot['account_id']}",
@@ -476,6 +491,8 @@ class PaperTradeDatabase:
                 quality_buckets=quality_buckets,
                 guard_buckets=guard_buckets,
                 daily_audits=daily_audits,
+                monthly_returns=monthly_returns,
+                yearly_returns=yearly_returns,
                 next_action="每天 schedule 或 watch 跑完后，用 paper-db 复盘买卖动作、收益和回撤质量。",
             )
 
@@ -504,7 +521,50 @@ class PaperTradeDatabase:
             quality_buckets=(),
             guard_buckets=(),
             daily_audits=(),
+            monthly_returns=(),
+            yearly_returns=(),
             next_action="SQLite 文件存在但还没有模拟盘快照，先运行一次 morning/watch/risk。",
+        )
+
+    def _build_period_returns(
+        self,
+        connection: sqlite3.Connection,
+        account_id: str,
+        *,
+        initial_cash: float,
+        period_length: int,
+        limit: int,
+    ) -> tuple[PaperTradePeriodReturn, ...]:
+        rows = connection.execute(
+            f"""
+            select
+                substr(closed_at, 1, {period_length}) as period,
+                count(*) as trade_count,
+                coalesce(sum(realized_pnl), 0) as realized_pnl,
+                coalesce(avg(realized_pnl_pct), 0) as average_return,
+                coalesce(sum(case when success = 1 then 1 else 0 end), 0) as wins
+            from closed_trades
+            where account_id = ?
+            group by period
+            order by period desc
+            limit ?
+            """,
+            (account_id, max(0, limit)),
+        ).fetchall()
+        return tuple(
+            PaperTradePeriodReturn(
+                period=str(row["period"]),
+                trade_count=int(row["trade_count"]),
+                realized_pnl=round(float(row["realized_pnl"]), 2),
+                realized_return_pct=(
+                    round(float(row["realized_pnl"]) / initial_cash, 6)
+                    if initial_cash > 0
+                    else 0.0
+                ),
+                win_rate=self._safe_rate(row["wins"], row["trade_count"]),
+                average_trade_return_pct=round(float(row["average_return"]), 6),
+            )
+            for row in rows
         )
 
     def _build_daily_audits(

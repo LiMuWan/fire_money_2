@@ -1284,6 +1284,26 @@ def render_paper_database_panel(report: PaperTradeDatabaseReport | None) -> str:
         """
         for audit in report.daily_audits[:5]
     ) or "<li>暂无每日运行审计</li>"
+    monthly_returns = "".join(
+        f"""
+        <li>
+          <strong>{_text(item.period)}</strong>
+          <span>闭环 {item.trade_count} 笔，已实现 {item.realized_pnl:.2f} / {item.realized_return_pct:.2%}</span>
+          <span>胜率 {item.win_rate:.2%}，平均单笔 {item.average_trade_return_pct:.2%}</span>
+        </li>
+        """
+        for item in report.monthly_returns[:6]
+    ) or "<li>暂无月度闭环收益</li>"
+    yearly_returns = "".join(
+        f"""
+        <li>
+          <strong>{_text(item.period)}</strong>
+          <span>闭环 {item.trade_count} 笔，已实现 {item.realized_pnl:.2f} / {item.realized_return_pct:.2%}</span>
+          <span>胜率 {item.win_rate:.2%}，平均单笔 {item.average_trade_return_pct:.2%}</span>
+        </li>
+        """
+        for item in report.yearly_returns[:6]
+    ) or "<li>暂无年度闭环收益</li>"
     return f"""
       <section class="panel one-to-two-panel">
         <h2>模拟盘数据库</h2>
@@ -1300,6 +1320,14 @@ def render_paper_database_panel(report: PaperTradeDatabaseReport | None) -> str:
         <h3 class="panel-subtitle">每日运行审计</h3>
         <ul class="detail-list compact">
           {daily_audits}
+        </ul>
+        <h3 class="panel-subtitle">本月/近期月度收益</h3>
+        <ul class="detail-list compact">
+          {monthly_returns}
+        </ul>
+        <h3 class="panel-subtitle">年度收益</h3>
+        <ul class="detail-list compact">
+          {yearly_returns}
         </ul>
         <h3 class="panel-subtitle">当前持仓</h3>
         <ul class="detail-list compact">
