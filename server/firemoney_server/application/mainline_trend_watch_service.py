@@ -144,7 +144,7 @@ class MainlineTrendWatchService:
     ) -> MainlineTrendWatchReport:
         rows = self._load_market_rows(trade_date)
         degraded_data = bool(rows) and all(
-            row.data_source != "full_market_spot" for row in rows
+            not row.data_source.startswith("full_market_spot") for row in rows
         )
         candidates = self._coarse_filter(rows, scan_limit=max(scan_limit, limit * 2))
         if not candidates:

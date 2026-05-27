@@ -207,8 +207,13 @@ class AkshareMarketDataProvider:
             spot = ak.stock_zh_a_spot_em()
             self._cache_payload(trade_date, "stock_zh_a_spot_em", spot)
         except Exception:
+            rows = self._load_alternative_full_market_rows(ak, trade_date)
+            if rows:
+                return rows
             return self._fallback_trend_rows(trade_date)
         rows = self._trend_rows_from_spot(spot, trade_date)
+        if not rows:
+            rows = self._load_alternative_full_market_rows(ak, trade_date)
         if not rows:
             return self._fallback_trend_rows(trade_date)
         return rows
@@ -233,7 +238,7 @@ class AkshareMarketDataProvider:
             return fallback_snapshot
         item = records[0]
         name = self._first_text(item, ("股票简称", "名称", "name"))
-        return FundamentalSnapshot(
+        snapshot = FundamentalSnapshot(
             symbol=symbol,
             name=name,
             report_date=self._first_text(item, ("报告期", "报告日期", "date")),
@@ -247,6 +252,21 @@ class AkshareMarketDataProvider:
             dividend_yield_pct=self._first_float(item, ("股息率", "dividend_yield")),
             summary="AkShare 同花顺财务摘要",
         )
+        if not any(
+            abs(value) > 0
+            for value in (
+                snapshot.roe_pct,
+                snapshot.revenue_growth_pct,
+                snapshot.net_profit_growth_pct,
+                snapshot.gross_margin_pct,
+                snapshot.debt_ratio_pct,
+                snapshot.pe_ttm,
+                snapshot.pb,
+                snapshot.dividend_yield_pct,
+            )
+        ):
+            return fallback_snapshot
+        return snapshot
 
     def load_price_bars(
         self,
@@ -855,10 +875,13 @@ class AkshareMarketDataProvider:
         rows: list[MarketTrendRow] = []
         records = getattr(spot, "to_dict", lambda *_args, **_kwargs: [])("records")
         for item in records:
-            symbol = str(item.get("代码", "")).strip()
-            name = str(item.get("名称", "")).strip()
-            latest = self._first_float(item, ("最新价", "最新"))
-            previous_close = self._first_float(item, ("昨收", "昨日收盘价"))
+            symbol = str(item.get("代码") or item.get("code") or "").strip()
+            name = str(item.get("名称") or item.get("name") or "").strip()
+            latest = self._first_float(item, ("最新价", "最新", "trade", "price"))
+            previous_close = self._first_float(
+                item,
+                ("昨收", "昨日收盘价", "settlement", "close"),
+            )
             if not symbol or not name or latest <= 0 or previous_close <= 0:
                 continue
             industry = self._first_text(
@@ -873,19 +896,25 @@ class AkshareMarketDataProvider:
                     board=self._board(symbol),
                     latest_price=latest,
                     previous_close=previous_close,
-                    change_pct=self._first_float(item, ("涨跌幅", "涨幅")),
-                    turnover_amount=self._first_float(item, ("成交额", "成交金额")),
-                    turnover_rate=self._first_float(item, ("换手率",)),
+                    change_pct=self._first_float(
+                        item,
+                        ("涨跌幅", "涨幅", "changepercent"),
+                    ),
+                    turnover_amount=self._first_float(
+                        item,
+                        ("成交额", "成交金额", "amount"),
+                    ),
+                    turnover_rate=self._first_float(item, ("换手率", "turnoverratio")),
                     market_cap=self._normalize_market_cap(
                         self._first_float(
                             item,
-                            ("总市值", "总市值(元)", "总市值(亿)"),
+                            ("总市值", "总市值(元)", "总市值(亿)", "mktcap"),
                         )
                     ),
                     float_market_cap=self._normalize_market_cap(
                         self._first_float(
                             item,
-                            ("流通市值", "流通市值(元)", "流通市值(亿)"),
+                            ("流通市值", "流通市值(元)", "流通市值(亿)", "nmc"),
                         )
                     ),
                     industry=industry,
@@ -896,6 +925,27 @@ class AkshareMarketDataProvider:
                 )
             )
         return tuple(rows)
+
+    def _load_alternative_full_market_rows(
+        self,
+        ak: Any,
+        trade_date: str,
+    ) -> tuple[MarketTrendRow, ...]:
+        try:
+            spot = ak.stock_zh_a_spot()
+            self._cache_payload(trade_date, "stock_zh_a_spot", spot)
+        except Exception:
+            return ()
+        rows = self._trend_rows_from_spot(spot, trade_date)
+        return tuple(
+            MarketTrendRow(
+                **{
+                    **row.__dict__,
+                    "data_source": "full_market_spot_alt",
+                }
+            )
+            for row in rows
+        )
 
     def _trend_rows_from_cached_spot(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
         cache_file = self._cache_dir / f"{trade_date}_stock_zh_a_spot_em.json"
