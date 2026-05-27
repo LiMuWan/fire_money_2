@@ -305,6 +305,7 @@ def build_live_workflow_data() -> PreviewWorkflowData:
             trade_date=trade_date,
             limit=8,
             timeout_seconds=8,
+            fast_snapshot=True,
         ),
         doctor_report=doctor_report,
         schedule_run=_build_live_schedule_run(trade_context, schedule_health_report),

@@ -54,11 +54,15 @@ from server.firemoney_server.infrastructure.market_data import (
     AkshareMarketDataProvider,
     SampleMarketDataProvider,
 )
+from server.firemoney_server.infrastructure.market_trend_cache import (
+    MarketTrendSnapshotCache,
+)
 from server.firemoney_server.infrastructure.notification_store import NotificationRecordStore
 from server.firemoney_server.infrastructure.one_to_two_config import load_one_to_two_settings
 from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.scheduler_run_store import SchedulerRunStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
+from server.firemoney_server.infrastructure.sina_full_market import SinaFullMarketClient
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
     FeishuNotificationResult,
@@ -1792,6 +1796,142 @@ class MainChainSmokeTest(unittest.TestCase):
 
         self.assertEqual(fake_ak.previous_calls, 2)
         self.assertEqual(second, first)
+
+    def test_sina_full_market_records_are_normalized_for_trend_scan(self) -> None:
+        rows = SinaFullMarketClient.rows_from_records(
+            [
+                {
+                    "symbol": "sh600183",
+                    "code": "600183",
+                    "name": "生益科技",
+                    "trade": "134.08",
+                    "settlement": "128.00",
+                    "changepercent": "4.75",
+                    "amount": "14800000000",
+                    "turnoverratio": "4.6",
+                    "mktcap": "32006000",
+                    "nmc": "21000000",
+                    "industry": "PCB",
+                }
+            ],
+            "2026-05-28",
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].symbol, "600183")
+        self.assertEqual(rows[0].board, "主板")
+        self.assertEqual(rows[0].data_source, "full_market_spot_sina")
+        self.assertEqual(rows[0].market_cap, 320060000000)
+        self.assertIn("PCB", rows[0].theme)
+
+    def test_full_market_trend_snapshot_cache_persists_normalized_rows(self) -> None:
+        rows = SinaFullMarketClient.rows_from_records(
+            [
+                {
+                    "symbol": "sh600183",
+                    "code": "600183",
+                    "name": "生益科技",
+                    "trade": "134.08",
+                    "settlement": "128.00",
+                    "amount": "14800000000",
+                    "mktcap": "32006000",
+                }
+            ],
+            "2026-05-28",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache = MarketTrendSnapshotCache(Path(temp_dir), ttl_seconds=60)
+            cache.remember("2026-05-28", rows)
+            second_cache = MarketTrendSnapshotCache(Path(temp_dir), ttl_seconds=60)
+
+            cached = second_cache.load("2026-05-28")
+
+        self.assertIsNotNone(cached)
+        assert cached is not None
+        self.assertEqual(cached[0].symbol, "600183")
+        self.assertEqual(cached[0].data_source, "full_market_spot_cache")
+
+    def test_full_market_trend_snapshot_cache_rejects_prefixed_stock_codes(self) -> None:
+        cache_payload = {
+            "trade_date": "2026-05-28",
+            "rows": [
+                {
+                    "symbol": "sz300308",
+                    "name": "中际旭创",
+                    "trade_date": "2026-05-28",
+                    "board": "创业板",
+                    "latest_price": 100.0,
+                    "previous_close": 98.0,
+                    "change_pct": 2.0,
+                    "turnover_amount": 1000000000.0,
+                    "turnover_rate": 3.0,
+                    "market_cap": 0.0,
+                    "float_market_cap": 0.0,
+                    "data_source": "full_market_spot_sina",
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "2026-05-28_full_market_trend_rows.json").write_text(
+                json.dumps(cache_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            cache = MarketTrendSnapshotCache(root, ttl_seconds=60)
+
+            rows = cache.load("2026-05-28", allow_stale=True)
+
+        self.assertIsNone(rows)
+
+    def test_full_market_scan_falls_back_to_sina_and_caches_snapshot(self) -> None:
+        class FakeAk:
+            def stock_zh_a_spot_em(self) -> object:
+                raise RuntimeError("eastmoney blocked")
+
+            def stock_zh_a_spot(self) -> object:
+                raise RuntimeError("alternative blocked")
+
+        class FakeSinaClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def load_rows(self, trade_date: str):
+                self.calls += 1
+                return SinaFullMarketClient.rows_from_records(
+                    [
+                        {
+                            "symbol": "sh600183",
+                            "code": "600183",
+                            "name": "生益科技",
+                            "trade": "134.08",
+                            "settlement": "128.00",
+                            "amount": "14800000000",
+                            "turnoverratio": "4.6",
+                            "industry": "PCB",
+                        }
+                    ],
+                    trade_date,
+                )
+
+        real_import = __import__
+        fake_ak = FakeAk()
+
+        def fake_import(name: str, *args: object, **kwargs: object):
+            if name == "akshare":
+                return fake_ak
+            return real_import(name, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            provider = AkshareMarketDataProvider(cache_dir=Path(temp_dir))
+            fake_sina = FakeSinaClient()
+            provider._sina_full_market_client = fake_sina
+            with patch("builtins.__import__", side_effect=fake_import):
+                first = provider.load_full_market_rows("2026-05-28")
+                second = provider.load_full_market_rows("2026-05-28")
+
+        self.assertEqual(fake_sina.calls, 1)
+        self.assertEqual(first[0].data_source, "full_market_spot_sina")
+        self.assertEqual(second[0].data_source, "full_market_spot_cache")
 
     def test_sample_market_data_provider_exposes_intraday_scaffolding(self) -> None:
         provider = SampleMarketDataProvider()

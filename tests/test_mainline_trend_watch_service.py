@@ -90,6 +90,39 @@ class FallbackTrendProvider(FakeTrendProvider):
         )
 
 
+class CachedFullMarketTrendProvider(FakeTrendProvider):
+    def load_full_market_rows(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
+        rows = super().load_full_market_rows(trade_date)
+        return tuple(
+            MarketTrendRow(
+                **{
+                    **row.__dict__,
+                    "data_source": "full_market_spot_cache",
+                }
+            )
+            for row in rows
+        )
+
+
+class CountingTrendProvider(FakeTrendProvider):
+    def __init__(self) -> None:
+        self.price_bar_calls = 0
+        self.fundamental_calls = 0
+
+    def load_price_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> tuple[HistoricalPriceBar, ...]:
+        self.price_bar_calls += 1
+        return super().load_price_bars(symbol, start_date, end_date)
+
+    def load_fundamental_snapshot(self, symbol: str) -> FundamentalSnapshot | None:
+        self.fundamental_calls += 1
+        return super().load_fundamental_snapshot(symbol)
+
+
 def _bars(
     end_date: str,
     *,
@@ -165,6 +198,32 @@ class MainlineTrendWatchServiceTest(unittest.TestCase):
             report.limitations,
         )
         self.assertEqual(report.items[0].symbol, "603256")
+
+    def test_cached_full_market_snapshot_is_not_marked_as_candidate_degraded(self) -> None:
+        service = MainlineTrendWatchService(
+            market_data_provider=CachedFullMarketTrendProvider()
+        )
+
+        report = service.build_report(trade_date="2026-05-27", limit=3)
+
+        self.assertIn("cached_full_market", report.summary)
+        self.assertFalse(any("不是完整全市场覆盖" in item for item in report.limitations))
+        self.assertTrue(any("30分钟内" in item for item in report.limitations))
+
+    def test_fast_snapshot_mode_skips_deep_history_and_fundamental_fetches(self) -> None:
+        provider = CountingTrendProvider()
+        service = MainlineTrendWatchService(market_data_provider=provider)
+
+        report = service.build_report(
+            trade_date="2026-05-27",
+            limit=2,
+            fast_snapshot=True,
+        )
+
+        self.assertEqual(provider.price_bar_calls, 0)
+        self.assertEqual(provider.fundamental_calls, 0)
+        self.assertGreater(len(report.items), 0)
+        self.assertTrue(any("页面快照模式" in item for item in report.limitations))
 
 
 if __name__ == "__main__":

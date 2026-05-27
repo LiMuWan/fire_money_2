@@ -391,6 +391,7 @@ class MainChainService:
         trade_date: str | None = None,
         limit: int = 12,
         timeout_seconds: float | None = None,
+        fast_snapshot: bool = False,
     ) -> MainlineTrendWatchReport:
         """Build a watch-only whole-market mainline trend-root report."""
 
@@ -404,12 +405,14 @@ class MainChainService:
                 trade_date=trade_context.trade_date,
                 limit=resolved_limit,
                 scan_limit=scan_limit,
+                fast_snapshot=fast_snapshot,
             )
         return self._build_mainline_trend_watch_report_with_timeout(
             trade_date=trade_context.trade_date,
             limit=resolved_limit,
             scan_limit=scan_limit,
             timeout_seconds=timeout_seconds,
+            fast_snapshot=fast_snapshot,
         )
 
     def build_one_to_two_morning_report(
@@ -1123,6 +1126,7 @@ class MainChainService:
         limit: int,
         scan_limit: int,
         timeout_seconds: float,
+        fast_snapshot: bool,
     ) -> MainlineTrendWatchReport:
         result_queue: Queue[tuple[str, object]] = Queue(maxsize=1)
 
@@ -1135,6 +1139,7 @@ class MainChainService:
                             trade_date=trade_date,
                             limit=limit,
                             scan_limit=scan_limit,
+                            fast_snapshot=fast_snapshot,
                         ),
                     )
                 )

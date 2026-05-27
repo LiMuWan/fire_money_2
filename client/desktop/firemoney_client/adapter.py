@@ -103,11 +103,13 @@ class LocalMainChainAdapter:
         trade_date: str | None = None,
         limit: int = 12,
         timeout_seconds: float | None = None,
+        fast_snapshot: bool = False,
     ) -> MainlineTrendWatchReport:
         return self._service.build_mainline_trend_watch_report(
             trade_date=trade_date,
             limit=limit,
             timeout_seconds=timeout_seconds,
+            fast_snapshot=fast_snapshot,
         )
 
     def send_one_to_two_feishu_test(

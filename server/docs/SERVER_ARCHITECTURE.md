@@ -43,6 +43,7 @@ server/firemoney_server/
     feishu_notifier.py     Feishu webhook/app robot adapter
     local_env.py           ignored local Feishu secret loader
     market_data.py         MarketDataProvider boundary and AkShare adapter
+    market_trend_cache.py  normalized full-market trend snapshot cache
     notification_store.py  local notification result records
     one_to_two_config.py   one-to-two strategy config loader
     paper_database.py      SQLite mirror for paper-trading events, positions, and P/L
@@ -52,6 +53,7 @@ server/firemoney_server/
     sample_market_data.py  deterministic sample provider for tests and preview
     scheduler_run_store.py local scheduler run audit records
     scheduler_state.py     completed local scheduler task state
+    sina_full_market.py    Sina full-market fallback adapter for trend scanning
     trading_calendar.py    trading-day context and T+1 date resolution
     config/
       one_to_two_strategy.zh_CN.json
@@ -90,6 +92,7 @@ MarketDataProvider/AkShare
 - Normalized market rows, historical bars, intraday bars, and tick snapshots are defined in `domain/one_to_two_types.py`; infrastructure must import these types from the type module, not from the scoring policy module.
 - `infrastructure/market_data.py` contains the real AkShare adapter and shared provider protocol; deterministic preview/test data lives in `infrastructure/sample_market_data.py` and is re-exported for backward-compatible imports.
 - AkShare raw snapshots are cached under `.firemoney/market_data/`.
+- Whole-market trend scanning first normalizes full-market spot rows into `MarketTrendRow`, then stores same-day normalized snapshots under `.firemoney/market_data/{trade_date}_full_market_trend_rows.json` for 30-minute reuse. If AkShare/Eastmoney full-market endpoints fail, `sina_full_market.py` is the current cloud-friendly fallback before the system degrades to the one-to-two candidate pool.
 - If market data is unavailable, the service returns a blocked morning report and no paper buy can be generated.
 - Hard blockers include ST, delisting, new stock, non-mainboard markets, high deviation, nearby pressure, low liquidity, weak market temperature, weak volume-ratio continuity, RSI over-cold/over-hot setups, low 60-day position percentile, generic mid-position setups, weak effective-turnover leader quality, over-wide executable candidate pools, open confirmation above 3.5%, and one-word unreachable boards.
 - The domain now exposes `turnover_quality_score`, `turnover_quality_label`, and `turnover_quality_notes` on `OneToTwoCandidate`. This is the daily-proxy buy-point gate for 换手龙: effective turnover range, sealed amount / turnover amount, first limit-up time, auction amount ratio, market temperature, volume ratio, RSI, and position structure must align before a candidate can become an executable paper buy. It intentionally does not use future bars; tick/order-book data can only upgrade this proxy later.
@@ -110,7 +113,7 @@ MarketDataProvider/AkShare
 - Morning-report orchestration lives in `application/morning_report_service.py`; it resolves the trading date, prepares the account view, loads market rows, adapts mainline candidates, and prepares/records only the morning notification boundary.
 - Watch report wrapping lives in `application/watch_report_service.py`; it delegates state changes to `WatchPhaseService`, asks `notification_orchestrator` whether the event is action-worthy, and records only eligible watch buy/sell notifications.
 - Mainline continuity enrichment lives in `application/mainline_continuity_service.py`; it uses live breadth/news evidence to enrich candidates for watch decisions, without writing paper positions or sending notifications.
-- Whole-market main-rise root scanning lives in `application/mainline_trend_watch_service.py`; it reads full-market spot rows, daily bars, and optional financial snapshots to score industry logic, value support, capital attraction, trend sustainability, and entry timing. It is research-only evidence: it must not write paper positions, send buy/sell notifications, connect QMT, or change the default mainboard 10cm paper-trading line.
+- Whole-market main-rise root scanning lives in `application/mainline_trend_watch_service.py`; it reads full-market spot rows, daily bars, and optional financial snapshots to score industry logic, value support, capital attraction, trend sustainability, and entry timing. It is research-only evidence: it must not write paper positions, send buy/sell notifications, connect QMT, or change the default mainboard 10cm paper-trading line. Its summary must distinguish `full_market`, `cached_full_market`, `stale_full_market_cache`, and `degraded_data` so users know whether the current view is live full-market coverage, same-day cache, stale full-market cache, or incomplete candidate-pool fallback.
 - Completed exits create `PaperTradeRecord` samples. Stability metrics use these closed trade records, not raw event counts.
 - The paper-trading guard treats consecutive low-quality closes as a hard stop: if recent closed trades fail to cover intratrade drawdown for the configured streak, new paper entries are blocked even when the final P/L was slightly positive.
 - Stability review also reports position-label distribution, exit-reason distribution, and capped recent closed samples so strategy quality can be judged by sample composition, not only headline win rate.

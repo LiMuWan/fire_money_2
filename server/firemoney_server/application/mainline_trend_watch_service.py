@@ -79,6 +79,13 @@ class _ThemeSignal:
     source: str
 
 
+@dataclass(frozen=True)
+class _DataQuality:
+    degraded: bool
+    cached: bool
+    stale: bool
+
+
 class MainlineTrendWatchService:
     """Explains why a stock may or may not have a mainline trend root."""
 
@@ -141,11 +148,10 @@ class MainlineTrendWatchService:
         lookback_days: int = 190,
         limit: int = 12,
         scan_limit: int = 24,
+        fast_snapshot: bool = False,
     ) -> MainlineTrendWatchReport:
         rows = self._load_market_rows(trade_date)
-        degraded_data = bool(rows) and all(
-            not row.data_source.startswith("full_market_spot") for row in rows
-        )
+        data_quality = self._data_quality(rows)
         candidates = self._coarse_filter(rows, scan_limit=max(scan_limit, limit * 2))
         if not candidates:
             return MainlineTrendWatchReport(
@@ -155,7 +161,7 @@ class MainlineTrendWatchService:
                 summary="全市场扫描没有拿到可分析样本；不做主升判断，也不生成买点。",
                 items=(),
                 rules=self._rules(),
-                limitations=self._limitations(),
+                limitations=self._limitations(data_quality),
                 next_action="先恢复全市场行情快照，再看主线逻辑、财务承接和资金持续性。",
             )
 
@@ -163,16 +169,19 @@ class MainlineTrendWatchService:
         items: list[MainlineTrendWatchItem] = []
         fundamental_limit = min(max(limit, 6), 12)
         for index, row in enumerate(candidates):
-            try:
-                bars = self._market_data_provider.load_price_bars(
-                    row.symbol,
-                    start_date,
-                    trade_date,
-                )
-            except Exception:
+            if fast_snapshot:
                 bars = ()
+            else:
+                try:
+                    bars = self._market_data_provider.load_price_bars(
+                        row.symbol,
+                        start_date,
+                        trade_date,
+                    )
+                except Exception:
+                    bars = ()
             fundamental = None
-            if index < fundamental_limit:
+            if not fast_snapshot and index < fundamental_limit:
                 try:
                     fundamental = self._market_data_provider.load_fundamental_snapshot(
                         row.symbol
@@ -195,22 +204,24 @@ class MainlineTrendWatchService:
                 report_id=f"mainline-trend-watch-{trade_date}",
                 trade_date=trade_date,
                 status="empty",
-                summary=self._summary_prefix(degraded_data)
+                summary=self._summary_prefix(data_quality)
                 + "候选缺少足够日线/资金/逻辑证据；先不讲主升故事。",
                 items=(),
                 rules=self._rules(),
-                limitations=self._limitations(degraded_data),
+                limitations=self._limitations(data_quality),
                 next_action="补齐候选日线和基础财务快照后，再给主升根因评分。",
             )
 
         prime_count = sum(1 for item in items if item.status == "prime_watch")
         wait_count = sum(1 for item in items if item.status == "wait_entry")
         summary = (
-            self._summary_prefix(degraded_data)
+            self._summary_prefix(data_quality)
             + f"从 {len(rows)} 只股票粗筛 {len(candidates)} 只，"
             f"输出 {len(items)} 只观察；{prime_count} 只逻辑/价值/资金共振，"
             f"{wait_count} 只只等买点。"
         )
+        if fast_snapshot:
+            summary += " 页面使用快照模式，先展示全市场逻辑/资金雷达，深度日线和财务由 CLI/后台补充。"
         return MainlineTrendWatchReport(
             report_id=f"mainline-trend-watch-{trade_date}",
             trade_date=trade_date,
@@ -218,7 +229,7 @@ class MainlineTrendWatchService:
             summary=summary,
             items=tuple(items),
             rules=self._rules(),
-            limitations=self._limitations(degraded_data),
+            limitations=self._limitations(data_quality, fast_snapshot=fast_snapshot),
             next_action="先看主升根因是否扎实，再看回踩/突破买点；没有产业逻辑、业绩承接和资金持续性，不因为涨了就追。",
         )
 
@@ -254,6 +265,16 @@ class MainlineTrendWatchService:
             return self._market_data_provider.load_full_market_rows(trade_date)
         except Exception:
             return ()
+
+    @staticmethod
+    def _data_quality(rows: tuple[MarketTrendRow, ...]) -> _DataQuality:
+        if not rows:
+            return _DataQuality(degraded=False, cached=False, stale=False)
+        sources = tuple(row.data_source for row in rows)
+        degraded = all(not source.startswith("full_market_spot") for source in sources)
+        cached = any("cache" in source for source in sources)
+        stale = any("cache_stale" in source for source in sources)
+        return _DataQuality(degraded=degraded, cached=cached, stale=stale)
 
     def _coarse_filter(
         self,
@@ -819,23 +840,54 @@ class MainlineTrendWatchService:
         )
 
     @staticmethod
-    def _limitations(degraded_data: bool = False) -> tuple[str, ...]:
+    def _limitations(
+        degraded_data: bool | _DataQuality = False,
+        *,
+        fast_snapshot: bool = False,
+    ) -> tuple[str, ...]:
+        if isinstance(degraded_data, _DataQuality):
+            data_quality = degraded_data
+        else:
+            data_quality = _DataQuality(
+                degraded=degraded_data,
+                cached=False,
+                stale=False,
+            )
         items = [
             "财务快照依赖行情源可用性；缺失时只给待确认价值结论，不伪装成确定性基本面。",
             "产业逻辑第一版来自行业/名称/题材关键词，后续应接入公告、研报摘要和板块强度。",
             "该模块是主升研究雷达，不改变主板10cm首板模拟盘这条已验证核心链路。",
         ]
-        if degraded_data:
+        if fast_snapshot:
+            items = [
+                "页面快照模式不逐只拉日线/财务，优先保证全市场覆盖和刷新速度；深度结论以 CLI/后台报告为准。",
+                *items,
+            ]
+        if data_quality.degraded:
             items = [
                 "当前全市场快照不可用，已降级到缓存或当日候选池；这不是完整全市场覆盖。",
+                *items,
+            ]
+        elif data_quality.stale:
+            items = [
+                "当前使用同日完整全市场快照的过期缓存；覆盖仍是全市场，但不是本次实时拉取。",
+                *items,
+            ]
+        elif data_quality.cached:
+            items = [
+                "当前使用30分钟内的同日完整全市场快照缓存；下一轮刷新会重新尝试实时拉取。",
                 *items,
             ]
         return tuple(items)
 
     @staticmethod
-    def _summary_prefix(degraded_data: bool) -> str:
-        if degraded_data:
+    def _summary_prefix(data_quality: _DataQuality) -> str:
+        if data_quality.degraded:
             return "全市场主升根因扫描（degraded_data）："
+        if data_quality.stale:
+            return "全市场主升根因扫描（stale_full_market_cache）："
+        if data_quality.cached:
+            return "全市场主升根因扫描（cached_full_market）："
         return "全市场主升根因扫描："
 
     @staticmethod
