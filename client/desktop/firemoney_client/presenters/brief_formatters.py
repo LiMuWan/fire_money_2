@@ -342,11 +342,15 @@ def format_mainline_trend_watch_brief(report: MainlineTrendWatchReport) -> str:
                 f"   主线：{item.theme}；{item.logic}",
                 f"   价值：{item.value_case}",
                 f"   资金：{item.capital_case}",
+                f"   持续：{item.sustainability_case}",
                 f"   买点：{item.entry_plan}",
             ]
         )
     if not report.items:
         lines.append("候选：无")
+    if report.limitations:
+        lines.append("限制：")
+        lines.extend(f"- {item}" for item in report.limitations[:4])
     lines.append(f"下一步：{report.next_action}")
     return "\n".join(lines)
 

@@ -222,6 +222,33 @@ class MainlineTrendWatchService:
             next_action="先看主升根因是否扎实，再看回踩/突破买点；没有产业逻辑、业绩承接和资金持续性，不因为涨了就追。",
         )
 
+    def build_unavailable_report(
+        self,
+        *,
+        trade_date: str,
+        status: str,
+        reason: str,
+        next_action: str,
+    ) -> MainlineTrendWatchReport:
+        """Return an honest page-safe report when full-market scanning is unavailable."""
+
+        return MainlineTrendWatchReport(
+            report_id=f"mainline-trend-watch-{trade_date}",
+            trade_date=trade_date,
+            status=status,
+            summary=(
+                f"全市场主升根因扫描（{status}）：{reason}；"
+                "本次不输出主升候选，也不把缓存候选伪装成实时全市场扫描。"
+            ),
+            items=(),
+            rules=self._rules(),
+            limitations=(
+                "本次未完成全市场行情扫描；宁可显示不可用，也不生成看起来很真的假结论。",
+                *self._limitations(degraded_data=True),
+            ),
+            next_action=next_action,
+        )
+
     def _load_market_rows(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
         try:
             return self._market_data_provider.load_full_market_rows(trade_date)
@@ -608,8 +635,9 @@ class MainlineTrendWatchService:
             cap = row.market_cap or row.float_market_cap
             cap_text = f"{cap / 100_000_000:.1f}亿" if cap else "未知"
             return (
-                f"基础财务快照暂缺，先只按市值 {cap_text}、成交额 "
-                f"{row.turnover_amount / 100_000_000:.1f}亿判断可承接性；价值结论需财报确认。"
+                f"价值投资承接待确认：财务快照暂缺，先只按市值 {cap_text}、成交额 "
+                f"{row.turnover_amount / 100_000_000:.1f}亿判断容量；"
+                "没有财报和订单证据时，不把题材当价值投资。"
             )
         parts = [
             f"ROE {fundamental.roe_pct:.1f}%",
@@ -618,13 +646,26 @@ class MainlineTrendWatchService:
         ]
         if fundamental.pe_ttm:
             parts.append(f"PE(TTM) {fundamental.pe_ttm:.1f}")
-        return "；".join(parts) + "。"
+        if (
+            fundamental.revenue_growth_pct >= 15
+            and fundamental.net_profit_growth_pct >= 15
+            and 0 < fundamental.pe_ttm <= 55
+        ):
+            verdict = "增长和估值能给主线故事做基本面承接。"
+        elif fundamental.net_profit_growth_pct >= 30:
+            verdict = "利润弹性强，但要确认营收和订单能不能继续跟上。"
+        elif fundamental.pe_ttm > 80:
+            verdict = "估值已经偏贵，价值投资承接不足，更多像情绪定价。"
+        else:
+            verdict = "价值承接一般，需要后续财报或订单继续确认。"
+        return "价值投资承接：" + "；".join(parts) + f"；{verdict}"
 
     @staticmethod
     def _capital_case(row: MarketTrendRow, profile: _TrendProfile) -> str:
         return (
-            f"成交额 {row.turnover_amount / 100_000_000:.1f}亿，换手 {row.turnover_rate:.1f}%，"
-            f"5日量比 {profile.volume_ratio_5:.2f}；主力愿不愿意来，核心看放量后能否缩量承接、不跌破20日线。"
+            f"资金吸引根源：成交额 {row.turnover_amount / 100_000_000:.1f}亿，"
+            f"换手 {row.turnover_rate:.1f}%，5日量比 {profile.volume_ratio_5:.2f}；"
+            "主力愿不愿意来，关键看题材容量够不够、放量后能否缩量承接、回撤是否守住20日线。"
         )
 
     @staticmethod
@@ -649,9 +690,9 @@ class MainlineTrendWatchService:
             else "业绩接力证据不足"
         )
         return (
-            f"{trend}，120日位置 {profile.position_percentile_120:.0%}，"
+            f"持续走强根源：{trend}，120日位置 {profile.position_percentile_120:.0%}，"
             f"近20日波动带 {profile.base_tightness_pct:.1%}；"
-            f"{theme.theme} 逻辑需要 {earning} 才能从炒作变成主升。"
+            f"{theme.theme} 逻辑只有叠加 {earning}、板块同涨和回踩承接，才可能从炒作变成主升。"
         )
 
     @staticmethod
@@ -667,12 +708,12 @@ class MainlineTrendWatchService:
     ) -> str:
         if close < ma10:
             return (
-                f"{action}：现价低于10日线，先等重新站回 {ma10:.2f} 并放量承接；"
+                f"{action}：现价低于10日线，说明主升结构还没确认；先等重新站回 {ma10:.2f} 并放量承接；"
                 f"站回后再看 {pullback_low:.2f}-{pullback_high:.2f} 是否缩量不破，"
                 f"跌破 {stop_loss:.2f} 取消主升假设。"
             )
         return (
-            f"{action}：优先等 {pullback_low:.2f}-{pullback_high:.2f} 缩量回踩后再转强；"
+            f"{action}：买点不是因为已经涨，而是优先等 {pullback_low:.2f}-{pullback_high:.2f} 缩量回踩后再转强；"
             f"若直接突破 {breakout_price:.2f}，只能小样本观察，不追离均线太远的加速；"
             f"跌破 {stop_loss:.2f} 取消主升假设。"
         )
@@ -772,9 +813,9 @@ class MainlineTrendWatchService:
     @staticmethod
     def _rules() -> tuple[str, ...]:
         return (
-            "先判断主升根因：产业逻辑、价值承接、资金容量、持续性结构，再看买点。",
+            "先判断能不能主升：产业逻辑是否可扩散、价值承接是否不虚、资金容量是否够、趋势结构是否能持续，再看买点。",
             "全市场扫描只输出观察和研究结论，不写入模拟盘、不连接 QMT、不自动下单。",
-            "买点优先等回踩承接或放量突破确认；离均线太远时即使逻辑强也不追。",
+            "低位转强只是时间窗口，不是买入理由；离均线太远时即使逻辑强也不追。",
         )
 
     @staticmethod

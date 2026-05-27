@@ -285,6 +285,7 @@ def render_mainline_trend_watch_panel(report: MainlineTrendWatchReport | None) -
         <ul class="detail-list compact">
           <li>先看结论：没有足够证据时不讲主升故事，也不生成买点。</li>
           <li>下一步：{_text(_translate_misc_text(report.next_action))}</li>
+          {"".join(f"<li>限制：{_text(_translate_misc_text(item))}</li>" for item in report.limitations[:3])}
         </ul>
       </section>
         """

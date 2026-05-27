@@ -390,16 +390,26 @@ class MainChainService:
         self,
         trade_date: str | None = None,
         limit: int = 12,
+        timeout_seconds: float | None = None,
     ) -> MainlineTrendWatchReport:
         """Build a watch-only whole-market mainline trend-root report."""
 
         trade_context = self._trading_calendar.resolve(
             trade_date or self._default_trade_date()
         )
-        return self._mainline_trend_watch_service.build_report(
+        resolved_limit = max(1, limit)
+        scan_limit = max(8, min(resolved_limit * 2, 24))
+        if timeout_seconds is None:
+            return self._mainline_trend_watch_service.build_report(
+                trade_date=trade_context.trade_date,
+                limit=resolved_limit,
+                scan_limit=scan_limit,
+            )
+        return self._build_mainline_trend_watch_report_with_timeout(
             trade_date=trade_context.trade_date,
-            limit=max(1, limit),
-            scan_limit=max(8, min(max(1, limit) * 2, 24)),
+            limit=resolved_limit,
+            scan_limit=scan_limit,
+            timeout_seconds=timeout_seconds,
         )
 
     def build_one_to_two_morning_report(
@@ -1105,6 +1115,55 @@ class MainChainService:
             return cached_loader(trade_date, allow_stale=True)
         except Exception:
             return None
+
+    def _build_mainline_trend_watch_report_with_timeout(
+        self,
+        *,
+        trade_date: str,
+        limit: int,
+        scan_limit: int,
+        timeout_seconds: float,
+    ) -> MainlineTrendWatchReport:
+        result_queue: Queue[tuple[str, object]] = Queue(maxsize=1)
+
+        def build_report() -> None:
+            try:
+                result_queue.put(
+                    (
+                        "ready",
+                        self._mainline_trend_watch_service.build_report(
+                            trade_date=trade_date,
+                            limit=limit,
+                            scan_limit=scan_limit,
+                        ),
+                    )
+                )
+            except Exception as exc:
+                result_queue.put(("blocked", exc))
+
+        worker = Thread(target=build_report, daemon=True)
+        worker.start()
+        try:
+            status, payload = result_queue.get(timeout=max(0.1, timeout_seconds))
+        except Empty:
+            return self._mainline_trend_watch_service.build_unavailable_report(
+                trade_date=trade_date,
+                status="timeout",
+                reason=f"全市场行情源 {timeout_seconds:.0f} 秒内未返回",
+                next_action=(
+                    "页面先保持真实降级状态；后台下一轮刷新或手动运行 "
+                    "mainline-trend --brief 复核行情源。"
+                ),
+            )
+        if status == "ready" and isinstance(payload, MainlineTrendWatchReport):
+            return payload
+        reason = str(payload) if payload else "全市场行情源异常"
+        return self._mainline_trend_watch_service.build_unavailable_report(
+            trade_date=trade_date,
+            status="error",
+            reason=reason,
+            next_action="先恢复全市场行情源，再输出主升候选；本次不生成买点。",
+        )
 
     def _historical_paper_store(self, path: Path) -> PaperTradeStore:
         return PaperTradeStore(

@@ -76,6 +76,7 @@ class MainChainGateway(Protocol):
         self,
         trade_date: str | None = None,
         limit: int = 12,
+        timeout_seconds: float | None = None,
     ) -> MainlineTrendWatchReport: ...
 
     def send_one_to_two_feishu_test(

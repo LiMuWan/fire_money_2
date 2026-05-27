@@ -118,6 +118,24 @@ def _trend_watch_report() -> MainlineTrendWatchReport:
     )
 
 
+def _trend_watch_timeout_report() -> MainlineTrendWatchReport:
+    return MainlineTrendWatchReport(
+        report_id="mainline-trend-watch-2026-05-27",
+        trade_date="2026-05-27",
+        status="timeout",
+        summary=(
+            "全市场主升根因扫描（timeout）：全市场行情源 8 秒内未返回；"
+            "本次不输出主升候选，也不把缓存候选伪装成实时全市场扫描。"
+        ),
+        items=(),
+        rules=("全市场扫描只输出观察，不写入模拟盘。",),
+        limitations=(
+            "本次未完成全市场行情扫描；宁可显示不可用，也不生成看起来很真的假结论。",
+        ),
+        next_action="等待下一轮刷新。",
+    )
+
+
 def _position() -> PaperPosition:
     return PaperPosition(
         symbol="600001",
@@ -442,8 +460,17 @@ class BriefFormatterTest(unittest.TestCase):
         self.assertIn("宏和科技（603256）", text)
         self.assertIn("逻辑/价值/资金/持续/买点", text)
         self.assertIn("AI服务器PCB升级", text)
+        self.assertIn("持续：", text)
         self.assertIn("等 11.20-11.90", text)
         self.assertNotIn('"items"', text)
+
+    def test_mainline_trend_watch_brief_is_honest_on_timeout(self) -> None:
+        text = format_mainline_trend_watch_brief(_trend_watch_timeout_report())
+
+        self.assertIn("timeout", text)
+        self.assertIn("候选：无", text)
+        self.assertIn("不把缓存候选伪装成实时全市场扫描", text)
+        self.assertIn("宁可显示不可用", text)
 
     def test_cli_brief_routes_mainline_trend_to_formatter(self) -> None:
         output: list[str] = []

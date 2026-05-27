@@ -303,7 +303,8 @@ def build_live_workflow_data() -> PreviewWorkflowData:
         paper_database_report=paper_database_report,
         trend_watch_report=adapter.build_mainline_trend_watch_report(
             trade_date=trade_date,
-            limit=12,
+            limit=8,
+            timeout_seconds=8,
         ),
         doctor_report=doctor_report,
         schedule_run=_build_live_schedule_run(trade_context, schedule_health_report),

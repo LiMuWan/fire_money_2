@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
@@ -547,6 +548,12 @@ class FailingNotifier:
         )
 
 
+class SlowTrendProvider(SampleMarketDataProvider):
+    def load_full_market_rows(self, trade_date: str):
+        time.sleep(0.25)
+        return super().load_full_market_rows(trade_date)
+
+
 class MainChainSmokeTest(unittest.TestCase):
     def test_one_to_two_contracts_are_json_friendly(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -569,6 +576,23 @@ class MainChainSmokeTest(unittest.TestCase):
             self.assertGreaterEqual(payload["candidates"][0]["mainline_score"], 14)
             self.assertGreaterEqual(payload["candidates"][0]["leader_score"], 16)
             self.assertIn("board-shadow-system", payload["candidates"][0]["leader_label"])
+
+    def test_mainline_trend_watch_timeout_does_not_fake_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = _build_service(
+                Path(temp_dir),
+                market_data_provider=SlowTrendProvider(),
+            )
+
+            report = service.build_mainline_trend_watch_report(
+                trade_date="2026-05-27",
+                timeout_seconds=0.01,
+            )
+
+            self.assertEqual(report.status, "timeout")
+            self.assertEqual(report.items, ())
+            self.assertIn("不把缓存候选伪装成实时全市场扫描", report.summary)
+            self.assertTrue(any("宁可显示不可用" in item for item in report.limitations))
 
     def test_limit_up_board_shadow_report_is_json_friendly(self) -> None:
         module = self._load_board_profit_matrix_module()
