@@ -1267,6 +1267,7 @@ def render_paper_database_panel(report: PaperTradeDatabaseReport | None) -> str:
         <li>
           <strong>{_text(trade.name)}（{_text(trade.symbol)}）</strong>
           <span>{_text(trade.closed_at)} / {_text(_translate_misc_text(trade.exit_reason))}</span>
+          <span>买入 {trade.entry_price:.2f}，卖出 {trade.exit_price:.2f}；买入金额 {trade.entry_price * trade.quantity:.2f}，卖出金额 {trade.exit_price * trade.quantity:.2f}</span>
           <span>{trade.realized_pnl:.2f} / {trade.realized_pnl_pct:.2%}</span>
           <span>赚撤比 {trade.profit_drawdown_ratio:.2f}R / 回撤 {trade.max_adverse_pct:.2%}</span>
         </li>
