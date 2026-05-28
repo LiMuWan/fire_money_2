@@ -4,6 +4,7 @@ set -euo pipefail
 APP_DIR="${FIREMONEY_APP_DIR:-/opt/firemoney}"
 PYTHON="${FIREMONEY_PYTHON:-$APP_DIR/.venv/bin/python}"
 PORT="${FIREMONEY_PREVIEW_PORT:-8765}"
+TREND_TIMEOUT_SECONDS="${FIREMONEY_PREVIEW_TREND_TIMEOUT_SECONDS:-45}"
 LOG_DIR="${FIREMONEY_LOG_DIR:-$APP_DIR/.firemoney/logs}"
 PREVIEW_DIR="$APP_DIR/client/desktop/preview"
 PREVIEW_HTML="$PREVIEW_DIR/core_workflow.html"
@@ -12,6 +13,8 @@ LOCK_FILE="/tmp/firemoney-preview-refresh.lock"
 
 mkdir -p "$LOG_DIR" "$PREVIEW_DIR"
 cd "$APP_DIR"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] preview_refresh_start trend_timeout=${TREND_TIMEOUT_SECONDS}s" >>"$LOG_DIR/firemoney_preview_refresh.log"
 
 preview_ok=true
 if ! flock -n "$LOCK_FILE" bash -c '

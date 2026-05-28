@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -304,7 +305,7 @@ def build_live_workflow_data() -> PreviewWorkflowData:
         trend_watch_report=adapter.build_mainline_trend_watch_report(
             trade_date=trade_date,
             limit=8,
-            timeout_seconds=8,
+            timeout_seconds=_live_trend_watch_timeout_seconds(),
             fast_snapshot=True,
         ),
         doctor_report=doctor_report,
@@ -325,6 +326,14 @@ def build_live_workflow_data() -> PreviewWorkflowData:
 
 def _preview_backtest_end_date() -> str:
     return date.today().isoformat()
+
+
+def _live_trend_watch_timeout_seconds() -> float:
+    raw = os.getenv("FIREMONEY_PREVIEW_TREND_TIMEOUT_SECONDS", "45")
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return 45.0
 
 
 def _account_view_for_trade_date(account: PaperAccount, trade_date: str) -> PaperAccount:

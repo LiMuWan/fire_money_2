@@ -8050,6 +8050,8 @@ class MainChainSmokeTest(unittest.TestCase):
         self.assertIn("ReadOnlyPaperTradeStore", live_source)
         self.assertIn("_today_paper_database_report", live_source)
         self.assertIn("_load_cached_or_unavailable_paper_backtest_report", live_source)
+        self.assertIn("FIREMONEY_PREVIEW_TREND_TIMEOUT_SECONDS", live_source)
+        self.assertIn("_live_trend_watch_timeout_seconds()", live_source)
         self.assertNotIn("build_one_to_two_backtest_audit(", live_source)
 
     def test_preview_backtest_cache_rejects_stale_coverage(self) -> None:

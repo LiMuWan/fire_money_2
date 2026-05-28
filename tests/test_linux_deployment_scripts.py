@@ -68,6 +68,8 @@ class LinuxDeploymentScriptsTest(unittest.TestCase):
         self.assertIn("runtime_status.json", refresh)
         self.assertIn("auto_refreshed_preview", refresh)
         self.assertIn("firemoney_preview_refresh.log", refresh)
+        self.assertIn("FIREMONEY_PREVIEW_TREND_TIMEOUT_SECONDS", refresh)
+        self.assertIn("preview_refresh_start trend_timeout", refresh)
         self.assertIn("preview_refresh_failed", refresh)
         self.assertIn("今日禁止参考旧指挥单", refresh)
         self.assertIn("schedule_health_status", refresh)
