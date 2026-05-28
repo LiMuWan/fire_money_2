@@ -21,6 +21,9 @@ from server.firemoney_server.infrastructure.market_trend_cache import (
     MarketTrendSnapshotCache,
 )
 from server.firemoney_server.infrastructure.sina_full_market import SinaFullMarketClient
+from server.firemoney_server.infrastructure.tencent_full_market import (
+    TencentFullMarketClient,
+)
 
 
 DEFAULT_MARKET_DATA_CACHE_DIR = Path(".firemoney") / "market_data"
@@ -108,6 +111,7 @@ class AkshareMarketDataProvider:
             ttl_seconds=max(cache_ttl_seconds, 1800.0),
         )
         self._sina_full_market_client = SinaFullMarketClient()
+        self._tencent_full_market_client = TencentFullMarketClient()
 
     def load_one_to_two_rows(self, trade_date: str) -> tuple[OneToTwoMarketRow, ...]:
         has_memory_cache = trade_date in self._row_cache
@@ -215,6 +219,9 @@ class AkshareMarketDataProvider:
         try:
             import akshare as ak  # type: ignore
         except Exception:
+            rows = self._load_tencent_full_market_rows(None, trade_date)
+            if rows:
+                return rows
             rows = self._load_sina_full_market_rows(trade_date)
             if rows:
                 return rows
@@ -225,6 +232,9 @@ class AkshareMarketDataProvider:
             self._cache_payload(trade_date, "stock_zh_a_spot_em", spot)
             rows = self._trend_rows_from_spot(spot, trade_date)
         except Exception:
+            rows = self._load_tencent_full_market_rows(ak, trade_date)
+            if rows:
+                return rows
             rows = self._load_sina_full_market_rows(trade_date)
             if rows:
                 return rows
@@ -236,6 +246,8 @@ class AkshareMarketDataProvider:
             if cached_stale is not None:
                 return cached_stale
             return self._fallback_trend_rows(trade_date)
+        if not rows:
+            rows = self._load_tencent_full_market_rows(ak, trade_date)
         if not rows:
             rows = self._load_sina_full_market_rows(trade_date)
         if not rows:
@@ -987,6 +999,46 @@ class AkshareMarketDataProvider:
         if rows:
             self._trend_snapshot_cache.remember(trade_date, rows)
         return rows
+
+    def _load_tencent_full_market_rows(
+        self,
+        ak: Any | None,
+        trade_date: str,
+    ) -> tuple[MarketTrendRow, ...]:
+        universe = self._load_stock_universe(ak)
+        if not universe:
+            return ()
+        try:
+            rows = self._tencent_full_market_client.load_rows(trade_date, universe)
+        except Exception:
+            return ()
+        if rows:
+            self._trend_snapshot_cache.remember(trade_date, rows)
+        return rows
+
+    def _load_stock_universe(self, ak: Any | None) -> tuple[tuple[str, str], ...]:
+        if ak is None:
+            try:
+                import akshare as ak  # type: ignore
+            except Exception:
+                return ()
+        try:
+            frame = ak.stock_info_a_code_name()
+        except Exception:
+            return ()
+        records = getattr(frame, "to_dict", lambda *_args, **_kwargs: [])("records")
+        universe: list[tuple[str, str]] = []
+        for item in records:
+            symbol = self._normalize_symbol(
+                str(item.get("code") or item.get("代码") or item.get("A股代码") or "")
+            )
+            name = self._first_text(
+                item,
+                ("name", "名称", "证券简称", "A股简称"),
+            )
+            if symbol.isdigit() and len(symbol) == 6 and name:
+                universe.append((symbol, name))
+        return tuple(universe)
 
     def _trend_rows_from_cached_spot(self, trade_date: str) -> tuple[MarketTrendRow, ...]:
         cache_file = self._cache_dir / f"{trade_date}_stock_zh_a_spot_em.json"

@@ -63,6 +63,7 @@ from server.firemoney_server.infrastructure.paper_store import PaperTradeStore
 from server.firemoney_server.infrastructure.scheduler_run_store import SchedulerRunStore
 from server.firemoney_server.infrastructure.scheduler_state import SchedulerStateStore
 from server.firemoney_server.infrastructure.sina_full_market import SinaFullMarketClient
+from server.firemoney_server.infrastructure.tencent_full_market import TencentFullMarketClient
 from server.firemoney_server.infrastructure.trading_calendar import WeekdayTradingCalendar
 from shared.contracts import (
     FeishuNotificationResult,
@@ -1883,13 +1884,96 @@ class MainChainSmokeTest(unittest.TestCase):
 
         self.assertIsNone(rows)
 
-    def test_full_market_scan_falls_back_to_sina_and_caches_snapshot(self) -> None:
+    def test_full_market_scan_uses_tencent_before_sina_and_caches_snapshot(self) -> None:
         class FakeAk:
             def stock_zh_a_spot_em(self) -> object:
                 raise RuntimeError("eastmoney blocked")
 
+            def stock_info_a_code_name(self):
+                return FakeFrame(
+                    [
+                        {"code": "600183", "name": "生益科技"},
+                        {"code": "300308", "name": "中际旭创"},
+                    ]
+                )
+
+            def stock_zh_a_spot(self) -> object:
+                raise AssertionError("tencent should be tried before legacy akshare spot")
+
+        class FakeFrame:
+            def __init__(self, records: list[dict[str, object]]) -> None:
+                self._records = records
+
+            def to_dict(self, orient: str) -> list[dict[str, object]]:
+                if orient != "records":
+                    raise AssertionError(f"unexpected orient: {orient}")
+                return self._records
+
+        class FakeTencentClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def load_rows(self, trade_date: str, universe):
+                self.calls += 1
+                self.universe = universe
+                return (
+                    TencentFullMarketClient._rows_from_quote_text(
+                        'v_sh600183="1~生益科技~600183~134.08~128.00~~~~~~20260528150000~~4.75~~~~1480000~4.60";',
+                        trade_date,
+                        dict(universe),
+                    )
+                )
+
+        class FakeSinaClient:
+            def load_rows(self, trade_date: str):
+                raise AssertionError("sina should be tried after tencent")
+
+        real_import = __import__
+        fake_ak = FakeAk()
+
+        def fake_import(name: str, *args: object, **kwargs: object):
+            if name == "akshare":
+                return fake_ak
+            return real_import(name, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            provider = AkshareMarketDataProvider(cache_dir=Path(temp_dir))
+            fake_tencent = FakeTencentClient()
+            provider._tencent_full_market_client = fake_tencent
+            provider._sina_full_market_client = FakeSinaClient()
+            with patch("builtins.__import__", side_effect=fake_import):
+                first = provider.load_full_market_rows("2026-05-28")
+                second = provider.load_full_market_rows("2026-05-28")
+
+        self.assertEqual(fake_tencent.calls, 1)
+        self.assertEqual(fake_tencent.universe[0], ("600183", "生益科技"))
+        self.assertEqual(first[0].symbol, "600183")
+        self.assertEqual(first[0].data_source, "full_market_spot_tencent")
+        self.assertEqual(second[0].data_source, "full_market_spot_cache")
+
+    def test_full_market_scan_falls_back_to_sina_when_tencent_is_unavailable(self) -> None:
+        class FakeAk:
+            def stock_zh_a_spot_em(self) -> object:
+                raise RuntimeError("eastmoney blocked")
+
+            def stock_info_a_code_name(self):
+                return FakeFrame([{"code": "600183", "name": "生益科技"}])
+
             def stock_zh_a_spot(self) -> object:
                 raise AssertionError("sina should be tried before legacy akshare spot")
+
+        class FakeFrame:
+            def __init__(self, records: list[dict[str, object]]) -> None:
+                self._records = records
+
+            def to_dict(self, orient: str) -> list[dict[str, object]]:
+                if orient != "records":
+                    raise AssertionError(f"unexpected orient: {orient}")
+                return self._records
+
+        class FakeTencentClient:
+            def load_rows(self, trade_date: str, universe):
+                return ()
 
         class FakeSinaClient:
             def __init__(self) -> None:
@@ -1924,6 +2008,7 @@ class MainChainSmokeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             provider = AkshareMarketDataProvider(cache_dir=Path(temp_dir))
             fake_sina = FakeSinaClient()
+            provider._tencent_full_market_client = FakeTencentClient()
             provider._sina_full_market_client = fake_sina
             with patch("builtins.__import__", side_effect=fake_import):
                 first = provider.load_full_market_rows("2026-05-28")
