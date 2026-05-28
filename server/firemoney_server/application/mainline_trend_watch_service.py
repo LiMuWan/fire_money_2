@@ -11,6 +11,9 @@ from server.firemoney_server.domain.one_to_two_types import (
     HistoricalPriceBar,
     MarketTrendRow,
 )
+from server.firemoney_server.application.mainline_trend_strategy_profile import (
+    build_mainline_trend_strategy_profile,
+)
 from shared.contracts import MainlineTrendWatchItem, MainlineTrendWatchReport
 
 
@@ -331,6 +334,13 @@ class MainlineTrendWatchService:
         value_case = self._value_case(fundamental, row)
         capital_case = self._capital_case(row, profile)
         sustainability_case = self._sustainability_case(row, profile, fundamental, theme)
+        strategy_profile = build_mainline_trend_strategy_profile(
+            row=row,
+            profile=profile,
+            fundamental=fundamental,
+            theme=theme,
+            scores=scores,
+        )
         entry_plan = self._entry_plan(
             action=action,
             pullback_low=pullback_low,
@@ -355,6 +365,8 @@ class MainlineTrendWatchService:
             theme=theme.theme,
             status=status,
             action=action,
+            strategy_type=strategy_profile.strategy_type,
+            strategy_fit=strategy_profile.fit,
             score=round(scores.total, 2),
             latest_price=round(profile.close, 2),
             ma5=round(profile.ma5, 2),
@@ -383,6 +395,11 @@ class MainlineTrendWatchService:
             value_case=value_case,
             capital_case=capital_case,
             sustainability_case=sustainability_case,
+            industry_chain_case=strategy_profile.industry_chain_case,
+            profit_driver_case=strategy_profile.profit_driver_case,
+            pre_breakout_case=strategy_profile.pre_breakout_case,
+            t_plan=strategy_profile.t_plan,
+            risk_control_case=strategy_profile.risk_control_case,
             entry_plan=entry_plan,
             reasons=tuple(reasons),
             risks=tuple(risks),

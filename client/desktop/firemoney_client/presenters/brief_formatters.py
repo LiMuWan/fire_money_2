@@ -339,10 +339,16 @@ def format_mainline_trend_watch_brief(report: MainlineTrendWatchReport) -> str:
                     f"{item.value_score:.0f}/{item.capital_attraction_score:.0f}/"
                     f"{item.sustainability_score:.0f}/{item.timing_score:.0f}"
                 ),
+                f"   战法：{item.strategy_type}；{item.strategy_fit}",
                 f"   主线：{item.theme}；{item.logic}",
                 f"   价值：{item.value_case}",
                 f"   资金：{item.capital_case}",
                 f"   持续：{item.sustainability_case}",
+                f"   产业链：{item.industry_chain_case}",
+                f"   利益驱动：{item.profit_driver_case}",
+                f"   启动前：{item.pre_breakout_case}",
+                f"   做T：{item.t_plan}",
+                f"   风控：{item.risk_control_case}",
                 f"   买点：{item.entry_plan}",
             ]
         )

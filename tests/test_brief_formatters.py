@@ -78,6 +78,8 @@ def _trend_watch_report() -> MainlineTrendWatchReport:
                 theme="AI服务器PCB上游",
                 status="prime_watch",
                 action="主升共振观察",
+                strategy_type="龙头主升候选",
+                strategy_fit="产业逻辑强、成交容量够、趋势还没有过度远离均线。",
                 score=82.0,
                 latest_price=12.18,
                 ma5=11.9,
@@ -106,6 +108,11 @@ def _trend_watch_report() -> MainlineTrendWatchReport:
                 value_case="价值：ROE 8.4%，净利增速 42.0%。",
                 capital_case="资金：成交额 6.8亿，换手 7.8%。",
                 sustainability_case="持续：趋势多头，业绩接力。",
+                industry_chain_case="AI服务器产业链：AI服务器 -> 高速PCB -> 电子布。",
+                profit_driver_case="经济利益来自净利增长带来的利润弹性。",
+                pre_breakout_case="启动前箱体收敛，等放量突破确认。",
+                t_plan="有底仓才做T，靠近10日线承接，冲高降仓。",
+                risk_control_case="回撤控制线 10.55，跌破移出观察。",
                 entry_plan="等 11.20-11.90 缩量回踩后再转强。",
                 reasons=("主线逻辑清楚",),
                 risks=("缺财务快照时需复核",),
@@ -459,8 +466,13 @@ class BriefFormatterTest(unittest.TestCase):
         self.assertIn("FireMoney 全市场主升根因扫描：watch_only", text)
         self.assertIn("宏和科技（603256）", text)
         self.assertIn("逻辑/价值/资金/持续/买点", text)
+        self.assertIn("战法：龙头主升候选", text)
         self.assertIn("AI服务器PCB升级", text)
         self.assertIn("持续：", text)
+        self.assertIn("产业链：AI服务器产业链", text)
+        self.assertIn("利益驱动：经济利益来自", text)
+        self.assertIn("做T：", text)
+        self.assertIn("风控：回撤控制线", text)
         self.assertIn("等 11.20-11.90", text)
         self.assertNotIn('"items"', text)
 

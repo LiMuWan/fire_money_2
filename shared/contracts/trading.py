@@ -781,6 +781,8 @@ class MainlineTrendWatchItem:
     theme: str
     status: str
     action: str
+    strategy_type: str
+    strategy_fit: str
     score: float
     latest_price: float
     ma5: float
@@ -809,6 +811,11 @@ class MainlineTrendWatchItem:
     value_case: str
     capital_case: str
     sustainability_case: str
+    industry_chain_case: str
+    profit_driver_case: str
+    pre_breakout_case: str
+    t_plan: str
+    risk_control_case: str
     entry_plan: str
     reasons: tuple[str, ...]
     risks: tuple[str, ...]

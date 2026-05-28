@@ -304,6 +304,7 @@ def render_mainline_trend_watch_panel(report: MainlineTrendWatchReport | None) -
           </div>
           <div class="tags">
             <span class="tag">{_text(item.action)}</span>
+            <span class="tag">战法 {_text(item.strategy_type)}</span>
             <span class="tag">逻辑 {item.logic_score:.0f}</span>
             <span class="tag">价值 {item.value_score:.0f}</span>
             <span class="tag">资金 {item.capital_attraction_score:.0f}</span>
@@ -311,10 +312,16 @@ def render_mainline_trend_watch_panel(report: MainlineTrendWatchReport | None) -
             <span class="tag">买点 {item.timing_score:.0f}</span>
           </div>
           <ul class="detail-list compact">
+            <li>战法画像：{_text(item.strategy_type)}；{_text(item.strategy_fit)}</li>
             <li>主升逻辑：{_text(item.logic)}</li>
             <li>价值承接：{_text(item.value_case)}</li>
             <li>资金吸引：{_text(item.capital_case)}</li>
             <li>持续根源：{_text(item.sustainability_case)}</li>
+            <li>产业链：{_text(item.industry_chain_case)}</li>
+            <li>经济利益：{_text(item.profit_driver_case)}</li>
+            <li>启动前：{_text(item.pre_breakout_case)}</li>
+            <li>做T计划：{_text(item.t_plan)}</li>
+            <li>风控纪律：{_text(item.risk_control_case)}</li>
             <li>买点计划：{_text(item.entry_plan)}</li>
             <li>结构：现价 {item.latest_price:.2f}，10日 {item.ma10:.2f}，20日 {item.ma20:.2f}，120日位置 {item.position_percentile_120:.0%}，近20日 {item.recent_gain_pct:.1%}</li>
             {"".join(f"<li>证据：{_text(reason)}</li>" for reason in item.reasons[:2])}
