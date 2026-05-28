@@ -317,9 +317,15 @@ def render_mainline_trend_watch_panel(report: MainlineTrendWatchReport | None) -
             <li>价值承接：{_text(item.value_case)}</li>
             <li>资金吸引：{_text(item.capital_case)}</li>
             <li>持续根源：{_text(item.sustainability_case)}</li>
+            <li>看重原因：{_text(item.why_watch_case)}</li>
+            <li>主升阶段：{_text(item.main_wave_stage)}</li>
             <li>产业链：{_text(item.industry_chain_case)}</li>
             <li>经济利益：{_text(item.profit_driver_case)}</li>
             <li>启动前：{_text(item.pre_breakout_case)}</li>
+            <li>上车确认：{_text(item.confirmation_case)}</li>
+            <li>完整主升持有：{_text(item.holding_plan)}</li>
+            <li>失效信号：{_text(item.failure_signal)}</li>
+            <li>仓位节奏：{_text(item.position_plan)}</li>
             <li>做T计划：{_text(item.t_plan)}</li>
             <li>风控纪律：{_text(item.risk_control_case)}</li>
             <li>买点计划：{_text(item.entry_plan)}</li>

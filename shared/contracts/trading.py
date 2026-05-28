@@ -816,6 +816,12 @@ class MainlineTrendWatchItem:
     pre_breakout_case: str
     t_plan: str
     risk_control_case: str
+    why_watch_case: str
+    main_wave_stage: str
+    confirmation_case: str
+    holding_plan: str
+    failure_signal: str
+    position_plan: str
     entry_plan: str
     reasons: tuple[str, ...]
     risks: tuple[str, ...]

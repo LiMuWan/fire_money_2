@@ -113,6 +113,12 @@ def _trend_watch_report() -> MainlineTrendWatchReport:
                 pre_breakout_case="启动前箱体收敛，等放量突破确认。",
                 t_plan="有底仓才做T，靠近10日线承接，冲高降仓。",
                 risk_control_case="回撤控制线 10.55，跌破移出观察。",
+                why_watch_case="产业逻辑、资金容量和结构位置同时出现。",
+                main_wave_stage="主升确认前段，适合找回踩确认。",
+                confirmation_case="等缩量回踩不破后再转强。",
+                holding_plan="站稳10日线且20日线上行时保留核心仓。",
+                failure_signal="跌破平台或板块不再扩散。",
+                position_plan="确认后再加到计划仓。",
                 entry_plan="等 11.20-11.90 缩量回踩后再转强。",
                 reasons=("主线逻辑清楚",),
                 risks=("缺财务快照时需复核",),
@@ -469,8 +475,14 @@ class BriefFormatterTest(unittest.TestCase):
         self.assertIn("战法：龙头主升候选", text)
         self.assertIn("AI服务器PCB升级", text)
         self.assertIn("持续：", text)
+        self.assertIn("看重原因：产业逻辑", text)
+        self.assertIn("主升阶段：主升确认前段", text)
         self.assertIn("产业链：AI服务器产业链", text)
         self.assertIn("利益驱动：经济利益来自", text)
+        self.assertIn("确认：等缩量回踩", text)
+        self.assertIn("持有：站稳10日线", text)
+        self.assertIn("失效：跌破平台", text)
+        self.assertIn("仓位：确认后再加", text)
         self.assertIn("做T：", text)
         self.assertIn("风控：回撤控制线", text)
         self.assertIn("等 11.20-11.90", text)
